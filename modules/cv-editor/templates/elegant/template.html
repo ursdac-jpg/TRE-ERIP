@@ -1,0 +1,100 @@
+<!--
+  modules/cv-editor/templates/elegant/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Elegant". Aucune donnee en dur : uniquement des
+  marqueurs {{...}} remplaces par rendreTemplate() avec l'objet produit
+  par normaliserDonneesCV() (voir docs/SCHEMA_CV.md).
+
+  Photo affichee uniquement si {{photo.url}} est renseigne (bloc
+  conditionnel generique, voir rendreTemplate.js) -- aucun element ni
+  espace vide si absente.
+
+  TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
+  est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
+  entiere (titre inclus) disparait. Limite assumee de l'engine (pas de
+  "ou" entre deux champs) : "Loisirs et engagements" reste un titre unique
+  couvrant deux listes, non masque si une seule des deux est vide.
+-->
+<div class="cv-elegant">
+
+  <header class="cv-elegant-entete">
+    {{#if photo.url}}
+    <div class="cv-elegant-photo" style="background-image:url('{{photo.url}}');"></div>
+    {{/if}}
+    <h1>{{identite.civilite}} {{identite.prenom}} {{identite.nom}}</h1>
+    <p class="cv-elegant-objectif">{{objectifProfessionnel}}</p>
+    <p class="cv-elegant-coordonnees">
+      {{identite.telephone}} &nbsp;•&nbsp; {{identite.email}} &nbsp;•&nbsp; {{identite.ville}}
+    </p>
+  </header>
+
+  <section class="cv-elegant-bloc">
+    <p>{{profil.profilUtilisateur}}</p>
+    <p>{{profil.profilIA}}</p>
+  </section>
+
+  {{#if experiences}}
+  <section class="cv-elegant-bloc">
+    <h2>Experiences</h2>
+    {{#each experiences}}
+    <div class="cv-elegant-experience">
+      <h3>{{poste}}</h3>
+      <p class="cv-elegant-meta">{{entreprise}} · {{lieu}} · {{dateDebut}} - {{dateFin}}</p>
+      <p>{{missions}}</p>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if experiencesPersonnelles}}
+  <section class="cv-elegant-bloc">
+    <h2>Experiences personnelles</h2>
+    {{#each experiencesPersonnelles}}
+    <div class="cv-elegant-experience">
+      <h3>{{intitule}}</h3>
+      <p>{{detail}}</p>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  <section class="cv-elegant-bloc cv-elegant-colonnes">
+    <div>
+      <h2>Competences</h2>
+      {{#if competences.savoirFaire}}<ul>{{#each competences.savoirFaire}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+      {{#if competences.savoirEtre}}<ul>{{#each competences.savoirEtre}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+      {{#if competences.savoirs}}<ul>{{#each competences.savoirs}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+    </div>
+    <div>
+      {{#if formations}}
+      <h2>Formations</h2>
+      {{#each formations}}
+      <p>{{niveau}} — {{intitule}} ({{annee}})</p>
+      {{/each}}
+      {{/if}}
+      {{#if langues}}
+      <h2>Langues</h2>
+      <ul>{{#each langues}}<li>{{langue}} ({{niveau}})</li>{{/each}}</ul>
+      {{/if}}
+    </div>
+  </section>
+
+  {{#if certifications}}
+  <section class="cv-elegant-bloc">
+    <h2>Certifications</h2>
+    <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  <section class="cv-elegant-bloc">
+    <h2>Permis</h2>
+    <p>{{permis.possede}} — {{permis.categories}}</p>
+  </section>
+
+  <section class="cv-elegant-bloc">
+    <h2>Loisirs et engagements</h2>
+    {{#if loisirs}}<ul>{{#each loisirs}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+    {{#if engagements}}<ul>{{#each engagements}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+  </section>
+
+</div>

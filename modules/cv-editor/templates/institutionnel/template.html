@@ -1,0 +1,109 @@
+<!--
+  modules/cv-editor/templates/institutionnel/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Institutionnel". Aucune donnee en dur : uniquement
+  des marqueurs {{...}} remplaces par rendreTemplate() avec l'objet
+  produit par normaliserDonneesCV() (voir docs/SCHEMA_CV.md).
+
+  Choix de presentation (pas de logique metier) : aucun emplacement
+  photo, structure tres claire par blocs numerotes/encadres, adapte
+  aux candidatures sobres (France Travail, collectivites).
+
+  TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
+  est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
+  entiere (titre inclus) disparait.
+-->
+<div class="cv-institutionnel">
+
+  <header class="cv-institutionnel-entete">
+    <h1>{{identite.civilite}} {{identite.prenom}} {{identite.nom}}</h1>
+    <p class="cv-institutionnel-objectif">Objectif professionnel : {{objectifProfessionnel}}</p>
+  </header>
+
+  <table class="cv-institutionnel-coordonnees">
+    <tr><td>Telephone</td><td>{{identite.telephone}}</td></tr>
+    <tr><td>E-mail</td><td>{{identite.email}}</td></tr>
+    <tr><td>Adresse</td><td>{{identite.adresse}} {{identite.ville}}</td></tr>
+  </table>
+
+  <section class="cv-institutionnel-bloc">
+    <h2>Presentation</h2>
+    <p>{{profil.profilUtilisateur}}</p>
+    <p>{{profil.profilIA}}</p>
+  </section>
+
+  {{#if experiences}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Experience professionnelle</h2>
+    {{#each experiences}}
+    <div class="cv-institutionnel-ligne">
+      <div><strong>{{poste}}</strong> — {{entreprise}} ({{lieu}})</div>
+      <div class="cv-institutionnel-dates">{{dateDebut}} au {{dateFin}}</div>
+    </div>
+    <p>{{missions}}</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if experiencesPersonnelles}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Experience personnelle et benevolat</h2>
+    {{#each experiencesPersonnelles}}
+    <div class="cv-institutionnel-ligne">
+      <div><strong>{{intitule}}</strong></div>
+    </div>
+    <p>{{detail}}</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if formations}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Formation</h2>
+    {{#each formations}}
+    <p>{{niveau}} — {{intitule}} ({{annee}})</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if certifications}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Certifications et habilitations</h2>
+    <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  <section class="cv-institutionnel-bloc">
+    <h2>Competences</h2>
+    {{#if competences.savoirFaire}}<p><strong>Savoir-faire :</strong> {{competences.savoirFaire}}</p>{{/if}}
+    {{#if competences.savoirEtre}}<p><strong>Savoir-etre :</strong> {{competences.savoirEtre}}</p>{{/if}}
+    {{#if competences.savoirs}}<p><strong>Savoirs :</strong> {{competences.savoirs}}</p>{{/if}}
+  </section>
+
+  {{#if langues}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Langues</h2>
+    <ul>{{#each langues}}<li>{{langue}} — niveau {{niveau}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  <section class="cv-institutionnel-bloc">
+    <h2>Permis de conduire</h2>
+    <p>{{permis.possede}} — {{permis.categories}}</p>
+  </section>
+
+  {{#if engagements}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Engagements citoyens et associatifs</h2>
+    <ul>{{#each engagements}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  {{#if loisirs}}
+  <section class="cv-institutionnel-bloc">
+    <h2>Centres d'interet</h2>
+    <ul>{{#each loisirs}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+</div>

@@ -1,0 +1,106 @@
+<!--
+  modules/cv-editor/templates/minimaliste/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Minimaliste". Aucune donnee en dur : uniquement
+  des marqueurs {{...}} remplaces par rendreTemplate() avec l'objet
+  produit par normaliserDonneesCV() (voir docs/SCHEMA_CV.md).
+
+  Choix de presentation (pas de logique metier) : aucun emplacement
+  photo, aucune couleur d'accent, typographie unique, lignes fines --
+  le plus depouille possible.
+
+  TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
+  est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
+  entiere (titre inclus) disparait.
+-->
+<div class="cv-minimaliste">
+
+  <header class="cv-minimaliste-entete">
+    <h1>{{identite.prenom}} {{identite.nom}}</h1>
+    <p>{{objectifProfessionnel}}</p>
+    <p class="cv-minimaliste-coordonnees">{{identite.telephone}} — {{identite.email}} — {{identite.ville}}</p>
+  </header>
+
+  <section>
+    <p>{{profil.profilUtilisateur}}</p>
+    <p>{{profil.profilIA}}</p>
+  </section>
+
+  {{#if experiences}}
+  <section>
+    <h2>Experiences</h2>
+    {{#each experiences}}
+    <div class="cv-minimaliste-ligne">
+      <span>{{poste}}, {{entreprise}}</span>
+      <span>{{dateDebut}} - {{dateFin}}</span>
+    </div>
+    <p class="cv-minimaliste-detail">{{missions}}</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if experiencesPersonnelles}}
+  <section>
+    <h2>Experiences personnelles</h2>
+    {{#each experiencesPersonnelles}}
+    <div class="cv-minimaliste-ligne">
+      <span>{{intitule}}</span>
+    </div>
+    <p class="cv-minimaliste-detail">{{detail}}</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if formations}}
+  <section>
+    <h2>Formations</h2>
+    {{#each formations}}
+    <div class="cv-minimaliste-ligne">
+      <span>{{niveau}} — {{intitule}}</span>
+      <span>{{annee}}</span>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  <section>
+    <h2>Competences</h2>
+    {{#if competences.savoirFaire}}<p>{{competences.savoirFaire}}</p>{{/if}}
+    {{#if competences.savoirEtre}}<p>{{competences.savoirEtre}}</p>{{/if}}
+    {{#if competences.savoirs}}<p>{{competences.savoirs}}</p>{{/if}}
+  </section>
+
+  {{#if langues}}
+  <section>
+    <h2>Langues</h2>
+    <p>{{#each langues}}{{langue}} ({{niveau}}) {{/each}}</p>
+  </section>
+  {{/if}}
+
+  <section>
+    <h2>Permis</h2>
+    <p>{{permis.possede}} — {{permis.categories}}</p>
+  </section>
+
+  {{#if certifications}}
+  <section>
+    <h2>Certifications</h2>
+    <p>{{certifications}}</p>
+  </section>
+  {{/if}}
+
+  {{#if loisirs}}
+  <section>
+    <h2>Loisirs</h2>
+    <p>{{loisirs}}</p>
+  </section>
+  {{/if}}
+
+  {{#if engagements}}
+  <section>
+    <h2>Engagements</h2>
+    <p>{{engagements}}</p>
+  </section>
+  {{/if}}
+
+</div>

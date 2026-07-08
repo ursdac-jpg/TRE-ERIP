@@ -1,0 +1,31 @@
+{
+  "id": "elegant",
+  "nom": "Elegant",
+  "description": "Design premium avec beaucoup d'espace blanc.",
+  "layout": {
+    "type": "header-top"
+  },
+  "colors": {
+    "primary": "#1F2937",
+    "secondary": "#D4AF37",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Playfair Display",
+    "body": "Lato"
+  },
+  "sections": [
+    "photo",
+    "identite",
+    "profil",
+    "experiences",
+    "experiencesPersonnelles",
+    "competences",
+    "formations",
+    "langues",
+    "certifications",
+    "permis",
+    "loisirs",
+    "engagements"
+  ]
+}

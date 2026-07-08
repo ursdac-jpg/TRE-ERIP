@@ -1,0 +1,30 @@
+{
+  "id": "minimaliste",
+  "nom": "Minimaliste",
+  "description": "CV extremement depouille, sans photo ni couleur d'accent.",
+  "layout": {
+    "type": "single-column"
+  },
+  "colors": {
+    "primary": "#1A1A1A",
+    "secondary": "#777777",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Helvetica",
+    "body": "Helvetica"
+  },
+  "sections": [
+    "identite",
+    "profil",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "competences",
+    "langues",
+    "permis",
+    "certifications",
+    "loisirs",
+    "engagements"
+  ]
+}

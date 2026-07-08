@@ -1,0 +1,133 @@
+<!--
+  modules/cv-editor/templates/moderne/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Moderne". Aucune donnee en dur : uniquement des
+  marqueurs {{...}} destines a etre remplaces par rendreTemplate()
+  avec l'objet produit par normaliserDonneesCV() (voir docs/SCHEMA_CV.md).
+
+  Emplacement photo : affiche uniquement si {{photo.url}} est renseigne
+  (bloc generique {{#if photo.url}}...{{/if}}, voir rendreTemplate.js).
+  Si absent, aucun element ni espace vide ne subsiste -- la mise en page
+  se reorganise naturellement. Aucune logique d'upload a ce stade -- ce
+  sera une tache independante, ulterieure.
+
+  Profil : les deux champs profilUtilisateur et profilIA sont affiches
+  tels quels, sans logique de priorite entre les deux (cette regle
+  d'affichage sera decidee lors d'une prochaine tache).
+-->
+<div class="cv-moderne">
+
+  <aside class="cv-moderne-colonne-laterale">
+    {{#if photo.url}}
+    <div class="cv-moderne-photo" style="background-image:url('{{photo.url}}');"></div>
+    {{/if}}
+
+    <h1 class="cv-moderne-nom">{{identite.civilite}} {{identite.prenom}} {{identite.nom}}</h1>
+    <p class="cv-moderne-objectif">{{objectifProfessionnel}}</p>
+
+    <div class="cv-moderne-bloc">
+      <h2>Coordonnees</h2>
+      <p>{{identite.telephone}}</p>
+      <p>{{identite.email}}</p>
+      <p>{{identite.adresse}}</p>
+      <p>{{identite.ville}}</p>
+      <p>{{identite.age}}</p>
+    </div>
+
+    <div class="cv-moderne-bloc">
+      <h2>Competences</h2>
+      {{#if competences.savoirFaire}}
+      <h3>Savoir-faire</h3>
+      <ul>{{#each competences.savoirFaire}}<li>{{.}}</li>{{/each}}</ul>
+      {{/if}}
+      {{#if competences.savoirEtre}}
+      <h3>Savoir-etre</h3>
+      <ul>{{#each competences.savoirEtre}}<li>{{.}}</li>{{/each}}</ul>
+      {{/if}}
+      {{#if competences.savoirs}}
+      <h3>Savoirs</h3>
+      <ul>{{#each competences.savoirs}}<li>{{.}}</li>{{/each}}</ul>
+      {{/if}}
+    </div>
+
+    {{#if langues}}
+    <div class="cv-moderne-bloc">
+      <h2>Langues</h2>
+      <ul>{{#each langues}}<li>{{langue}} ({{niveau}})</li>{{/each}}</ul>
+    </div>
+    {{/if}}
+
+    <div class="cv-moderne-bloc">
+      <h2>Permis</h2>
+      <p>{{permis.possede}}</p>
+      <p>{{permis.categories}}</p>
+      <p>{{permis.vehicule}}</p>
+    </div>
+
+    {{#if loisirs}}
+    <div class="cv-moderne-bloc">
+      <h2>Loisirs</h2>
+      <ul>{{#each loisirs}}<li>{{.}}</li>{{/each}}</ul>
+    </div>
+    {{/if}}
+
+    {{#if engagements}}
+    <div class="cv-moderne-bloc">
+      <h2>Engagements</h2>
+      <ul>{{#each engagements}}<li>{{.}}</li>{{/each}}</ul>
+    </div>
+    {{/if}}
+  </aside>
+
+  <main class="cv-moderne-contenu">
+
+    <div class="cv-moderne-bloc">
+      <h2>Profil</h2>
+      <p>{{profil.profilUtilisateur}}</p>
+      <p>{{profil.profilIA}}</p>
+    </div>
+
+    {{#if experiences}}
+    <div class="cv-moderne-bloc">
+      <h2>Experiences professionnelles</h2>
+      {{#each experiences}}
+      <div class="cv-moderne-experience">
+        <h3>{{poste}} — {{entreprise}}</h3>
+        <p class="cv-moderne-experience-meta">{{lieu}} · {{dateDebut}} - {{dateFin}}</p>
+        <p>{{missions}}</p>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if experiencesPersonnelles}}
+    <div class="cv-moderne-bloc">
+      <h2>Experiences personnelles</h2>
+      {{#each experiencesPersonnelles}}
+      <div class="cv-moderne-experience">
+        <h3>{{intitule}}</h3>
+        <p>{{detail}}</p>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if formations}}
+    <div class="cv-moderne-bloc">
+      <h2>Formations</h2>
+      {{#each formations}}
+      <p>{{niveau}} — {{intitule}} ({{annee}})</p>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if certifications}}
+    <div class="cv-moderne-bloc">
+      <h2>Certifications</h2>
+      <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
+    </div>
+    {{/if}}
+
+  </main>
+
+</div>

@@ -1,0 +1,31 @@
+{
+  "id": "jeune-diplome",
+  "nom": "Jeune diplome",
+  "description": "CV moderne, formations mises en avant, adapte aux profils avec peu d'experience professionnelle.",
+  "layout": {
+    "type": "header-photo-left"
+  },
+  "colors": {
+    "primary": "#1D4ED8",
+    "secondary": "#3B82F6",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Nunito",
+    "body": "Nunito"
+  },
+  "sections": [
+    "photo",
+    "identite",
+    "profil",
+    "formations",
+    "experiences",
+    "experiencesPersonnelles",
+    "engagements",
+    "competences",
+    "langues",
+    "certifications",
+    "permis",
+    "loisirs"
+  ]
+}

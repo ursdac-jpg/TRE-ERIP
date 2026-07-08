@@ -1,0 +1,104 @@
+<!--
+  modules/cv-editor/templates/jeune-diplome/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Jeune diplome". Aucune donnee en dur : uniquement
+  des marqueurs {{...}} remplaces par rendreTemplate() avec l'objet
+  produit par normaliserDonneesCV() (voir docs/SCHEMA_CV.md).
+
+  Choix de presentation (pas de logique metier) : les Formations sont
+  placees AVANT les Experiences (ordre d'affichage uniquement, aucune
+  logique conditionnelle) -- pertinent pour un public ayant peu
+  d'experience professionnelle mais un parcours de formation recent.
+  Photo affichee uniquement si {{photo.url}} est renseigne.
+
+  TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
+  est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
+  entiere (titre inclus) disparait. Limite assumee : "Experiences
+  personnelles et engagements" reste un titre unique couvrant deux
+  donnees, non masque si une seule des deux est vide.
+-->
+<div class="cv-jeune-diplome">
+
+  <header class="cv-jeune-diplome-entete">
+    {{#if photo.url}}
+    <div class="cv-jeune-diplome-photo" style="background-image:url('{{photo.url}}');"></div>
+    {{/if}}
+    <div>
+      <h1>{{identite.prenom}} {{identite.nom}}</h1>
+      <p class="cv-jeune-diplome-objectif">{{objectifProfessionnel}}</p>
+      <p class="cv-jeune-diplome-coordonnees">{{identite.telephone}} · {{identite.email}} · {{identite.ville}}</p>
+    </div>
+  </header>
+
+  <section class="cv-jeune-diplome-bloc">
+    <p>{{profil.profilUtilisateur}}</p>
+    <p>{{profil.profilIA}}</p>
+  </section>
+
+  {{#if formations}}
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#127891; Formations</h2>
+    {{#each formations}}
+    <p>{{niveau}} — {{intitule}} ({{annee}})</p>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if experiences}}
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#128188; Experiences (stages, alternance, jobs)</h2>
+    {{#each experiences}}
+    <div class="cv-jeune-diplome-experience">
+      <h3>{{poste}} — {{entreprise}}</h3>
+      <p class="cv-jeune-diplome-meta">{{lieu}} · {{dateDebut}} - {{dateFin}}</p>
+      <p>{{missions}}</p>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#129309; Experiences personnelles et engagements</h2>
+    {{#each experiencesPersonnelles}}
+    <div class="cv-jeune-diplome-experience">
+      <h3>{{intitule}}</h3>
+      <p>{{detail}}</p>
+    </div>
+    {{/each}}
+    {{#if engagements}}<ul>{{#each engagements}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+  </section>
+
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#128161; Competences</h2>
+    {{#if competences.savoirFaire}}<ul>{{#each competences.savoirFaire}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+    {{#if competences.savoirEtre}}<ul>{{#each competences.savoirEtre}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+    {{#if competences.savoirs}}<ul>{{#each competences.savoirs}}<li>{{.}}</li>{{/each}}</ul>{{/if}}
+  </section>
+
+  {{#if langues}}
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#127760; Langues</h2>
+    <ul>{{#each langues}}<li>{{langue}} ({{niveau}})</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  {{#if certifications}}
+  <section class="cv-jeune-diplome-bloc">
+    <h2>Certifications</h2>
+    <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  <section class="cv-jeune-diplome-bloc">
+    <h2>Permis</h2>
+    <p>{{permis.possede}} — {{permis.categories}}</p>
+  </section>
+
+  {{#if loisirs}}
+  <section class="cv-jeune-diplome-bloc">
+    <h2>&#127942; Loisirs</h2>
+    <ul>{{#each loisirs}}<li>{{.}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+</div>

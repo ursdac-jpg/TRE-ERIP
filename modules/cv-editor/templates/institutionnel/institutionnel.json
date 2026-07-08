@@ -1,0 +1,30 @@
+{
+  "id": "institutionnel",
+  "nom": "Institutionnel",
+  "description": "CV sobre et structure, adapte aux candidatures France Travail et collectivites.",
+  "layout": {
+    "type": "single-column"
+  },
+  "colors": {
+    "primary": "#1A1A2E",
+    "secondary": "#555566",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Times New Roman",
+    "body": "Times New Roman"
+  },
+  "sections": [
+    "identite",
+    "profil",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "certifications",
+    "competences",
+    "langues",
+    "permis",
+    "engagements",
+    "loisirs"
+  ]
+}
