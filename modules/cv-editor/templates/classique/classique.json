@@ -26,5 +26,9 @@
     "certifications",
     "loisirs",
     "engagements"
-  ]
+  ],
+  "capacites": {
+    "experiences": 5, "formations": 3, "competences": 6,
+    "langues": 4, "certifications": 3, "loisirs": 3, "engagements": 3
+  }
 }

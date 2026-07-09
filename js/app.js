@@ -31,14 +31,31 @@ function creerDossierIAVide() {
       profil: '',
       pointsForts: [],
       motsCles: [],
+      // TACHE (Moteur de decision de candidature, Tache 1 : extension du
+      // prompt CV V2) : typeCV reste un objet unique (une seule decision
+      // possible) ; les 3 autres deviennent des LISTES d'objets, chacun
+      // portant sa propre justification -- conforme a
+      // docs/ARCHITECTURE_MOTEUR_DECISION_CANDIDATURE.md (§5, §7).
+      // Volontairement pas d'identifiant technique sur les elements de
+      // liste (ex. pas d'id sur une experience) : le rapprochement avec
+      // dossier.experiences se fera par correspondance de champs
+      // (poste/entreprise), comme deja fait pour le moteur d'import
+      // (SPECIFICATION_IMPORT, champsRapprochement) -- jamais anticipe
+      // sous forme d'identifiant stable a ce stade.
       recommandations: {
         typeCV: { valeur: null, justification: '' },
-        experiencesAMettreEnAvant: { valeur: null, justification: '' },
-        competencesAValoriser: { valeur: null, justification: '' },
-        rubriquesMasquables: { valeur: null, justification: '' }
+        experiencesAMettreEnAvant: [],  // [{ poste, entreprise, justification }]
+        competencesAValoriser: [],      // [{ competence, justification }]
+        rubriquesMasquables: []         // [{ rubrique, justification }]
       }
     },
-    lettre: {},
+    // TACHE (Lettre V2, tache 1 : texte complet) : structure par defaut,
+    // conforme au format desormais produit par analyserReponseIALettre().
+    lettre: {
+      accroche: '',
+      arguments: [],
+      lettre: { objet: '', texte: '' }
+    },
     entretien: {}
   };
 }
@@ -70,11 +87,22 @@ var dossier = {
   catalogueActif: {},    // Etape 3 : suivi Oui/Non par catalogue (cle = nom du champ, ex. 'loisirs')
   experiences: [],
   experiencesPerso: [],  // benevolat, entraide familiale, foyer... (valorisation)
-  niveauFormation: null, // TACHE (refonte Formations et diplomes) : { niveauRNCP, niveauVisible, intitule }, une seule valeur
+  // TACHE (Tache 1 : formations en tableau) : remplace l'ancien niveauFormation
+  // (valeur unique). Chaque element : { niveau, intitule, annee }. Le moteur
+  // de rendu du CV attendait deja un tableau (voir normaliserDonneesCV.js) --
+  // ce champ n'a plus besoin d'etre enveloppe artificiellement.
   formations: [],
   loisirs: [],
   engagements: [],       // Etape 5 : catalogue engagements (tableau de chaines)
   certifications: [],    // Etape 8 : referentiel certifications (tableau de chaines)
+  // TACHE (Tache 2 : preparation du moteur d'import) : logiciels/outils
+  // maitrises (ex. "Excel", "SAGE", "Photoshop"), tableau de chaines, meme
+  // nature que loisirs/engagements/certifications ci-dessus. Champ cree
+  // maintenant pour que le futur moteur d'import (voir
+  // docs/ARCHITECTURE_MOTEUR_IMPORT.md) ait un endroit ou ranger cette
+  // information des sa premiere version -- aucune interface de saisie ni
+  // aucune logique ne l'alimente ou ne le lit encore a ce stade.
+  logiciels: [],
   langues: [],           // { langue, niveau }
   permis: { possede: null, categories: [], vehicule: null },
   contrat: [],           // CDD, CDI, Remplacements, Interim
@@ -98,12 +126,28 @@ var dossier = {
   // l'assistant IA, conforme a docs/ARCHITECTURE_V2_IA.md. Voir
   // creerDossierIAVide() ci-dessus pour le detail de la structure.
   ia: creerDossierIAVide(),
+  // TACHE (Tache 2 : preparation du moteur d'import) : porte d'entree du
+  // futur moteur generique d'alimentation du dossier (voir
+  // docs/ARCHITECTURE_MOTEUR_IMPORT.md, §2 et §11). "courant" accueillera,
+  // le moment venu, UN import en cours de validation
+  // ({ schemaVersion, typeSource, date, donnees }) -- jamais plusieurs en
+  // meme temps, jamais lu directement par le reste de l'application tant
+  // qu'il n'a pas ete valide par la personne et fusionne dans dossier.
+  // Aucune logique d'import n'existe encore : ce champ reste vide (null)
+  // jusqu'a la tache dediee.
+  imports: { courant: null },
   // TACHE (demande : metiers hors repertoire) : jusqu'a 3 intitules saisis
   // librement par la personne, quand son metier n'existe pas dans notre
   // referentiel. Distincts de metiersCandidats (ne comptent PAS dans la
   // limite de 5) -- pas de fiche ROME ni de competences associees, puisque
   // ce ne sont pas des metiers de notre base de connaissances.
-  metiersHorsRepertoire: []
+  metiersHorsRepertoire: [],
+  // TACHE (bandeau contextuel Impression) : garde en memoire la derniere
+  // carte utilisee ("Creer votre CV" ou "Lettre de motivation"), pour
+  // n'afficher qu'un seul bandeau d'impression a la fois sur la page
+  // Action -- jamais les deux en meme temps, aucun tant que rien n'est
+  // commence.
+  dernierDocumentPrepare: null
   // champs remplis par l'analyse CV (voir metiers.js) :
   // competencesCV, savoirsCV, cvAnalyse
 };
@@ -113,6 +157,11 @@ var dossier = {
 // suffisamment renseignes. Uniquement en memoire (pas sauvegarde, pas persistant).
 // Mecanisme unique, reutilise pour les 4 blocs (candidature, mobilite, formation, metier).
 var blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: false, metier: false };
+// TACHE (Tache 1 : formations en tableau) : brouillon de la formation en
+// cours d'ajout (niveau/intitule/annee), jamais ecrit dans dossier.formations
+// tant que la personne n'a pas clique sur "+ Ajouter" -- uniquement en
+// memoire, memes garanties que blocsAMettreEnEvidence ci-dessus.
+var brouillonFormationEnCours = null;
 function doitMettreEnEvidence(cle) { return !!blocsAMettreEnEvidence[cle]; }
 // Retire la mise en evidence d'un bloc des que l'utilisateur clique dedans ou y saisit
 // quelque chose ; chaque bloc redevient normal independamment des autres.
@@ -1817,7 +1866,7 @@ function pageValeurs() {
 // "VAE" reste en gras (plus le reste de la phrase).
 function messageVAE() {
   var aExperience = dossier.experiences.length > 0 || dossier.activites.indexOf('famille') !== -1 || dossier.cvAnalyse;
-  var aDiplome = !!dossier.niveauFormation;
+  var aDiplome = dossier.formations.length > 0;
   if (aExperience && !aDiplome) {
     return '<div class="message-vae-accordeon">' +
       blocAccordeon('vae', '&#128161; Vous avez de l\'expérience sans diplôme correspondant ?', '',
@@ -2172,33 +2221,49 @@ function wireMobilite(rerender) {
   if (vehiculeNon) { vehiculeNon.addEventListener('click', function () { dossier.permis.vehicule = false; rerender(); }); }
 }
 
+// TACHE (Tache 1 : formations en tableau) : construit un brouillon
+// (niveau + intitule + annee), jamais ecrit directement dans
+// dossier.formations -- seul le clic sur "+ Ajouter" pousse une entree
+// definitive dans le tableau, sur le meme principe que l'ajout d'une
+// experience (formulaire de saisie, puis validation explicite).
 function wireFormation(rerender) {
-  // Pastilles de niveau (une seule valeur a la fois). Cliquer sur le niveau
-  // deja actif l'efface (remplace l'ancien bouton "Effacer le niveau").
   document.querySelectorAll('[data-niveau-diplome]').forEach(function (el) {
     el.addEventListener('click', function () {
       var rncp = parseInt(this.dataset.niveauDiplome, 10);
-      if (dossier.niveauFormation && dossier.niveauFormation.niveauRNCP === rncp) {
-        dossier.niveauFormation = null;
+      if (brouillonFormationEnCours && brouillonFormationEnCours.niveauRNCP === rncp) {
+        brouillonFormationEnCours = null;
         rerender();
         return;
       }
       var n = NIVEAUX_DIPLOME_SIMPLES.filter(function (x) { return x.rncp === rncp; })[0];
       if (!n) { return; }
-      dossier.niveauFormation = { niveauRNCP: n.rncp, niveauVisible: n.label, intitule: '', annee: '' };
+      brouillonFormationEnCours = { niveauRNCP: n.rncp, niveauVisible: n.label, intitule: '', annee: '' };
       rerender();
     });
   });
   var champIntituleNiveau = document.getElementById('niveauFormationIntitule');
   if (champIntituleNiveau) {
     champIntituleNiveau.addEventListener('input', function () {
-      if (dossier.niveauFormation) { dossier.niveauFormation.intitule = this.value; }
+      if (brouillonFormationEnCours) { brouillonFormationEnCours.intitule = this.value; }
     });
   }
   var champAnneeNiveau = document.getElementById('niveauFormationAnnee');
   if (champAnneeNiveau) {
     champAnneeNiveau.addEventListener('input', function () {
-      if (dossier.niveauFormation) { dossier.niveauFormation.annee = this.value; }
+      if (brouillonFormationEnCours) { brouillonFormationEnCours.annee = this.value; }
+    });
+  }
+  var btnAjouterFormation = document.getElementById('ajouterFormationBtn');
+  if (btnAjouterFormation) {
+    btnAjouterFormation.addEventListener('click', function () {
+      if (!brouillonFormationEnCours) { return; }
+      dossier.formations.push({
+        niveau: brouillonFormationEnCours.niveauVisible,
+        intitule: brouillonFormationEnCours.intitule,
+        annee: brouillonFormationEnCours.annee
+      });
+      brouillonFormationEnCours = null;
+      rerender();
     });
   }
 }
@@ -2433,7 +2498,7 @@ function ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender) {
     btnPersonnaliser.addEventListener('click', function () {
       blocsAMettreEnEvidence.candidature = !informationsCandidatureSuffisantes();
       blocsAMettreEnEvidence.mobilite = (dossier.permis.possede === null);
-      blocsAMettreEnEvidence.formation = !dossier.niveauFormation;
+      blocsAMettreEnEvidence.formation = dossier.formations.length === 0;
       blocsAMettreEnEvidence.metier = !dossier.metierCible;
       fermerPanneauGuide();
       naviguerVers('projet');
@@ -2474,7 +2539,7 @@ function ouvrirPanneauChoixMetierParmiCandidats(rerender) {
     btnPersonnaliser.addEventListener('click', function () {
       blocsAMettreEnEvidence.candidature = !informationsCandidatureSuffisantes();
       blocsAMettreEnEvidence.mobilite = (dossier.permis.possede === null);
-      blocsAMettreEnEvidence.formation = !dossier.niveauFormation;
+      blocsAMettreEnEvidence.formation = dossier.formations.length === 0;
       blocsAMettreEnEvidence.metier = !dossier.metierCible;
       fermerPanneauGuide();
       naviguerVers('projet');
@@ -3737,25 +3802,15 @@ function blocMobilite() {
     contenuMobilite() + '</div>';
 }
 
-// Complement tache 8 : extrait de la section CV et deplace sur l'ecran Revelation,
-// avec mise en evidence possible via le bouton "Personnaliser ma candidature".
-// TACHE (refonte Mon projet, Etape C) : contenu pur (formulaire d'ajout
-// uniquement, la liste passe dans le resume du bloc "Parcours"). wireFormation
-// fonctionne sans changement (memes id de champs).
-// TACHE (refonte Formations et diplomes) : deux parties distinctes dans la
-// meme sous-section -- (1) le niveau de diplome, UNE seule valeur a la fois
-// (dossier.niveauFormation), choisie par pastilles parmi NIVEAUX_DIPLOME_SIMPLES
-// (jamais de RNCP saisi directement, donc jamais d'incoherence type "CAP"+8) ;
-// (2) les autres formations (CACES, FIMO, habilitations...), qui n'ont pas de
-// niveau RNCP comparable et restent une petite liste (plafond 5, inchange).
-// TACHE (refonte Formations et diplomes, v2) : plus qu'une seule chose ici,
-// le niveau de diplome (dossier.niveauFormation, une seule valeur). Les
-// "autres formations" (CACES, FIMO, habilitations...) sont retirees : elles
-// faisaient doublon avec la rubrique "Certifications", deja prevue pour ca.
-// L'intitule est affiche en premier (visible sans avoir a chercher plus bas).
-// Cliquer sur le niveau deja actif l'efface (remplace l'ancien bouton "Effacer").
+// TACHE (Tache 1 : formations en tableau) : formulaire d'AJOUT (plus une
+// selection unique). Le niveau choisi par pastille + l'intitule + l'annee
+// forment un brouillon (brouillonFormationEnCours, jamais ecrit directement
+// dans dossier.formations). Le bouton "+ Ajouter" (cable dans wireFormation)
+// pousse ce brouillon dans le tableau. La liste des formations deja
+// ajoutees s'affiche dans le resume du bloc "Parcours" (resumeParcours()),
+// pas ici -- meme principe que les experiences.
 function contenuFormations() {
-  var nf = dossier.niveauFormation || null;
+  var nf = brouillonFormationEnCours || null;
   var niveauActuel = NIVEAUX_DIPLOME_SIMPLES.filter(function (n) { return nf && n.rncp === nf.niveauRNCP; })[0];
   var placeholderIntitule = niveauActuel ? niveauActuel.placeholder : 'Choisissez d\'abord un niveau ci-dessous';
   var pastillesNiveau = NIVEAUX_DIPLOME_SIMPLES.map(function (n) {
@@ -3772,13 +3827,15 @@ function contenuFormations() {
     (nf ? '' : ' disabled') + ' value="' + echapperAttribut(nf ? (nf.annee || '') : '') + '"></div>' +
     '</div>' +
     '<p class="mb-2">Quel est le niveau de votre diplôme ?</p>' +
-    '<div class="pastilles">' + pastillesNiveau + '</div>';
+    '<div class="pastilles mb-2">' + pastillesNiveau + '</div>' +
+    '<button class="btn btn-primary btn-sm" id="ajouterFormationBtn"' + (nf ? '' : ' disabled') + '>+ Ajouter</button>';
 }
 
 // Conservee pour compatibilite (plus appelee par pageProjet depuis l'Etape C).
 function blocFormations() {
   var formHtml = dossier.formations.map(function (f, i) {
-    return '<div class="cv-item"><div><strong>' + f.intitule + '</strong>' +
+    var label = f.niveau + (f.intitule ? ' — ' + f.intitule : '') + (f.annee ? ' (' + f.annee + ')' : '');
+    return '<div class="cv-item"><div><strong>' + label + '</strong>' +
       '</div><span class="remove-item" data-index="' + i + '" data-type="form">&#10005;</span></div>';
   }).join('');
   return '<div class="cv-section mt-4' + (doitMettreEnEvidence('formation') ? ' a-completer' : '') + '" id="blocFormationCible"><h5>&#127891; Formations et diplomes</h5>' +
@@ -3863,7 +3920,7 @@ function blocMetiersRecommandes() {
 function informationsSuffisantesPourCVSpecifique() {
   return informationsCandidatureSuffisantes() &&
     dossier.permis.possede !== null &&
-    !!dossier.niveauFormation &&
+    dossier.formations.length > 0 &&
     !!dossier.metierCible;
 }
 
@@ -4290,11 +4347,13 @@ var CONFIG_BLOC_VOUS_ACTION = {
 // bloc "Vous".
 function resumeParcours() {
   var items = [];
-  if (dossier.niveauFormation) {
-    var nf = dossier.niveauFormation;
-    var label = nf.niveauVisible + (nf.intitule ? ' — ' + nf.intitule : '') + (nf.annee ? ' (' + nf.annee + ')' : '');
-    items.push({ label: label, source: 'niveauFormation' });
-  }
+  // TACHE (Tache 1 : formations en tableau) : meme motif que certifications/
+  // experiencesPerso juste en dessous -- une entree par element du tableau,
+  // avec son index pour permettre la suppression ciblee.
+  (dossier.formations || []).forEach(function (f, i) {
+    var label = f.niveau + (f.intitule ? ' — ' + f.intitule : '') + (f.annee ? ' (' + f.annee + ')' : '');
+    items.push({ label: label, source: 'formation', index: i });
+  });
   (dossier.certifications || []).forEach(function (c, i) { items.push({ label: c, source: 'certification', index: i }); });
   (dossier.experiencesPerso || []).forEach(function (e, i) { items.push({ label: e.intitule, source: 'experiencePerso', index: i }); });
   return items;
@@ -4302,7 +4361,7 @@ function resumeParcours() {
 function resumeOnSuppressionParcours(idx) {
   var item = resumeParcours()[idx];
   if (!item) { return; }
-  if (item.source === 'niveauFormation') { dossier.niveauFormation = null; }
+  if (item.source === 'formation') { dossier.formations.splice(item.index, 1); }
   else if (item.source === 'certification') { dossier.certifications.splice(item.index, 1); }
   else if (item.source === 'experiencePerso') { dossier.experiencesPerso.splice(item.index, 1); }
 }
@@ -4311,7 +4370,6 @@ var CONFIG_BLOC_PARCOURS = {
   resume: resumeParcours,
   resumeOnSuppression: resumeOnSuppressionParcours,
   onResetTout: function () {
-    dossier.niveauFormation = null;
     dossier.formations = [];
     dossier.certifications = [];
     dossier.experiencesPerso = [];
@@ -4326,7 +4384,7 @@ var CONFIG_BLOC_PARCOURS = {
     if (dossier.modeCreation !== 'pret') {
       sections.push({
         id: 'formations', titre: 'Formations et diplômes',
-        complet: function () { return !!dossier.niveauFormation; },
+        complet: function () { return dossier.formations.length > 0; },
         contenuHTML: contenuFormations,
         wire: function (rerender) { wireFormation(rerender); },
         enEvidence: function () { return doitMettreEnEvidence('formation'); },
@@ -4553,6 +4611,26 @@ function pageResultats() {
       '<button class="btn btn-primary btn-sm mt-2" id="ajouterExpBtn">+ Ajouter</button></div><hr>';
   }
 
+  // TACHE (bandeau contextuel Impression) : un seul bandeau visible a la
+  // fois, selon la derniere carte utilisee (dossier.dernierDocumentPrepare,
+  // mis a jour au clic sur "Creer votre CV"/"Lettre de motivation" -- voir
+  // plus bas dans cette fonction). Tant qu'aucun document n'a ete
+  // commence, aucun des deux bandeaux ne s'affiche.
+  var accordeonImpressionCV = (dossier.dernierDocumentPrepare === 'cv')
+    ? blocAccordeon('export-canva', '&#128424; Imprimer mon CV', '',
+        '<p class="mb-3">Prévisualisez votre CV avant de l\'imprimer. Choisissez parmi plusieurs modèles de ' +
+        'présentation, puis imprimez-le ou enregistrez-le au format PDF directement depuis la fenêtre d\'aperçu. ' +
+        'Les fonctions d\'export complémentaires (dont Canva) restent disponibles dans la fenêtre ' +
+        '&laquo;&nbsp;Créer votre CV&nbsp;&raquo;, section &laquo;&nbsp;Exporter&nbsp;&raquo;.</p>' +
+        '<button type="button" class="btn-copy" id="btnApercuCVAction">&#128269; Aperçu du CV</button>')
+    : '';
+  var accordeonImpressionLettre = (dossier.dernierDocumentPrepare === 'lettre')
+    ? blocAccordeon('impression-lettre', '&#128424; Imprimer ma lettre de motivation', '',
+        '<p class="mb-3">Prévisualisez votre lettre de motivation avant de l\'imprimer. Le texte est directement ' +
+        'modifiable dans la fenêtre d\'aperçu, puis vous pouvez l\'imprimer ou l\'enregistrer au format PDF.</p>' +
+        '<button type="button" class="btn-copy" id="btnApercuLettreAction">&#128269; Aperçu de ma lettre</button>')
+    : '';
+
   var html = afficherProgression('resultats') +
     '<div class="text-center"><h1>&#128640; Passons a l\'action</h1><p class="sousTitre">Vous avez les cles. Completez votre profil puis choisissez votre etape.</p></div>' +
     '<div class="cv-section"><h4>&#128196; Mon CV</h4>' +
@@ -4562,12 +4640,7 @@ function pageResultats() {
       '<div><h5>Savoir-etre</h5>' + (savoirEtre.length ? savoirEtre.map(function (c) { return '<span class="badge bg-success badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>' +
       '<div><h5>Savoir-faire</h5>' + (savoirFaire.length ? savoirFaire.map(function (c) { return '<span class="badge bg-primary badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>' +
       '<div><h5>Savoirs</h5>' + (savoirs.length ? savoirs.map(function (c) { return '<span class="badge bg-info badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>') +
-    blocAccordeon('export-canva', '&#128424; Imprimer mon CV', '',
-      '<p class="mb-3">Prévisualisez votre CV avant de l\'imprimer. Choisissez parmi plusieurs modèles de ' +
-      'présentation, puis imprimez-le ou enregistrez-le au format PDF directement depuis la fenêtre d\'aperçu. ' +
-      'Les fonctions d\'export complémentaires (dont Canva) restent disponibles dans la fenêtre ' +
-      '&laquo;&nbsp;Créer votre CV&nbsp;&raquo;, section &laquo;&nbsp;Exporter&nbsp;&raquo;.</p>' +
-      '<button type="button" class="btn-copy" id="btnApercuCVAction">&#128269; Aperçu du CV</button>') +
+    accordeonImpressionCV + accordeonImpressionLettre +
     '</div>' +
     '<div class="col-md-6">' +
     // TACHE (correction : fonctions manquantes) : reutilise desormais le
@@ -4625,6 +4698,14 @@ function brancherEvenementsResultats() {
     btnApercuCVAction.addEventListener('click', function () { ouvrirApercuCV(); });
   }
 
+  // TACHE (bandeau contextuel Impression, Lettre) : meme principe que le
+  // bouton CV ci-dessus -- reutilise directement ouvrirApercuLettre(), deja
+  // definie, aucune logique dupliquee.
+  var btnApercuLettreAction = document.getElementById('btnApercuLettreAction');
+  if (btnApercuLettreAction) {
+    btnApercuLettreAction.addEventListener('click', function () { ouvrirApercuLettre(); });
+  }
+
   // Outils
   document.querySelectorAll('.outil-item').forEach(function (el) {
     el.addEventListener('click', function () {
@@ -4650,9 +4731,17 @@ function brancherEvenementsResultats() {
       }
       if (outil === 'cv') {
         if (!cvDisponible()) { return; } // carte desactivee : aucun CV disponible
+        // TACHE (bandeau contextuel Impression) : memorise que le CV est
+        // desormais le document actif, et rafraichit immediatement la page
+        // Action pour que le bandeau "Imprimer mon CV" apparaisse sans
+        // attendre un retour manuel sur cet onglet.
+        dossier.dernierDocumentPrepare = 'cv';
+        pageResultats();
         ouvrirAideIA('cv');
       } else if (outil === 'lettre') {
         if (cvDisponible()) {
+          dossier.dernierDocumentPrepare = 'lettre';
+          pageResultats();
           ouvrirAideIA('lettre');
         } else {
           // Complement tache 8 : reutilisation de la fenetre de depot du CV,
@@ -4662,7 +4751,11 @@ function brancherEvenementsResultats() {
             intro: 'Déposez votre CV pour que l\'assistant puisse rédiger une lettre de motivation cohérente ' +
               'avec votre profil. Formats acceptés : PDF, Word (.docx) ou texte (.txt). Votre CV est lu ' +
               'directement dans votre navigateur, il n\'est envoyé nulle part.',
-            onTerminer: function () { ouvrirAideIA('lettre'); }
+            onTerminer: function () {
+              dossier.dernierDocumentPrepare = 'lettre';
+              pageResultats();
+              ouvrirAideIA('lettre');
+            }
           });
         }
       } else if (outil === 'entretien') {
@@ -4746,15 +4839,142 @@ function anonymiserTexte(texte) {
   [id.nom, id.prenom, id.adresse, id.telephone, id.email, id.ville, id.age].forEach(function (valeur) {
     if (valeur && String(valeur).trim()) {
       var echappe = String(valeur).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      t = t.replace(new RegExp(echappe, 'gi'), '[information supprimee]');
+      t = t.replace(new RegExp(echappe, 'gi'), '[ANONYMISÉ]');
     }
   });
   // Filets fiables complementaires (au cas ou une valeur n'aurait pas encore ete confirmee)
-  t = t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[information supprimee]');
-  t = t.replace(/(?:(?:\+33|0033)[\s.-]?[1-9]|0[1-9])(?:[\s.-]?\d{2}){4}/g, '[information supprimee]');
+  t = t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[ANONYMISÉ]');
+  t = t.replace(/(?:(?:\+33|0033)[\s.-]?[1-9]|0[1-9])(?:[\s.-]?\d{2}){4}/g, '[ANONYMISÉ]');
   t = t.replace(/https?:\/\/\S+/gi, '[lien supprime]');
   t = t.replace(/\bwww\.\S+/gi, '[lien supprime]');
   return t;
+}
+
+// TACHE (standard IA, composant generique) : liste partagee des assistants
+// IA proposes dans l'application. Reprend exactement les 5 memes (memes
+// noms, memes URLs) que celles deja utilisees dans ouvrirAideIA() -- pas
+// une nouvelle liste parallele, juste rendue reutilisable ailleurs (ici,
+// pour le nouveau selecteur par cartes). ouvrirAideIA() elle-meme n'est
+// pas touchee dans cette tache.
+var ASSISTANTS_IA = [
+  { id: 'claude', nom: 'Claude', url: 'https://claude.ai/' },
+  { id: 'chatgpt', nom: 'ChatGPT', url: 'https://chat.openai.com/' },
+  { id: 'gemini', nom: 'Gemini', url: 'https://gemini.google.com/' },
+  { id: 'perplexity', nom: 'Perplexity', url: 'https://www.perplexity.ai/' },
+  { id: 'mistral', nom: 'Mistral', url: 'https://chat.mistral.ai/' }
+];
+
+// ============================================================
+// TACHE (standard IA, composant generique) : fenetre d'information/mise en
+// confiance, destinee a devenir LE standard de toute interaction avec un
+// assistant IA externe dans l'application. Pensee des le depart comme un
+// composant reutilisable, pas specifique a l'import de CV -- seul le
+// contenu (config) change selon le contexte d'appel (import de CV
+// aujourd'hui ; creation du CV, lettre, entretien plus tard, sans modifier
+// cette fonction).
+//
+// config attendu :
+// - nomAssistant, urlAssistant : l'assistant deja choisi (par les cartes
+//   affichees AVANT l'ouverture de cette fenetre -- cette fenetre ne fait
+//   jamais choisir l'IA, uniquement confirmer et informer)
+// - construireTexteACopier(anonymiserActif) : fonction fournie par
+//   l'appelant, qui retourne le texte final a copier ; recoit l'etat de la
+//   bascule anonymisation au moment du clic
+// - afficherAnonymisation (optionnel, true par defaut) : certains contextes
+//   futurs (ex. entretien deja anonymise en amont) pourraient ne pas en
+//   avoir besoin
+// - onApresValidation() (optionnel) : callback apres copie + ouverture
+// ============================================================
+function fermerFenetreAssistantIA() {
+  var f = document.getElementById('fenetreAssistantIA');
+  if (f) { f.remove(); }
+}
+
+function ouvrirFenetreAssistantIA(config) {
+  fermerFenetreAssistantIA();
+  var afficherAnon = config.afficherAnonymisation !== false;
+  var anonymiserActif = afficherAnon && (dossier.anonymiser !== false);
+
+  var fenetre = document.createElement('div');
+  fenetre.id = 'fenetreAssistantIA';
+  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
+    'display:flex;align-items:center;justify-content:center;z-index:2200;padding:1rem;';
+
+  function contenuHTML() {
+    return '<div style="background:white;border-radius:1.5rem;max-width:520px;width:100%;' +
+      'max-height:85vh;overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
+      '<div class="d-flex justify-content-between align-items-center mb-2">' +
+      '<h5 class="mb-0">Avant de continuer vers ' + config.nomAssistant + '</h5>' +
+      '<button type="button" id="fermerAssistantIABtn" class="btn btn-sm btn-outline-secondary" ' +
+      'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
+      '</div>' +
+      '<p class="small">Vous allez être redirigé(e) vers le site externe de <strong>' + config.nomAssistant + '</strong>. ' +
+      'Rien de compliqué : voici exactement ce qui va se passer.</p>' +
+      '<ol class="small ps-3 mb-3">' +
+      '<li>Le texte nécessaire est <strong>automatiquement copié</strong> dans votre presse-papiers.</li>' +
+      '<li>Une fois sur le site de ' + config.nomAssistant + ', cliquez simplement dans la zone de conversation.</li>' +
+      '<li>Faites <strong>Ctrl + V</strong>, puis appuyez sur <strong>Entrée</strong>.</li>' +
+      '<li>Une fois sa réponse affichée, cliquez sur le bouton "Copier" de ' + config.nomAssistant + '.</li>' +
+      '<li>Revenez ensuite ici pour importer cette réponse.</li>' +
+      '</ol>' +
+      (afficherAnon
+        ? '<div class="border rounded p-2 mb-2" style="background:#F0FDF4;">' +
+          '<p class="small mb-2">&#128274; Par défaut, vos données personnelles (nom, prénom, adresse, téléphone, ' +
+          'e-mail) sont automatiquement masquées avant l\'envoi vers cet assistant externe. Vous pouvez désactiver ' +
+          'cette protection si vous le souhaitez.</p>' +
+          '<button type="button" id="btnAnonAssistantIA" data-anon="' + (anonymiserActif ? '1' : '0') + '" ' +
+          'style="border:none;padding:0.4rem 1rem;border-radius:30px;font-weight:600;color:white;background:' +
+          (anonymiserActif ? '#dc3545' : '#198754') + ';">' +
+          (anonymiserActif ? '&#128274; Anonymiser (activé)' : '&#128275; Anonymiser (désactivé)') + '</button>' +
+          '</div>'
+        : '') +
+      '<div class="d-flex justify-content-end mt-3">' +
+      '<button type="button" id="validerAssistantIABtn" class="btn btn-primary">Je comprends, continuer</button>' +
+      '</div></div>';
+  }
+
+  function cablerBoutons() {
+    document.getElementById('fermerAssistantIABtn').addEventListener('click', fermerFenetreAssistantIA);
+    var btnAnon = document.getElementById('btnAnonAssistantIA');
+    if (btnAnon) {
+      btnAnon.addEventListener('click', function () {
+        anonymiserActif = !anonymiserActif;
+        fenetre.innerHTML = contenuHTML();
+        cablerBoutons();
+      });
+    }
+    document.getElementById('validerAssistantIABtn').addEventListener('click', function () {
+      // TACHE (standard IA) : seul et unique declencheur de toute la
+      // sequence -- construction du texte, copie, ouverture de l'IA.
+      // Memorise aussi le choix d'anonymisation dans dossier.anonymiser,
+      // le meme reglage global deja utilise par ouvrirAideIA().
+      dossier.anonymiser = anonymiserActif;
+      var texteACopier = config.construireTexteACopier(anonymiserActif);
+      function ouvrirAssistant() {
+        window.open(config.urlAssistant, '_blank');
+        fermerFenetreAssistantIA();
+        if (typeof config.onApresValidation === 'function') { config.onApresValidation(); }
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texteACopier).then(ouvrirAssistant).catch(function () {
+          var z = document.createElement('textarea');
+          z.value = texteACopier;
+          document.body.appendChild(z);
+          z.select();
+          document.execCommand('copy');
+          z.remove();
+          ouvrirAssistant();
+        });
+      } else {
+        ouvrirAssistant();
+      }
+    });
+  }
+
+  fenetre.innerHTML = contenuHTML();
+  document.body.appendChild(fenetre);
+  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerFenetreAssistantIA(); } });
+  cablerBoutons();
 }
 
 function texteProfil(type) {
@@ -4811,9 +5031,10 @@ function texteProfil(type) {
       return '   . ' + e.intitule + (e.detail ? ' : ' + e.detail : '');
     }).join('\n') + '\n';
   }
-  if (dossier.niveauFormation) {
-    var nf = dossier.niveauFormation;
-    t += '- Niveau de diplome : ' + nf.niveauVisible + (nf.intitule ? ' (' + nf.intitule + ')' : '') + (nf.annee ? ', obtenu en ' + nf.annee : '') + '\n';
+  if (dossier.formations.length) {
+    t += '- Formations :\n' + dossier.formations.map(function (f) {
+      return '   . ' + f.niveau + (f.intitule ? ' (' + f.intitule + ')' : '') + (f.annee ? ', obtenu en ' + f.annee : '');
+    }).join('\n') + '\n';
   }
   if (langues) { t += '- Langues : ' + langues + '\n'; }
   if (permis) { t += '- Mobilite : ' + permis + '\n'; }
@@ -4905,9 +5126,13 @@ var FICHIERS_PROMPTS_EXTERNES = {
   entretien: 'prompts/entretien.md',
   // TACHE (V2 IA, etape 1) : prompt separe et dedie, pour ne prendre aucun
   // risque sur le prompt principal de redaction du CV (prompts/cv.md).
-  accroche: 'prompts/accroche.md'
+  accroche: 'prompts/accroche.md',
+  // TACHE 5 (moteur d'import) : prompt d'extraction, distinct des 4
+  // precedents -- ceux-la construisent une strategie, celui-ci ne fait que
+  // lire un CV depose pour en extraire les faits (voir docs/ARCHITECTURE_MOTEUR_IMPORT.md).
+  'extraction-cv': 'prompts/extraction-cv.md'
 };
-var promptsExternesCharges = { cv: null, lettre: null, entretien: null, accroche: null };
+var promptsExternesCharges = { cv: null, lettre: null, entretien: null, accroche: null, 'extraction-cv': null };
 
 function chargerPromptsExternes() {
   if (typeof fetch !== 'function') { return; } // navigateur trop ancien : reste sur le texte par defaut
@@ -4931,6 +5156,29 @@ function chargerPromptsExternes() {
 // Textes par defaut (utilises tant que le fichier externe correspondant n'a
 // pas ete charge avec succes). Identiques aux 3 fichiers prompts/*.md.
 function promptParDefaut(type) {
+  if (type === 'extraction-cv') {
+    // TACHE 5 (moteur d'import) : texte de secours aligne sur
+    // prompts/extraction-cv.md (version validee) -- utilise uniquement si
+    // le fichier externe ne peut pas etre charge.
+    return 'Tu es un assistant d\'extraction. Lis le texte du CV ci-dessous et extrait uniquement les informations ' +
+      'factuelles qui y figurent (identite, experiences avec leurs missions en liste, formations, competences, ' +
+      'langues, certifications, logiciels explicitement cites, permis, loisirs, engagements). N\'invente rien, ne ' +
+      'reformule rien, ne selectionne rien. Ne deduis jamais un logiciel a partir d\'un metier. Ne normalise jamais ' +
+      'une date, recopie le texte tel quel. Pour le permis, "possede" ne vaut true que si explicitement mentionne ' +
+      'comme possede, false que si son absence est explicitement mentionnee, null sinon. Ajoute un champ ' +
+      '"confiance" ("elevee", "moyenne" ou "faible") sur chaque experience/formation/langue, et un champ "alertes" ' +
+      'si un element te semble incomplet ou ambigu. Place toute information ne correspondant a aucune categorie ' +
+      'dans "informationsNonClassees". Respecte strictement les types (booleen : true/false/null uniquement, ' +
+      'jamais "oui"/"non" ; liste : toujours un tableau). Termine ta reponse par un bloc de code JSON strictement ' +
+      'valide, exactement selon ce format : {"identite": {"civilite": "", "nom": "", "prenom": "", "telephone": "", ' +
+      '"email": "", "adresse": "", "ville": ""}, "experiences": [{"poste": "", "entreprise": "", "lieu": "", ' +
+      '"dateDebut": "", "dateFin": "", "missions": [], "confiance": "elevee", "alertes": []}], "formations": ' +
+      '[{"niveau": "", "intitule": "", "annee": "", "confiance": "elevee", "alertes": []}], "competences": ' +
+      '{"savoirFaire": [], "savoirEtre": [], "savoirs": []}, "langues": [{"langue": "", "niveau": "", "confiance": ' +
+      '"elevee", "alertes": []}], "certifications": [], "logiciels": [], "permis": {"possede": null, "categories": ' +
+      '[], "vehicule": null}, "loisirs": [], "engagements": [], "informationsNonClassees": []}. N\'ajoute jamais de ' +
+      'propriete JSON en dehors de ce format.';
+  }
   if (type === 'accroche') {
     return 'Tu es un conseiller en insertion professionnelle. A partir du profil ci-dessous, ' +
       'propose un contenu court pour enrichir un CV : une accroche professionnelle (2 a 4 phrases), ' +
@@ -4939,25 +5187,42 @@ function promptParDefaut(type) {
       'exactement selon ce format : {"profil": "...", "pointsForts": ["...", "..."], "motsCles": ["...", "..."]}.';
   }
   if (type === 'lettre') {
-    // TACHE (integration prompt Lettre V2) : texte de secours aligne sur
-    // prompts/lettre.md (version validee) -- utilise uniquement si le
-    // fichier externe ne peut pas etre charge (ex. site ouvert en file://).
-    return 'Tu es un conseiller en insertion professionnelle experimente. Ton role n\'est pas de rediger un texte ' +
-      'de lettre mis en forme, mais de construire une veritable strategie de communication, dont la lettre n\'est ' +
-      'que le resultat. Une lettre de motivation est un outil de persuasion : elle doit toujours repondre, meme ' +
-      'implicitement, a trois questions que se pose tout recruteur : Pourquoi cette personne ? Pourquoi notre ' +
-      'entreprise ? Pourquoi maintenant ? Adapte l\'angle et la longueur au type de candidature indique dans le ' +
-      'profil (offre, candidature spontanee, reconversion, stage, alternance, immersion). Ne repete jamais le CV : ' +
-      'complete-le en donnant du sens au parcours. Choisis, hierarchise, et laisse volontairement de cote ce qui ' +
-      'ne sert aucune des trois questions. Ne jamais inventer un fait qui ne figure pas dans le profil. Redige ' +
-      'd\'abord quelques phrases lisibles expliquant ta strategie, puis termine IMPERATIVEMENT par un bloc de code ' +
-      'JSON strictement valide, exactement selon ce format : {"accroche": "...", "arguments": ["...", "..."]}.';
+    // TACHE (integration prompt Lettre V2, tache 1 : texte complet) : texte
+    // de secours aligne sur prompts/lettre.md (version validee) -- utilise
+    // uniquement si le fichier externe ne peut pas etre charge (ex. site
+    // ouvert en file://).
+    return 'Tu es un conseiller en insertion professionnelle experimente. Ton role est de construire une veritable ' +
+      'strategie de communication, puis de rediger, a partir de cette strategie, le texte complet de la lettre de ' +
+      'motivation elle-meme (tu ne dois pas te soucier de la mise en forme graphique, geree par l\'application). ' +
+      'Une lettre de motivation est un outil de persuasion : elle doit toujours repondre, meme implicitement, a ' +
+      'trois questions que se pose tout recruteur : Pourquoi cette personne ? Pourquoi notre entreprise ? ' +
+      'Pourquoi maintenant ? Adapte l\'angle et la longueur au type de candidature indique dans le profil (offre, ' +
+      'candidature spontanee, reconversion, stage, alternance, immersion). Ne repete jamais le CV : complete-le en ' +
+      'donnant du sens au parcours. Choisis, hierarchise, et laisse volontairement de cote ce qui ne sert aucune ' +
+      'des trois questions. Ne jamais inventer un fait qui ne figure pas dans le profil. La lettre finale tient ' +
+      'sur une seule page A4, avec une police jamais inferieure a 10 pt : reste suffisamment concis pour y tenir ' +
+      'naturellement, sans jamais reduire la police pour compenser. Redige d\'abord quelques ' +
+      'phrases lisibles expliquant ta strategie, puis termine IMPERATIVEMENT par un bloc de code JSON strictement ' +
+      'valide, exactement selon ce format : {"accroche": "...", "arguments": ["...", "..."], "lettre": {"objet": ' +
+      '"...", "texte": "..."}}.';
   }
   if (type === 'entretien') {
-    return 'Tu es un conseiller en insertion professionnelle. A partir du profil ci-dessous, ' +
-      'prepare la personne a un entretien : liste les questions frequentes, propose des reponses ' +
-      'appuyees sur son profil, donne des conseils de presentation et des points a valoriser. ' +
-      'Reste bienveillant et concret.';
+    // TACHE (integration prompt Entretien V2) : texte de secours aligne sur
+    // prompts/entretien.md (version validee) -- utilise uniquement si le
+    // fichier externe ne peut pas etre charge (ex. site ouvert en file://).
+    return 'Tu es un conseiller en insertion professionnelle experimente, agissant comme coach de preparation a ' +
+      'l\'entretien d\'embauche. Contrairement au CV et a la lettre, cette preparation n\'est pas une reponse ' +
+      'unique : c\'est un accompagnement progressif par le dialogue, qui se termine par un bilan. Analyse ' +
+      'silencieusement le fil conducteur de la candidature, les zones de fragilite (periode d\'inactivite, ' +
+      'reconversion, manque d\'experience, sujets sensibles), le niveau de preparation et le contexte (stage, ' +
+      'alternance, immersion, premier emploi) deductibles du profil, sans redemander ce qui y figure deja. ' +
+      'Demarre par la presentation de debut d\'entretien, puis prepare les questions anticipees avec une ' +
+      'structure de reponse (situation, tache, action, resultat) et un retour bref, les zones de fragilite avec ' +
+      'bienveillance, les questions que le candidat pourra poser au recruteur, et quelques conseils de ' +
+      'comportement si utile. N\'aborde jamais un handicap de ta propre initiative. Ne jamais inventer un fait. ' +
+      'Quand la preparation est terminee, termine ta derniere reponse IMPERATIVEMENT par un bloc de code JSON ' +
+      'strictement valide, exactement selon ce format : {"presentation": "...", "pointsAPreparer": ["...", "..."], ' +
+      '"questionsAnticipees": ["...", "..."], "questionsDuCandidat": ["...", "..."]}.';
   }
   // TACHE (integration prompt CV V2) : texte de secours aligne sur
   // prompts/cv.md (version validee) -- utilise uniquement si le fichier
@@ -4973,9 +5238,19 @@ function promptParDefaut(type) {
     'du CV (general ou specifique), au metier ou secteur vise, et au type de candidature indiques dans le ' +
     'profil. Privilegie les competences transferables et les experiences personnelles (benevolat, entraide, ' +
     'gestion du foyer, engagement) quand l\'experience directe dans le metier vise est limitee. Ne jamais ' +
-    'inventer un fait qui ne figure pas dans le profil. Redige d\'abord quelques phrases lisibles expliquant ' +
-    'ta strategie, puis termine IMPERATIVEMENT par un bloc de code JSON strictement valide, exactement selon ' +
-    'ce format : {"profil": "...", "pointsForts": ["...", "..."], "motsCles": ["...", "..."]}.';
+    'inventer un fait qui ne figure pas dans le profil. Le CV final tient sur une seule page A4, avec une police ' +
+    'jamais inferieure a 10 pt : limite le nombre d\'experiences detaillees et de missions par experience pour ' +
+    'que ta selection y tienne naturellement, sans jamais reduire la police pour compenser. Recommande aussi, ' +
+    'sans jamais inventer un fait, un type de CV (specifique/general) avec justification, les experiences a ' +
+    'mettre en avant en priorite (poste + entreprise + justification), les competences a valoriser en priorite ' +
+    '(competence + justification), et les rubriques entieres a masquer si elles n\'apportent rien (rubrique + ' +
+    'justification) -- listes vides si rien a recommander, jamais remplies par defaut. Redige d\'abord ' +
+    'quelques phrases lisibles expliquant ta strategie, puis termine IMPERATIVEMENT par un bloc de code JSON ' +
+    'strictement valide, exactement selon ce format : {"profil": "...", "pointsForts": ["...", "..."], ' +
+    '"motsCles": ["...", "..."], "recommandations": {"typeCV": {"valeur": "specifique", "justification": "..."}, ' +
+    '"experiencesAMettreEnAvant": [{"poste": "...", "entreprise": "...", "justification": "..."}], ' +
+    '"competencesAValoriser": [{"competence": "...", "justification": "..."}], ' +
+    '"rubriquesMasquables": [{"rubrique": "...", "justification": "..."}]}}.';
 }
 
 // TACHE (V2 IA, etape 1 : lien assistant IA -> moteur de rendu) : parsing
@@ -4998,6 +5273,45 @@ function promptParDefaut(type) {
 //    que le moteur de rendu, jamais un comptage separe/duplique.
 // Aucun texte libre de l'IA n'est reinjecte ici (uniquement des comptes et
 // des booleens) : aucun risque d'injection HTML depuis un contenu externe.
+// TACHE (integration Entretien V2, generalisation) : fonction GENERIQUE de
+// resume post-import, utilisable par tout module (utilisee ici par
+// Entretien ; le CV garde sa propre fonction dediee genererResumeImportCV(),
+// plus riche car elle croise aussi les faits deja presents dans dossier --
+// voir plus bas). Chaque module ne fait que decrire ses champs et leurs
+// libelles ; toute la mecanique d'affichage est ecrite une seule fois ici.
+function genererResumeGeneriqueImportIA(valeurs, specificationAffichage) {
+  var lignes = ['<p class="mb-1" style="color:#15803d;">✅ Import terminé avec succès.</p>'];
+  specificationAffichage.forEach(function (champ) {
+    var val = valeurs[champ.cle];
+    if (champ.type === 'liste') {
+      var n = val.length;
+      var libelle = (n === 1) ? champ.libelleUnite : champ.libellePluriel;
+      lignes.push('<p class="mb-0">' + (n ? '✅ ' + n + ' ' + libelle : '⚠️ Aucun(e) ' + champ.libellePluriel + ' identifié(e)') + '</p>');
+    } else {
+      lignes.push('<p class="mb-0">' + (val ? '✅ ' + champ.libelle + ' détectée' : '⚠️ Aucune ' + champ.libelle.toLowerCase() + ' détectée') + '</p>');
+    }
+  });
+  return lignes.join('');
+}
+
+var SPEC_AFFICHAGE_ENTRETIEN = [
+  { cle: 'presentation', type: 'texte', libelle: 'Présentation' },
+  { cle: 'pointsAPreparer', type: 'liste', libelleUnite: 'point à préparer', libellePluriel: 'points à préparer' },
+  { cle: 'questionsAnticipees', type: 'liste', libelleUnite: 'question anticipée', libellePluriel: 'questions anticipées' },
+  { cle: 'questionsDuCandidat', type: 'liste', libelleUnite: 'question à poser au recruteur', libellePluriel: 'questions à poser au recruteur' }
+];
+
+// TACHE (Lettre V2, tache 1 : texte complet) : specification d'affichage
+// pour le resume generique -- "texteLettre" est une cle synthetique (pas un
+// champ plat du JSON), construite au moment de l'affichage a partir du
+// champ imbrique lettre.texte, pour reutiliser genererResumeGeneriqueImportIA()
+// sans le modifier.
+var SPEC_AFFICHAGE_LETTRE = [
+  { cle: 'accroche', type: 'texte', libelle: 'Accroche' },
+  { cle: 'arguments', type: 'liste', libelleUnite: 'argument retenu', libellePluriel: 'arguments retenus' },
+  { cle: 'texteLettre', type: 'texte', libelle: 'Lettre complète' }
+];
+
 function genererResumeImportCV(resultatIA, dossierActuel) {
   var objetCV = normaliserDonneesCV(dossierActuel);
   var lignes = [];
@@ -5084,7 +5398,25 @@ function normaliserListeTextesIA(v) {
     .filter(function (e) { return e.length > 0; });
 }
 
-function analyserReponseIACV(texteColle) {
+// TACHE (integration Entretien V2, generalisation) : petite fonction
+// utilitaire pour un message d'erreur naturel ("a, b ou c"), utilisee par
+// le coeur generique ci-dessous.
+function joindreAvecOu(liste) {
+  if (liste.length <= 1) { return liste[0] || ''; }
+  return liste.slice(0, -1).join(', ') + ' ou ' + liste[liste.length - 1];
+}
+
+// TACHE (integration Entretien V2, generalisation) : coeur GENERIQUE de
+// validation d'une reponse IA, partage par CV, Lettre, Entretien et tout
+// futur module -- une seule logique de recherche (extraireBlocJSONDepuisTexte),
+// une seule logique de normalisation par champ (normaliserTexteIA /
+// normaliserListeTextesIA), un seul jeu de messages d'erreur. Chaque module
+// ne fait que decrire SES champs attendus (nom + type texte/liste) ; toute
+// la mecanique de parsing/validation/tolerance est ecrite une seule fois ici.
+//
+// specification : tableau de { cle: 'profil', type: 'texte' } ou
+// { cle: 'pointsForts', type: 'liste' }.
+function analyserReponseIA(texteColle, specification) {
   if (!(texteColle || '').trim()) {
     return { succes: false, erreur: 'Aucun texte a analyser. Collez la reponse de l\'assistant IA avant de continuer.' };
   }
@@ -5098,10 +5430,89 @@ function analyserReponseIACV(texteColle) {
     };
   }
 
+  var resultat = {};
+  var auMoinsUnChampRempli = false;
+  specification.forEach(function (champ) {
+    var valeur = (champ.type === 'liste')
+      ? normaliserListeTextesIA(objet[champ.cle])
+      : normaliserTexteIA(objet[champ.cle]);
+    resultat[champ.cle] = valeur;
+    if (champ.type === 'liste' ? valeur.length > 0 : !!valeur) { auMoinsUnChampRempli = true; }
+  });
+
+  if (!auMoinsUnChampRempli) {
+    return {
+      succes: false,
+      erreur: 'Le JSON a été lu, mais ne contient aucune information exploitable ' +
+        '(' + joindreAvecOu(specification.map(function (c) { return c.cle; })) + '). Vérifiez le contenu collé.'
+    };
+  }
+
+  return { succes: true, valeurs: resultat };
+}
+
+var SPEC_CHAMPS_ENTRETIEN = [
+  { cle: 'presentation', type: 'texte' },
+  { cle: 'pointsAPreparer', type: 'liste' },
+  { cle: 'questionsAnticipees', type: 'liste' },
+  { cle: 'questionsDuCandidat', type: 'liste' }
+];
+
+// TACHE (Moteur de decision de candidature, Tache 1) : normalise une LISTE
+// de recommandations (chacune un objet a champs texte simples + une
+// justification), en filtrant les entrees entierement vides. Reutilise
+// normaliserTexteIA(), deja partagee -- aucune nouvelle logique de
+// normalisation de texte. Meme esprit que le traitement des categories
+// 'liste-objets' du moteur d'import, mais reste ici une fonction dediee au
+// CV (pas ajoutee a SPECIFICATION_IMPORT, qui ne concerne que l'import).
+function normaliserListeRecommandationsIA(brut, champs) {
+  var liste = Array.isArray(brut) ? brut : [];
+  return liste.map(function (item) {
+    var e = {};
+    champs.forEach(function (c) { e[c] = normaliserTexteIA(item ? item[c] : ''); });
+    return e;
+  }).filter(function (e) { return champs.some(function (c) { return !!e[c]; }); });
+}
+
+// TACHE (Moteur de decision de candidature, Tache 1) : fonction DEDIEE
+// (comme analyserReponseIALettre()), pas une delegation vers
+// analyserReponseIA() -- "recommandations" melange un objet unique
+// (typeCV) et des listes d'objets (experiencesAMettreEnAvant,
+// competencesAValoriser, rubriquesMasquables), une forme que le coeur
+// generique (SPEC_CHAMPS_*, pense pour CV/Lettre/Entretien) ne sait pas
+// exprimer. Le succes/echec reste uniquement determine par
+// profil/pointsForts/motsCles (les recommandations sont un enrichissement,
+// jamais le critere de succes du parsing).
+function analyserReponseIACV(texteColle) {
+  if (!(texteColle || '').trim()) {
+    return { succes: false, erreur: 'Aucun texte a analyser. Collez la reponse de l\'assistant IA avant de continuer.' };
+  }
+
+  var objetBrut = extraireBlocJSONDepuisTexte(texteColle);
+  if (!objetBrut) {
+    return {
+      succes: false,
+      erreur: 'Le texte collé ne semble pas être un JSON valide. Vérifiez que vous avez bien copié ' +
+        'l\'intégralité de la réponse de l\'IA, sans texte ajouté avant ou après.'
+    };
+  }
+
+  var recoBrut = objetBrut.recommandations || {};
+  var typeCVBrut = recoBrut.typeCV || {};
+
   var resultat = {
-    profil: normaliserTexteIA(objet.profil),
-    pointsForts: normaliserListeTextesIA(objet.pointsForts),
-    motsCles: normaliserListeTextesIA(objet.motsCles)
+    profil: normaliserTexteIA(objetBrut.profil),
+    pointsForts: normaliserListeTextesIA(objetBrut.pointsForts),
+    motsCles: normaliserListeTextesIA(objetBrut.motsCles),
+    recommandations: {
+      typeCV: {
+        valeur: normaliserTexteIA(typeCVBrut.valeur) || null,
+        justification: normaliserTexteIA(typeCVBrut.justification)
+      },
+      experiencesAMettreEnAvant: normaliserListeRecommandationsIA(recoBrut.experiencesAMettreEnAvant, ['poste', 'entreprise', 'justification']),
+      competencesAValoriser: normaliserListeRecommandationsIA(recoBrut.competencesAValoriser, ['competence', 'justification']),
+      rubriquesMasquables: normaliserListeRecommandationsIA(recoBrut.rubriquesMasquables, ['rubrique', 'justification'])
+    }
   };
 
   if (!resultat.profil && resultat.pointsForts.length === 0 && resultat.motsCles.length === 0) {
@@ -5115,10 +5526,22 @@ function analyserReponseIACV(texteColle) {
   return { succes: true, valeurs: resultat };
 }
 
-// TACHE (integration Lettre V2) : meme principe que analyserReponseIACV(),
-// memes garanties de robustesse (jamais d'exception, jamais de plantage),
-// mais pour les champs propres a la lettre (accroche/arguments). Reutilise
-// extraireBlocJSONDepuisTexte() -- aucune logique de recherche dupliquee.
+// TACHE (Lettre V2, tache 1 : texte complet) : normalise le champ imbrique
+// "lettre" ({objet, texte}) -- toujours un objet valide en sortie, meme si
+// absent ou mal forme (jamais d'exception, jamais de plantage).
+function normaliserLettreImbriquee(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) { return { objet: '', texte: '' }; }
+  return { objet: normaliserTexteIA(v.objet), texte: normaliserTexteIA(v.texte) };
+}
+
+// TACHE (Lettre V2, tache 1 : texte complet) : fonction DEDIEE (pas une
+// delegation vers analyserReponseIA()), car le champ imbrique "lettre" n'est
+// pas un type gere par le coeur generique -- exactement comme convenu
+// (option B : coeur generique inchange, champ imbrique traite uniquement
+// ici). Reutilise neanmoins extraireBlocJSONDepuisTexte() et les memes
+// normalisations souples (normaliserTexteIA/normaliserListeTextesIA) --
+// aucune logique de recherche/normalisation dupliquee, seule la structure
+// du resultat differe.
 function analyserReponseIALettre(texteColle) {
   if (!(texteColle || '').trim()) {
     return { succes: false, erreur: 'Aucun texte a analyser. Collez la reponse de l\'assistant IA avant de continuer.' };
@@ -5135,18 +5558,1109 @@ function analyserReponseIALettre(texteColle) {
 
   var resultat = {
     accroche: normaliserTexteIA(objet.accroche),
-    arguments: normaliserListeTextesIA(objet.arguments)
+    arguments: normaliserListeTextesIA(objet.arguments),
+    lettre: normaliserLettreImbriquee(objet.lettre)
   };
 
-  if (!resultat.accroche && resultat.arguments.length === 0) {
+  var auMoinsUnChampRempli = !!resultat.accroche || resultat.arguments.length > 0 ||
+    !!resultat.lettre.texte || !!resultat.lettre.objet;
+
+  if (!auMoinsUnChampRempli) {
     return {
       succes: false,
       erreur: 'Le JSON a été lu, mais ne contient aucune information exploitable ' +
-        '(accroche ou arguments). Vérifiez le contenu collé.'
+        '(accroche, arguments ou lettre). Vérifiez le contenu collé.'
     };
   }
 
   return { succes: true, valeurs: resultat };
+}
+
+// TACHE (integration Entretien V2) : meme mecanique generique que CV et
+// Lettre, aucune logique dupliquee -- seule la specification des champs change.
+function analyserReponseIAEntretien(texteColle) { return analyserReponseIA(texteColle, SPEC_CHAMPS_ENTRETIEN); }
+
+// ============================================================
+// TACHE 3 (moteur d'import, structures communes) : conforme a
+// docs/ARCHITECTURE_MOTEUR_IMPORT.md. Cette specification decrit,
+// categorie par categorie ET champ par champ, la forme attendue -- ni
+// analyserReponseImport() ci-dessous, ni le futur moteur de comparaison/
+// fusion (taches 5 et 7) ne doivent jamais connaitre un nom de categorie
+// "en dur" : ils se contentent de parcourir cette liste. Ajouter une
+// future categorie (portfolio, publications...) se fait ici, jamais dans
+// le moteur lui-meme.
+//
+// Types de CATEGORIE geres (spec.type) :
+// - 'texte'                  : chaine simple
+// - 'liste-textes'            : tableau de chaines (ex. certifications)
+// - 'objet'                   : objet a champs fixes, chacun type (voir
+//                               ci-dessous) (ex. identite, permis)
+// - 'liste-objets'             : tableau d'elements structures, chaque
+//                               champ type, chaque element pouvant porter
+//                               des "alertes" (voir §4 du document
+//                               d'architecture)
+// - 'objet-de-listes-textes'   : objet dont chaque champ est lui-meme un
+//                               tableau de chaines (ex. competences)
+//
+// Types de CHAMP geres, a l'interieur d'un 'objet' ou d'un 'liste-objets'
+// (champ.type) -- volontairement simple a ce stade (pas de validateur
+// complet construit ici), mais suffisant pour que le moteur puisse, plus
+// tard, valider les types, detecter les incoherences et normaliser plus
+// finement, sans avoir a retoucher la structure de la specification :
+// - 'texte'    : chaine simple
+// - 'liste'    : tableau de chaines (ex. permis.categories)
+// - 'booleen'  : true / false uniquement -- toute autre valeur (chaine,
+//               nombre...) est consideree comme non renseignee (null),
+//               jamais devinee ou convertie a l'aveugle
+// - 'date'     : chaine, traitee comme un texte pour l'instant (aucun
+//               format impose) -- le type est deja pose pour permettre une
+//               validation de format plus stricte plus tard, sans casser
+//               la specification actuelle
+// ============================================================
+var SPECIFICATION_IMPORT = [
+  { cle: 'identite', type: 'objet', champs: [
+    { nom: 'civilite', type: 'texte' }, { nom: 'nom', type: 'texte' }, { nom: 'prenom', type: 'texte' },
+    { nom: 'telephone', type: 'texte' }, { nom: 'email', type: 'texte' }, { nom: 'adresse', type: 'texte' }, { nom: 'ville', type: 'texte' }
+  ]},
+  // TACHE (raffinement prompt extraction-cv.md) : missions en LISTE (une
+  // mission par element), pas une chaine unique -- permet a l'avenir de
+  // masquer/reordonner/raccourcir des missions individuellement (ex. via
+  // appliquerPrioritesIA()), sans avoir a re-parser du texte libre.
+  { cle: 'experiences', type: 'liste-objets', champs: [
+    { nom: 'poste', type: 'texte' }, { nom: 'entreprise', type: 'texte' }, { nom: 'lieu', type: 'texte' },
+    { nom: 'dateDebut', type: 'date' }, { nom: 'dateFin', type: 'date' },
+    // TACHE 8 (moteur de fusion) : dossier.experiences[].missions est une
+    // CHAINE unique (deja le cas avant le moteur d'import, confirme dans le
+    // rendu des templates -- <p>{{missions}}</p>, jamais une liste). Le
+    // schema d'import produit une liste (une mission par element, plus
+    // utile pour l'IA et l'ecran de validation). "transformationVersDossier"
+    // fait la conversion au moment de la fusion, de facon DECLARATIVE --
+    // le moteur de fusion (fusionnerDonnees) n'a jamais besoin de connaitre
+    // "experiences" ou "missions" en dur, il applique juste cette fonction
+    // si elle est presente.
+    { nom: 'missions', type: 'liste', transformationVersDossier: function (valeur) { return (valeur || []).join('. '); } }
+  ], champsRapprochement: ['poste', 'entreprise'] },
+  { cle: 'formations', type: 'liste-objets', champs: [
+    { nom: 'niveau', type: 'texte' }, { nom: 'intitule', type: 'texte' }, { nom: 'annee', type: 'texte' }
+  ], champsRapprochement: ['intitule', 'annee'] },
+  { cle: 'competences', type: 'objet-de-listes-textes', champs: ['savoirFaire', 'savoirEtre', 'savoirs'] },
+  { cle: 'langues', type: 'liste-objets', champs: [
+    { nom: 'langue', type: 'texte' }, { nom: 'niveau', type: 'texte' }
+  ], champsRapprochement: ['langue'] },
+  { cle: 'certifications', type: 'liste-textes', champsRapprochement: null },
+  { cle: 'logiciels', type: 'liste-textes', champsRapprochement: null },
+  { cle: 'permis', type: 'objet', champs: [
+    { nom: 'possede', type: 'booleen' }, { nom: 'categories', type: 'liste' }, { nom: 'vehicule', type: 'booleen' }
+  ]},
+  { cle: 'loisirs', type: 'liste-textes', champsRapprochement: null },
+  { cle: 'engagements', type: 'liste-textes', champsRapprochement: null },
+  // TACHE (raffinement prompt extraction-cv.md, point 7) : filet de
+  // securite generique -- toute information reperee par l'IA mais ne
+  // correspondant a aucune categorie ci-dessus (disponibilite, mobilite,
+  // LinkedIn, RQTH si explicitement mentionnee, pretentions salariales...)
+  // atterrit ici plutot que d'etre perdue. Simple liste de texte ; le tri
+  // eventuel vers une categorie future reste une decision humaine ou une
+  // evolution ulterieure du moteur, jamais une deduction automatique.
+  { cle: 'informationsNonClassees', type: 'liste-textes', champsRapprochement: null }
+];
+
+// TACHE 3 (moteur d'import) : normalise UNE valeur selon le type de CHAMP
+// declare dans la specification (pas le type de categorie) -- utilisee par
+// les branches 'objet' et 'liste-objets' ci-dessous. Jamais d'exception,
+// jamais de valeur inventee : une valeur du mauvais type retombe sur une
+// valeur neutre (null pour un booleen, chaine/liste vide sinon).
+// TACHE (raffinement prompt extraction-cv.md, point 2) : seules 3 valeurs
+// autorisees pour le niveau de confiance d'un element extrait. Toute autre
+// valeur (absente, mal ecrite, dans une autre langue...) retombe sur null --
+// jamais devinee, jamais une valeur par defaut optimiste.
+function normaliserConfianceIA(v) {
+  return (v === 'elevee' || v === 'moyenne' || v === 'faible') ? v : null;
+}
+
+function normaliserChampSelonType(valeur, typeChamp) {
+  if (typeChamp === 'liste') { return normaliserListeTextesIA(valeur); }
+  if (typeChamp === 'booleen') { return (valeur === true || valeur === false) ? valeur : null; }
+  if (typeChamp === 'date') { return normaliserTexteIA(valeur); } // pas de validation de format a ce stade
+  return normaliserTexteIA(valeur); // 'texte' par defaut
+}
+
+// Un champ est-il considere "rempli" pour la detection generale
+// (auMoinsUnChampRempli) ? Depend du type -- un booleen "false" est une
+// reponse valide (donc "rempli"), contrairement a null (non renseigne).
+function champEstRempli(valeur, typeChamp) {
+  if (typeChamp === 'liste') { return valeur.length > 0; }
+  if (typeChamp === 'booleen') { return valeur !== null; }
+  return !!valeur;
+}
+
+// TACHE 3 (moteur d'import) : parsing GENERIQUE, partage par toute future
+// source (CV, LinkedIn, Europass...) -- seule la specification passee en
+// parametre change, jamais cette fonction. Reutilise extraireBlocJSONDepuisTexte()
+// et normaliserTexteIA()/normaliserListeTextesIA(), deja partagees par le CV/
+// la Lettre/l'Entretien -- aucune logique de recherche ou de normalisation
+// dupliquee. Toujours tolerant : un champ absent ou mal forme retombe sur
+// une valeur neutre, jamais une exception.
+function analyserReponseImport(texteColle, specification) {
+  if (!(texteColle || '').trim()) {
+    return { succes: false, erreur: 'Aucun texte a analyser. Collez la reponse de l\'assistant IA avant de continuer.' };
+  }
+
+  var objetBrut = extraireBlocJSONDepuisTexte(texteColle);
+  if (!objetBrut) {
+    return {
+      succes: false,
+      erreur: 'Le texte collé ne semble pas être un JSON valide. Vérifiez que vous avez bien copié ' +
+        'l\'intégralité de la réponse de l\'IA, sans texte ajouté avant ou après.'
+    };
+  }
+
+  var resultat = {};
+  var auMoinsUnChampRempli = false;
+
+  specification.forEach(function (spec) {
+    var brut = objetBrut[spec.cle];
+
+    if (spec.type === 'texte') {
+      resultat[spec.cle] = normaliserTexteIA(brut);
+      if (resultat[spec.cle]) { auMoinsUnChampRempli = true; }
+
+    } else if (spec.type === 'liste-textes') {
+      resultat[spec.cle] = normaliserListeTextesIA(brut);
+      if (resultat[spec.cle].length > 0) { auMoinsUnChampRempli = true; }
+
+    } else if (spec.type === 'objet') {
+      var objetSource = (brut && typeof brut === 'object' && !Array.isArray(brut)) ? brut : {};
+      var objetNormalise = {};
+      var objetRempli = false;
+      spec.champs.forEach(function (champ) {
+        var v = normaliserChampSelonType(objetSource[champ.nom], champ.type);
+        objetNormalise[champ.nom] = v;
+        if (champEstRempli(v, champ.type)) { objetRempli = true; }
+      });
+      resultat[spec.cle] = objetNormalise;
+      if (objetRempli) { auMoinsUnChampRempli = true; }
+
+    } else if (spec.type === 'liste-objets') {
+      var listeSource = Array.isArray(brut) ? brut : [];
+      resultat[spec.cle] = listeSource.map(function (item) {
+        var e = {};
+        spec.champs.forEach(function (champ) {
+          e[champ.nom] = normaliserChampSelonType(item ? item[champ.nom] : undefined, champ.type);
+        });
+        // TACHE (alertes, §4 du document d'architecture) : incertitude
+        // signalee par l'IA elle-meme sur cet element precis (ex. "date de
+        // fin manquante") -- toujours optionnel, jamais invente ici.
+        e.alertes = normaliserListeTextesIA(item ? item.alertes : []);
+        // TACHE (raffinement prompt extraction-cv.md, point 2) : niveau de
+        // confiance de l'IA sur CET element precis -- champ UNIVERSEL,
+        // comme alertes, jamais a redeclarer categorie par categorie dans
+        // "champs". Seules 3 valeurs autorisees ; toute autre valeur
+        // (absente, mal orthographiee...) retombe sur null plutot que
+        // d'etre devinee.
+        e.confiance = normaliserConfianceIA(item ? item.confiance : null);
+        return e;
+      });
+      if (resultat[spec.cle].length > 0) { auMoinsUnChampRempli = true; }
+
+    } else if (spec.type === 'objet-de-listes-textes') {
+      var objetListesSource = (brut && typeof brut === 'object') ? brut : {};
+      var objetListesNormalise = {};
+      var objetListesRempli = false;
+      spec.champs.forEach(function (c) {
+        objetListesNormalise[c] = normaliserListeTextesIA(objetListesSource[c]);
+        if (objetListesNormalise[c].length > 0) { objetListesRempli = true; }
+      });
+      resultat[spec.cle] = objetListesNormalise;
+      if (objetListesRempli) { auMoinsUnChampRempli = true; }
+    }
+  });
+
+  if (!auMoinsUnChampRempli) {
+    return {
+      succes: false,
+      erreur: 'Le JSON a été lu, mais ne contient aucune information exploitable. Vérifiez le contenu collé.'
+    };
+  }
+
+  return { succes: true, valeurs: resultat };
+}
+
+// ============================================================
+// TACHE 6 (moteur d'import, comparaison) : conforme a
+// docs/ARCHITECTURE_MOTEUR_IMPORT.md, §6. Fonction PURE -- ne modifie
+// jamais dossier, ne decide jamais rien, se contente de CONSTATER des
+// differences. Pilotee entierement par SPECIFICATION_IMPORT : ne connait
+// aucun nom de categorie en dur, fonctionne a l'identique pour une future
+// categorie ajoutee a la specification. Reutilisable telle quelle, plus
+// tard, pour comparer deux CV entre eux ou un dossier ancien/nouveau (§13
+// du document d'architecture) -- elle ne sait meme pas que l'un des deux
+// cotes s'appelle "dossier".
+// ============================================================
+
+// Compare deux chaines en ignorant casse/espaces superflus -- jamais une
+// egalite stricte de chaines brutes, pour eviter des faux "nouveaux"
+// evidents (ex. "Excel" vs "excel ").
+function normaliserPourComparaison(texte) {
+  return (texte || '').toString().trim().toLowerCase();
+}
+
+// Un element de liste (dossier.certifications, logiciels...) existe-t-il
+// deja, a la casse/espaces pres ?
+function texteExisteDeja(liste, texte) {
+  var t = normaliserPourComparaison(texte);
+  if (!t) { return false; }
+  return (liste || []).some(function (e) { return normaliserPourComparaison(e) === t; });
+}
+
+// Deux elements structures (une experience, une formation...) sont-ils un
+// doublon PROBABLE ? Compare uniquement les champs de rapprochement
+// declares dans la specification (jamais tous les champs) -- toujours une
+// heuristique, jamais une certitude (voir §9 du document d'architecture).
+// Exige qu'au moins un champ compare soit non vide, pour ne jamais
+// rapprocher deux elements entierement vides entre eux.
+function estDoublonProbable(existant, propose, champsRapprochement) {
+  if (!champsRapprochement || champsRapprochement.length === 0) { return false; }
+  var auMoinsUnChampNonVide = false;
+  var tousCorrespondent = champsRapprochement.every(function (champ) {
+    var a = normaliserPourComparaison(existant[champ]);
+    var b = normaliserPourComparaison(propose[champ]);
+    if (b) { auMoinsUnChampNonVide = true; }
+    return a === b;
+  });
+  return auMoinsUnChampNonVide && tousCorrespondent;
+}
+
+// Une valeur de champ (texte/liste/booleen) est-elle consideree "non vide" ?
+// Utilise pour savoir s'il y a quelque chose a comparer/proposer.
+function champNonVide(valeur, typeChamp) {
+  if (typeChamp === 'liste') { return Array.isArray(valeur) && valeur.length > 0; }
+  if (typeChamp === 'booleen') { return valeur !== null && valeur !== undefined; }
+  return !!valeur;
+}
+
+function comparerDonnees(dossierExistant, donneesProposees, specification) {
+  var resultat = {};
+
+  specification.forEach(function (spec) {
+    var existant = dossierExistant ? dossierExistant[spec.cle] : undefined;
+    var propose = donneesProposees ? donneesProposees[spec.cle] : undefined;
+
+    if (spec.type === 'liste-textes') {
+      var listeExistanteTextes = Array.isArray(existant) ? existant : [];
+      var listeProposeeTextes = Array.isArray(propose) ? propose : [];
+      var nouveauxTextes = [], doublonsTextes = [];
+      listeProposeeTextes.forEach(function (item) {
+        (texteExisteDeja(listeExistanteTextes, item) ? doublonsTextes : nouveauxTextes).push(item);
+      });
+      resultat[spec.cle] = { nouveaux: nouveauxTextes, doublonsProbables: doublonsTextes, conflits: [] };
+
+    } else if (spec.type === 'liste-objets') {
+      var listeExistanteObjets = Array.isArray(existant) ? existant : [];
+      var listeProposeeObjets = Array.isArray(propose) ? propose : [];
+      var nouveauxObjets = [], doublonsObjets = [];
+      listeProposeeObjets.forEach(function (item) {
+        var aUnDoublon = listeExistanteObjets.some(function (e) {
+          return estDoublonProbable(e, item, spec.champsRapprochement);
+        });
+        (aUnDoublon ? doublonsObjets : nouveauxObjets).push(item);
+      });
+      resultat[spec.cle] = { nouveaux: nouveauxObjets, doublonsProbables: doublonsObjets, conflits: [] };
+
+    } else if (spec.type === 'objet') {
+      var existantObj = existant || {};
+      var proposeObj = propose || {};
+      var nouveauxChamps = [];
+      var conflitsChamps = [];
+      spec.champs.forEach(function (champ) {
+        var valExistante = existantObj[champ.nom];
+        var valProposee = proposeObj[champ.nom];
+        if (!champNonVide(valProposee, champ.type)) { return; } // rien de propose pour ce champ
+        if (!champNonVide(valExistante, champ.type)) {
+          nouveauxChamps.push({ champ: champ.nom, valeur: valProposee });
+          return;
+        }
+        // Les deux cotes ont une valeur : conflit uniquement si elles different reellement.
+        var identique = (champ.type === 'liste')
+          ? JSON.stringify((valExistante || []).slice().sort()) === JSON.stringify((valProposee || []).slice().sort())
+          : valExistante === valProposee;
+        if (!identique) {
+          conflitsChamps.push({ champ: champ.nom, valeurExistante: valExistante, valeurProposee: valProposee });
+        }
+      });
+      resultat[spec.cle] = { nouveaux: nouveauxChamps, doublonsProbables: [], conflits: conflitsChamps };
+
+    } else if (spec.type === 'objet-de-listes-textes') {
+      var sousResultat = {};
+      spec.champs.forEach(function (sousChamp) {
+        var listeExistanteSous = (existant && existant[sousChamp]) || [];
+        var listeProposeeSous = (propose && propose[sousChamp]) || [];
+        var nouveauxSous = [], doublonsSous = [];
+        listeProposeeSous.forEach(function (item) {
+          (texteExisteDeja(listeExistanteSous, item) ? doublonsSous : nouveauxSous).push(item);
+        });
+        sousResultat[sousChamp] = { nouveaux: nouveauxSous, doublonsProbables: doublonsSous, conflits: [] };
+      });
+      resultat[spec.cle] = sousResultat;
+
+    } else if (spec.type === 'texte') {
+      var proposeTexte = propose || '';
+      if (!proposeTexte) {
+        resultat[spec.cle] = { nouveaux: [], doublonsProbables: [], conflits: [] };
+      } else if (!existant) {
+        resultat[spec.cle] = { nouveaux: [proposeTexte], doublonsProbables: [], conflits: [] };
+      } else if (existant === proposeTexte) {
+        resultat[spec.cle] = { nouveaux: [], doublonsProbables: [proposeTexte], conflits: [] };
+      } else {
+        resultat[spec.cle] = { nouveaux: [], doublonsProbables: [], conflits: [{ valeurExistante: existant, valeurProposee: proposeTexte }] };
+      }
+    }
+  });
+
+  return resultat;
+}
+
+// ============================================================
+// TACHE 7 (moteur d'import, ecran de validation) : conforme a
+// docs/ARCHITECTURE_MOTEUR_IMPORT.md, §3 et §9. Genere une vue d'ensemble,
+// categorie par categorie, a partir du resultat de comparerDonnees() --
+// jamais d'ecriture dans dossier ici (voir Tache 8, pas encore construite).
+// Entierement pilote par SPECIFICATION_IMPORT : ne connait aucun nom de
+// categorie en dur.
+//
+// Convention d'attributs data-* utilisee pour relier chaque controle a
+// l'element qu'il represente, relue ensuite par lireDecisionsValidationImport() :
+// - data-categorie, data-sous-categorie (pour competences), data-groupe
+//   ("nouveaux"/"doublonsProbables"), data-index (position dans ce groupe),
+//   data-champ (pour les listes d'objets et les objets).
+// ============================================================
+
+function badgeConfiance(confiance) {
+  if (confiance === 'elevee') { return '<span style="color:#15803d;" title="Confiance elevee">&#128994;</span>'; }
+  if (confiance === 'moyenne') { return '<span style="color:#b45309;" title="Confiance moyenne">&#128993;</span>'; }
+  if (confiance === 'faible') { return '<span style="color:#b91c1c;" title="Confiance faible">&#128308;</span>'; }
+  return '';
+}
+
+function texteAlertes(alertes) {
+  if (!alertes || !alertes.length) { return ''; }
+  return '<div class="small" style="color:#b45309;">&#9888;&#65039; ' + alertes.join(' — ') + '</div>';
+}
+
+// Une ligne pour un element simple de liste-textes (certifications,
+// logiciels, loisirs, engagements, informationsNonClassees...). Checkbox
+// cochee par defaut pour un "nouveau", decochee par defaut pour un
+// "doublon probable" (deja present, l'ajouter a nouveau est un choix
+// explicite, pas le comportement par defaut).
+function ligneItemListeTextes(categorie, groupe, index, texte) {
+  var idBase = 'val_' + categorie + '_' + groupe + '_' + index;
+  var cocheParDefaut = (groupe === 'nouveaux') ? ' checked' : '';
+  return '<div class="d-flex align-items-center gap-2 mb-1">' +
+    '<input type="checkbox" id="' + idBase + '_case" data-categorie="' + categorie + '" data-groupe="' + groupe +
+    '" data-index="' + index + '"' + cocheParDefaut + '>' +
+    '<input type="text" class="form-control form-control-sm" id="' + idBase + '_valeur" value="' + echapperAttribut(texte) + '">' +
+    '</div>';
+}
+
+// Meme principe, pour un sous-champ de competences (objet-de-listes-textes).
+function ligneItemCompetence(sousCategorie, groupe, index, texte) {
+  var idBase = 'val_competences_' + sousCategorie + '_' + groupe + '_' + index;
+  var cocheParDefaut = (groupe === 'nouveaux') ? ' checked' : '';
+  return '<div class="d-flex align-items-center gap-2 mb-1">' +
+    '<input type="checkbox" id="' + idBase + '_case" data-categorie="competences" data-sous-categorie="' + sousCategorie +
+    '" data-groupe="' + groupe + '" data-index="' + index + '"' + cocheParDefaut + '>' +
+    '<input type="text" class="form-control form-control-sm" id="' + idBase + '_valeur" value="' + echapperAttribut(texte) + '">' +
+    '</div>';
+}
+
+// Une ligne pour un element de liste-objets (experiences, formations,
+// langues) : une checkbox globale pour l'element + un champ texte editable
+// par sous-champ, plus le badge de confiance et les alertes eventuelles.
+function ligneItemListeObjets(categorie, groupe, index, item, champs) {
+  var idBase = 'val_' + categorie + '_' + groupe + '_' + index;
+  var cocheParDefaut = (groupe === 'nouveaux') ? ' checked' : '';
+  var champsHtml = champs.map(function (champ) {
+    var valeurAffichee = (champ.type === 'liste') ? (item[champ.nom] || []).join(', ') : (item[champ.nom] || '');
+    return '<input type="text" class="form-control form-control-sm mb-1" ' +
+      'id="' + idBase + '_' + champ.nom + '" data-champ="' + champ.nom + '" ' +
+      'placeholder="' + echapperAttribut(champ.nom) + '" value="' + echapperAttribut(valeurAffichee) + '">';
+  }).join('');
+  return '<div class="border rounded p-2 mb-2">' +
+    '<div class="d-flex align-items-center gap-2 mb-1">' +
+    '<input type="checkbox" id="' + idBase + '_case" data-categorie="' + categorie + '" data-groupe="' + groupe +
+    '" data-index="' + index + '"' + cocheParDefaut + '>' +
+    badgeConfiance(item.confiance) +
+    '</div>' + champsHtml + texteAlertes(item.alertes) +
+    '</div>';
+}
+
+// Un champ scalaire d'un "objet" (identite, permis) propose comme NOUVEAU
+// (le champ etait vide dans dossier) : checkbox + valeur editable.
+function ligneChampObjetNouveau(categorie, champNom, valeur, typeChamp) {
+  var idBase = 'val_' + categorie + '_nouveauChamp_' + champNom;
+  var valeurAffichee = (typeChamp === 'liste') ? (valeur || []).join(', ') : (typeChamp === 'booleen' ? (valeur ? 'Oui' : 'Non') : valeur);
+  var champInput = (typeChamp === 'booleen')
+    ? '<select class="form-select form-select-sm" id="' + idBase + '_valeur"><option value="true"' + (valeur ? ' selected' : '') + '>Oui</option><option value="false"' + (!valeur ? ' selected' : '') + '>Non</option></select>'
+    : '<input type="text" class="form-control form-control-sm" id="' + idBase + '_valeur" value="' + echapperAttribut(valeurAffichee) + '">';
+  return '<div class="d-flex align-items-center gap-2 mb-1">' +
+    '<input type="checkbox" id="' + idBase + '_case" data-categorie="' + categorie + '" data-groupe="nouveauChamp" ' +
+    'data-champ="' + champNom + '" checked>' +
+    '<label class="small text-muted mb-0" style="min-width:110px;">' + champNom + '</label>' + champInput +
+    '</div>';
+}
+
+// Un champ scalaire d'un "objet" en CONFLIT (dossier a deja une valeur,
+// l'import en propose une differente) : choix explicite garder/remplacer,
+// jamais de remplacement automatique.
+function ligneChampObjetConflit(categorie, champNom, valeurExistante, valeurProposee, typeChamp) {
+  var idBase = 'val_' + categorie + '_conflit_' + champNom;
+  var afficheExistant = (typeChamp === 'liste') ? (valeurExistante || []).join(', ') : (typeChamp === 'booleen' ? (valeurExistante ? 'Oui' : 'Non') : valeurExistante);
+  var afficheProposee = (typeChamp === 'liste') ? (valeurProposee || []).join(', ') : (typeChamp === 'booleen' ? (valeurProposee ? 'Oui' : 'Non') : valeurProposee);
+  return '<div class="border rounded p-2 mb-2">' +
+    '<label class="small text-muted mb-1 d-block">' + champNom + '</label>' +
+    '<div class="form-check"><input class="form-check-input" type="radio" name="' + idBase + '" id="' + idBase + '_garder" value="garder" checked>' +
+    '<label class="form-check-label small" for="' + idBase + '_garder">Garder : ' + afficheExistant + '</label></div>' +
+    '<div class="form-check"><input class="form-check-input" type="radio" name="' + idBase + '" id="' + idBase + '_remplacer" value="remplacer">' +
+    '<label class="form-check-label small" for="' + idBase + '_remplacer">Remplacer par : ' + afficheProposee + '</label></div>' +
+    '</div>';
+}
+
+// Assemble l'ecran complet, categorie par categorie, a partir du resultat
+// de comparerDonnees(). Retourne une chaine HTML, ne touche a aucun DOM ici
+// (facilite les tests -- voir plus bas).
+function genererEcranValidationImport(resultatComparaison, specification) {
+  var blocs = specification.map(function (spec) {
+    var res = resultatComparaison[spec.cle];
+    if (!res) { return ''; }
+
+    if (spec.type === 'liste-textes') {
+      if (res.nouveaux.length === 0 && res.doublonsProbables.length === 0) { return ''; }
+      var lignes = res.nouveaux.map(function (t, i) { return ligneItemListeTextes(spec.cle, 'nouveaux', i, t); }).join('') +
+        res.doublonsProbables.map(function (t, i) { return ligneItemListeTextes(spec.cle, 'doublonsProbables', i, t); }).join('');
+      return '<div class="mb-3"><h6>' + spec.cle + '</h6>' + lignes + '</div>';
+
+    } else if (spec.type === 'liste-objets') {
+      if (res.nouveaux.length === 0 && res.doublonsProbables.length === 0) { return ''; }
+      var lignesObjets = res.nouveaux.map(function (it, i) { return ligneItemListeObjets(spec.cle, 'nouveaux', i, it, spec.champs); }).join('') +
+        res.doublonsProbables.map(function (it, i) { return ligneItemListeObjets(spec.cle, 'doublonsProbables', i, it, spec.champs); }).join('');
+      return '<div class="mb-3"><h6>' + spec.cle + '</h6>' + lignesObjets + '</div>';
+
+    } else if (spec.type === 'objet') {
+      var lignesChamps = res.nouveaux.map(function (n) {
+        var champDef = spec.champs.filter(function (c) { return c.nom === n.champ; })[0];
+        return ligneChampObjetNouveau(spec.cle, n.champ, n.valeur, champDef ? champDef.type : 'texte');
+      }).join('') + res.conflits.map(function (c) {
+        var champDef = spec.champs.filter(function (ch) { return ch.nom === c.champ; })[0];
+        return ligneChampObjetConflit(spec.cle, c.champ, c.valeurExistante, c.valeurProposee, champDef ? champDef.type : 'texte');
+      }).join('');
+      if (!lignesChamps) { return ''; }
+      return '<div class="mb-3"><h6>' + spec.cle + '</h6>' + lignesChamps + '</div>';
+
+    } else if (spec.type === 'objet-de-listes-textes') {
+      var sousBlocs = spec.champs.map(function (sousChamp) {
+        var sousRes = res[sousChamp];
+        if (!sousRes || (sousRes.nouveaux.length === 0 && sousRes.doublonsProbables.length === 0)) { return ''; }
+        var lignesSous = sousRes.nouveaux.map(function (t, i) { return ligneItemCompetence(sousChamp, 'nouveaux', i, t); }).join('') +
+          sousRes.doublonsProbables.map(function (t, i) { return ligneItemCompetence(sousChamp, 'doublonsProbables', i, t); }).join('');
+        return '<p class="small text-muted mb-1">' + sousChamp + '</p>' + lignesSous;
+      }).join('');
+      if (!sousBlocs) { return ''; }
+      return '<div class="mb-3"><h6>' + spec.cle + '</h6>' + sousBlocs + '</div>';
+    }
+    return '';
+  }).join('');
+
+  return blocs || '<p class="text-muted">Aucune information nouvelle detectee par rapport a votre dossier actuel.</p>';
+}
+
+// Relit l'ecran genere ci-dessus (une fois affiche dans une vraie page) et
+// produit une structure "decisionsUtilisateur", prete pour le futur
+// fusionnerDonnees() (Tache 8). Ne modifie jamais dossier elle-meme.
+function lireDecisionsValidationImport(resultatComparaison, specification) {
+  var decisions = {};
+
+  specification.forEach(function (spec) {
+    var res = resultatComparaison[spec.cle];
+    if (!res) { return; }
+
+    if (spec.type === 'liste-textes') {
+      var elements = [];
+      ['nouveaux', 'doublonsProbables'].forEach(function (groupe) {
+        (res[groupe] || []).forEach(function (_, i) {
+          var idBase = 'val_' + spec.cle + '_' + groupe + '_' + i;
+          var caseACocher = document.getElementById(idBase + '_case');
+          var champValeur = document.getElementById(idBase + '_valeur');
+          if (caseACocher && caseACocher.checked && champValeur) { elements.push(champValeur.value.trim()); }
+        });
+      });
+      decisions[spec.cle] = { elementsAAjouter: elements };
+
+    } else if (spec.type === 'liste-objets') {
+      var elementsObjets = [];
+      ['nouveaux', 'doublonsProbables'].forEach(function (groupe) {
+        (res[groupe] || []).forEach(function (_, i) {
+          var idBase = 'val_' + spec.cle + '_' + groupe + '_' + i;
+          var caseACocher = document.getElementById(idBase + '_case');
+          if (!caseACocher || !caseACocher.checked) { return; }
+          var e = {};
+          spec.champs.forEach(function (champ) {
+            var champInput = document.getElementById(idBase + '_' + champ.nom);
+            var val = champInput ? champInput.value : '';
+            e[champ.nom] = (champ.type === 'liste') ? val.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : val;
+          });
+          elementsObjets.push(e);
+        });
+      });
+      decisions[spec.cle] = { elementsAAjouter: elementsObjets };
+
+    } else if (spec.type === 'objet') {
+      var champsAAppliquer = {};
+      (res.nouveaux || []).forEach(function (n) {
+        var idBase = 'val_' + spec.cle + '_nouveauChamp_' + n.champ;
+        var caseACocher = document.getElementById(idBase + '_case');
+        if (!caseACocher || !caseACocher.checked) { return; }
+        var champDef = spec.champs.filter(function (c) { return c.nom === n.champ; })[0];
+        var champValeur = document.getElementById(idBase + '_valeur');
+        var brut = champValeur ? champValeur.value : '';
+        if (champDef && champDef.type === 'booleen') { champsAAppliquer[n.champ] = (brut === 'true'); }
+        else if (champDef && champDef.type === 'liste') { champsAAppliquer[n.champ] = brut.split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
+        else { champsAAppliquer[n.champ] = brut; }
+      });
+      (res.conflits || []).forEach(function (c) {
+        var idBase = 'val_' + spec.cle + '_conflit_' + c.champ;
+        var choixRemplacer = document.getElementById(idBase + '_remplacer');
+        if (choixRemplacer && choixRemplacer.checked) { champsAAppliquer[c.champ] = c.valeurProposee; }
+        // Sinon ("garder"), on n'ajoute rien : la valeur existante reste inchangee.
+      });
+      decisions[spec.cle] = { champsAAppliquer: champsAAppliquer };
+
+    } else if (spec.type === 'objet-de-listes-textes') {
+      var sousDecisions = {};
+      spec.champs.forEach(function (sousChamp) {
+        var sousRes = res[sousChamp];
+        var elementsSous = [];
+        if (sousRes) {
+          ['nouveaux', 'doublonsProbables'].forEach(function (groupe) {
+            (sousRes[groupe] || []).forEach(function (_, i) {
+              var idBase = 'val_competences_' + sousChamp + '_' + groupe + '_' + i;
+              var caseACocher = document.getElementById(idBase + '_case');
+              var champValeur = document.getElementById(idBase + '_valeur');
+              if (caseACocher && caseACocher.checked && champValeur) { elementsSous.push(champValeur.value.trim()); }
+            });
+          });
+        }
+        sousDecisions[sousChamp] = { elementsAAjouter: elementsSous };
+      });
+      decisions[spec.cle] = sousDecisions;
+    }
+  });
+
+  return decisions;
+}
+
+// Orchestre l'ouverture de l'ecran de validation : lit dossier.imports.courant,
+// calcule la comparaison, affiche l'ecran, et relie le bouton "Valider" a la
+// lecture des decisions -- PAS ENCORE a une fusion reelle (Tache 8).
+// ============================================================
+// TACHE 8 (moteur d'import, fusion) : conforme a
+// docs/ARCHITECTURE_MOTEUR_IMPORT.md, §7. N'applique QUE ce qui a ete
+// explicitement decide (voir lireDecisionsValidationImport(), Tache 7) --
+// jamais de deduction, jamais d'ecrasement, jamais de suppression
+// automatique. Entierement pilotee par la specification : ne connait
+// aucun nom de categorie en dur (le cas particulier "competences", dont la
+// forme dans dossier ne correspond pas exactement au schema d'import --
+// voir plus bas -- reste la seule exception assumee et commentee).
+//
+// Retourne { dossier, resume } : le resume (ce qui a ete reellement
+// ajoute/modifie) prepare le terrain pour une future historisation
+// (§12 du document d'architecture), sans qu'elle soit construite ici.
+// ============================================================
+function fusionnerDonnees(dossierCible, decisionsUtilisateur, specification) {
+  var resume = {};
+
+  specification.forEach(function (spec) {
+    var decision = decisionsUtilisateur[spec.cle];
+    if (!decision) { return; }
+
+    if (spec.type === 'liste-textes') {
+      if (!Array.isArray(dossierCible[spec.cle])) { dossierCible[spec.cle] = []; }
+      var ajoutesTextes = [];
+      (decision.elementsAAjouter || []).forEach(function (texte) {
+        if (texte && !texteExisteDeja(dossierCible[spec.cle], texte)) {
+          dossierCible[spec.cle].push(texte);
+          ajoutesTextes.push(texte);
+        }
+      });
+      resume[spec.cle] = { ajoutes: ajoutesTextes };
+
+    } else if (spec.type === 'liste-objets') {
+      if (!Array.isArray(dossierCible[spec.cle])) { dossierCible[spec.cle] = []; }
+      var ajoutesObjets = [];
+      (decision.elementsAAjouter || []).forEach(function (item) {
+        var itemPourDossier = {};
+        spec.champs.forEach(function (champ) {
+          var v = item[champ.nom];
+          itemPourDossier[champ.nom] = (typeof champ.transformationVersDossier === 'function')
+            ? champ.transformationVersDossier(v) : v;
+        });
+        dossierCible[spec.cle].push(itemPourDossier);
+        ajoutesObjets.push(itemPourDossier);
+      });
+      resume[spec.cle] = { ajoutes: ajoutesObjets };
+
+    } else if (spec.type === 'objet') {
+      if (!dossierCible[spec.cle] || typeof dossierCible[spec.cle] !== 'object') { dossierCible[spec.cle] = {}; }
+      var champsAppliques = {};
+      var champsAAppliquer = decision.champsAAppliquer || {};
+      Object.keys(champsAAppliquer).forEach(function (champNom) {
+        dossierCible[spec.cle][champNom] = champsAAppliquer[champNom];
+        champsAppliques[champNom] = champsAAppliquer[champNom];
+      });
+      resume[spec.cle] = { champsAppliques: champsAppliques };
+
+    } else if (spec.type === 'objet-de-listes-textes' && spec.cle === 'competences') {
+      // TACHE 8 (cas particulier assume) : dossier n'a pas de champ
+      // "competences" structure en {savoirFaire, savoirEtre, savoirs} --
+      // il a deux champs plats, dossier.competencesCV (savoir-faire ET
+      // savoir-etre reunis) et dossier.savoirsCV, alimentes historiquement
+      // par l'ancienne analyse rapide (appliquerAnalyseCV(), Tache 9 a
+      // venir). On fusionne donc vers ces memes champs, pour que les
+      // competences importees soient reellement prises en compte par
+      // deduireCompetences() (deja lu ces deux champs).
+      if (!Array.isArray(dossierCible.competencesCV)) { dossierCible.competencesCV = []; }
+      if (!Array.isArray(dossierCible.savoirsCV)) { dossierCible.savoirsCV = []; }
+      var ajoutesCompetences = { savoirFaire: [], savoirEtre: [], savoirs: [] };
+      ['savoirFaire', 'savoirEtre'].forEach(function (sousChamp) {
+        var d = decision[sousChamp] || { elementsAAjouter: [] };
+        (d.elementsAAjouter || []).forEach(function (texte) {
+          if (texte && !texteExisteDeja(dossierCible.competencesCV, texte)) {
+            dossierCible.competencesCV.push(texte);
+            ajoutesCompetences[sousChamp].push(texte);
+          }
+        });
+      });
+      var dSavoirs = decision.savoirs || { elementsAAjouter: [] };
+      (dSavoirs.elementsAAjouter || []).forEach(function (texte) {
+        if (texte && !texteExisteDeja(dossierCible.savoirsCV, texte)) {
+          dossierCible.savoirsCV.push(texte);
+          ajoutesCompetences.savoirs.push(texte);
+        }
+      });
+      resume[spec.cle] = ajoutesCompetences;
+    }
+  });
+
+  return { dossier: dossierCible, resume: resume };
+}
+
+// ============================================================
+// TACHE 9 (moteur d'import, resume des operations) : conforme a
+// docs/ARCHITECTURE_MOTEUR_IMPORT.md, §12. Transforme le "resume" retourne
+// par fusionnerDonnees() (deja structure, voir Tache 8) en quelques lignes
+// lisibles pour la personne -- purement presentationnel, ne modifie jamais
+// dossier, ne relit jamais le DOM. Les libelles ci-dessous sont les seules
+// exceptions "categorie en dur" de tout le moteur d'import, et c'est
+// assume : ils ne servent qu'a l'affichage, jamais a la logique de
+// comparaison/validation/fusion elle-meme (deja entierement generiques).
+// ============================================================
+var LIBELLES_RESUME_IMPORT = {
+  experiences: { singulier: 'expérience ajoutée', pluriel: 'expériences ajoutées' },
+  formations: { singulier: 'formation ajoutée', pluriel: 'formations ajoutées' },
+  langues: { singulier: 'langue ajoutée', pluriel: 'langues ajoutées' },
+  certifications: { singulier: 'certification ajoutée', pluriel: 'certifications ajoutées' },
+  logiciels: { singulier: 'logiciel ajouté', pluriel: 'logiciels ajoutés' },
+  loisirs: { singulier: 'loisir ajouté', pluriel: 'loisirs ajoutés' },
+  engagements: { singulier: 'engagement ajouté', pluriel: 'engagements ajoutés' },
+  informationsNonClassees: { singulier: 'information complémentaire ajoutée', pluriel: 'informations complémentaires ajoutées' }
+};
+
+var LIBELLES_CHAMPS_IMPORT = {
+  'identite.civilite': 'Civilité', 'identite.nom': 'Nom', 'identite.prenom': 'Prénom',
+  'identite.telephone': 'Téléphone', 'identite.email': 'E-mail', 'identite.adresse': 'Adresse', 'identite.ville': 'Ville',
+  'permis.possede': 'Permis de conduire', 'permis.categories': 'Catégories de permis', 'permis.vehicule': 'Véhicule personnel'
+};
+
+function libelleChampImport(categorie, champ) {
+  return LIBELLES_CHAMPS_IMPORT[categorie + '.' + champ] ||
+    (champ.charAt(0).toUpperCase() + champ.slice(1));
+}
+
+// Produit une liste de lignes lisibles (tableau de chaines), a partir du
+// "resume" structure retourne par fusionnerDonnees(). Entierement pilotee
+// par la specification pour l'ORDRE et la PRESENCE des categories -- seuls
+// les libelles ci-dessus sont fixes par categorie/champ.
+function genererResumeFusionImport(resultatFusion, specification) {
+  var lignes = [];
+  var resume = (resultatFusion && resultatFusion.resume) || {};
+
+  specification.forEach(function (spec) {
+    var r = resume[spec.cle];
+    if (!r) { return; }
+
+    if (spec.type === 'liste-textes' || spec.type === 'liste-objets') {
+      var n = (r.ajoutes || []).length;
+      if (n > 0) {
+        var lib = LIBELLES_RESUME_IMPORT[spec.cle] || { singulier: spec.cle, pluriel: spec.cle };
+        lignes.push('✅ ' + n + ' ' + (n === 1 ? lib.singulier : lib.pluriel));
+      }
+
+    } else if (spec.type === 'objet') {
+      Object.keys(r.champsAppliques || {}).forEach(function (champNom) {
+        lignes.push('✅ ' + libelleChampImport(spec.cle, champNom) + ' renseigné');
+      });
+
+    } else if (spec.type === 'objet-de-listes-textes') {
+      var total = 0;
+      Object.keys(r).forEach(function (sc) { total += (r[sc] || []).length; });
+      if (total > 0) { lignes.push('✅ ' + total + ' compétence' + (total > 1 ? 's' : '') + ' ajoutée' + (total > 1 ? 's' : '')); }
+    }
+  });
+
+  return lignes;
+}
+
+// TACHE (retour automatique au parcours) : "onImportTermine" est un
+// callback OPTIONNEL, appele une fois la fusion validee ET la fenetre de
+// resume fermee (automatiquement apres une courte temporisation, ou
+// immediatement si la personne clique). Cette fonction (generique,
+// ne connait rien de ouvrirFenetreCV() ni d'etapeSuivante()) ne fait que
+// prevenir l'appelant que le processus est termine -- c'est a l'appelant
+// de decider ce que "reprendre le parcours" signifie dans son contexte
+// (ex. metiers.js passe etapeSuivante(), qui ferme sa propre fenetre et
+// navigue vers l'etape suivante).
+// ============================================================
+// MOTEUR DE DECISION DE CANDIDATURE (Tache 3, coeur generique)
+// ------------------------------------------------------------
+// Conforme a docs/ARCHITECTURE_MOTEUR_DECISION_CANDIDATURE.md. Ce moteur
+// ne connait AUCUN support de candidature (jamais le mot "CV") -- il ne
+// fait que selectionner, ordonner et masquer, a partir de ce qui existe
+// deja dans dossier et des recommandations deja produites par l'IA.
+//
+// Reutilise deux fonctions deja construites pour le moteur d'import,
+// jamais dupliquees :
+// - normaliserPourComparaison() : comparaison de texte insensible a la
+//   casse/aux espaces (categories 'liste-textes')
+// - estDoublonProbable() : rapprochement flou sur les champs declares dans
+//   "champsRapprochement" de SPECIFICATION_IMPORT (categories 'liste-objets')
+//
+// IMPORTANT (Tache 3, construction et tests via donnees synthetiques
+// uniquement) : ce moteur ne sait pas, et n'a pas besoin de savoir, que
+// "competence" ou "poste"/"entreprise" sont les noms de champs utilises
+// par le prompt CV V2. Il attend une forme deja normalisee en entree :
+// - pour une categorie 'liste-textes' : [{ texte: "...", justification: "..." }]
+// - pour une categorie 'liste-objets' : [{ ...memes champs que champsRapprochement, justification: "..." }]
+// La traduction depuis la forme brute de dossier.ia.cv.recommandations
+// (avec ses noms de champs propres au CV) est une responsabilite du CV
+// (Tache 4), jamais de ce moteur.
+// ============================================================
+
+// La rubrique "cle" (ex. 'experiences') est-elle explicitement demandee
+// comme masquable par l'IA ? Recherche insensible a la casse, sur le nom
+// de rubrique tel qu'ecrit par l'IA (dossier.ia.cv.recommandations.rubriquesMasquables).
+function rubriqueEstMasquee(rubriquesMasquables, nomCategorie) {
+  var cible = normaliserPourComparaison(nomCategorie);
+  return (rubriquesMasquables || []).some(function (r) { return normaliserPourComparaison(r.rubrique) === cible; });
+}
+function explicationMasquageRubrique(rubriquesMasquables, nomCategorie) {
+  var cible = normaliserPourComparaison(nomCategorie);
+  var trouve = (rubriquesMasquables || []).filter(function (r) { return normaliserPourComparaison(r.rubrique) === cible; })[0];
+  return trouve ? trouve.justification : '';
+}
+
+// Decision pour une categorie de type 'liste-textes' (ex. competences,
+// certifications, logiciels, loisirs, engagements, langues si traitees
+// comme telles). Classe (recommandes d'abord, dans l'ordre de l'IA, puis
+// le reste du dossier), deduplique, plafonne -- chaque element, retenu ou
+// exclu, porte une explication (§7 de l'architecture).
+function deciderListeTextes(elementsDossier, recommandations, capacite) {
+  var elementsOrdonnes = [];
+  var dejaTraites = [];
+
+  (recommandations || []).forEach(function (reco) {
+    var texteReco = normaliserPourComparaison(reco.texte);
+    if (!texteReco) { return; }
+    var correspondance = (elementsDossier || []).filter(function (e) {
+      return normaliserPourComparaison(e) === texteReco && dejaTraites.indexOf(normaliserPourComparaison(e)) === -1;
+    })[0];
+    if (correspondance !== undefined) {
+      elementsOrdonnes.push({ element: correspondance, explication: reco.justification || 'Recommandé par l\'assistant IA.' });
+      dejaTraites.push(normaliserPourComparaison(correspondance));
+    }
+  });
+
+  (elementsDossier || []).forEach(function (e) {
+    var norm = normaliserPourComparaison(e);
+    if (dejaTraites.indexOf(norm) === -1) {
+      elementsOrdonnes.push({ element: e, explication: 'Présent dans votre dossier, aucune recommandation spécifique de l\'IA.' });
+      dejaTraites.push(norm);
+    }
+  });
+
+  var capaciteEffective = (typeof capacite === 'number') ? capacite : elementsOrdonnes.length;
+  var elementsRetenus = elementsOrdonnes.slice(0, capaciteEffective);
+  var elementsExclus = elementsOrdonnes.slice(capaciteEffective).map(function (e) {
+    return { element: e.element, explication: 'Non retenu par manque de place (capacité atteinte pour cette rubrique).' };
+  });
+
+  return { elementsRetenus: elementsRetenus, elementsExclus: elementsExclus };
+}
+
+// Meme principe pour une categorie de type 'liste-objets' (ex.
+// experiences, formations, langues) -- le rapprochement recommandation
+// <-> element du dossier se fait via estDoublonProbable() et
+// champsRapprochement, pas via une egalite de texte simple.
+function deciderListeObjets(elementsDossier, recommandations, champsRapprochement, capacite) {
+  var elementsOrdonnes = [];
+  var indicesTraites = [];
+
+  (recommandations || []).forEach(function (reco) {
+    var indexTrouve = -1;
+    (elementsDossier || []).forEach(function (e, i) {
+      if (indexTrouve === -1 && indicesTraites.indexOf(i) === -1 && estDoublonProbable(e, reco, champsRapprochement)) {
+        indexTrouve = i;
+      }
+    });
+    if (indexTrouve !== -1) {
+      elementsOrdonnes.push({ element: elementsDossier[indexTrouve], explication: reco.justification || 'Recommandé par l\'assistant IA.' });
+      indicesTraites.push(indexTrouve);
+    }
+  });
+
+  (elementsDossier || []).forEach(function (e, i) {
+    if (indicesTraites.indexOf(i) === -1) {
+      elementsOrdonnes.push({ element: e, explication: 'Présent dans votre dossier, aucune recommandation spécifique de l\'IA.' });
+      indicesTraites.push(i);
+    }
+  });
+
+  var capaciteEffective = (typeof capacite === 'number') ? capacite : elementsOrdonnes.length;
+  var elementsRetenus = elementsOrdonnes.slice(0, capaciteEffective);
+  var elementsExclus = elementsOrdonnes.slice(capaciteEffective).map(function (e) {
+    return { element: e.element, explication: 'Non retenu par manque de place (capacité atteinte pour cette rubrique).' };
+  });
+
+  return { elementsRetenus: elementsRetenus, elementsExclus: elementsExclus };
+}
+
+// Point d'entree unique du moteur (interface publique, §12 de l'architecture).
+// Fonction PURE : ne modifie jamais dossier, ne lit jamais le DOM, aucun
+// effet de bord. Ignore silencieusement toute categorie de
+// specificationCategories qui ne serait pas 'liste-textes' ou
+// 'liste-objets' (identite, permis, competences en tant
+// qu'objet-de-listes-textes... restent hors perimetre, §9 de l'architecture).
+function decider(dossier, recommandationsParCategorie, capacites, specificationCategories) {
+  var recos = recommandationsParCategorie || {};
+  var rubriquesMasquables = recos.rubriquesMasquables || [];
+  var resultat = {};
+
+  (specificationCategories || []).forEach(function (spec) {
+    if (spec.type !== 'liste-textes' && spec.type !== 'liste-objets') { return; }
+
+    var elementsDossier = (dossier && dossier[spec.cle]) || [];
+    var recommandationsCategorie = recos[spec.cle] || [];
+    var capaciteCategorie = capacites ? capacites[spec.cle] : undefined;
+
+    var decision = (spec.type === 'liste-textes')
+      ? deciderListeTextes(elementsDossier, recommandationsCategorie, capaciteCategorie)
+      : deciderListeObjets(elementsDossier, recommandationsCategorie, spec.champsRapprochement, capaciteCategorie);
+
+    decision.rubriqueMasquee = rubriqueEstMasquee(rubriquesMasquables, spec.cle);
+    decision.explicationMasquage = decision.rubriqueMasquee ? explicationMasquageRubrique(rubriquesMasquables, spec.cle) : '';
+
+    resultat[spec.cle] = decision;
+  });
+
+  return resultat;
+}
+
+// ============================================================
+// INTEGRATION CV DU MOTEUR DE DECISION (Tache 4)
+// ------------------------------------------------------------
+// Tout ce qui suit est volontairement CV-specifique (§9 de l'architecture) :
+// decider() lui-meme, ci-dessus, ne connait toujours pas le mot "CV". Cette
+// couche fait deux choses que le moteur generique ne doit jamais faire :
+// 1. Traduire dossier.ia.cv.recommandations (noms de champs propres au
+//    prompt CV : "competence", "poste"/"entreprise", "rubrique") vers la
+//    forme generique attendue par decider() ({texte, justification} ou
+//    {...champsRapprochement, justification}).
+// 2. Traiter le cas particulier des competences (savoirFaire/savoirEtre/
+//    savoirs), qui n'est pas une simple 'liste-textes' mais un objet de
+//    3 listes -- non gere par decider() (hors perimetre, §9). La capacite
+//    du modele pour "competences" est traitee comme un budget PARTAGE
+//    entre les 3 sous-categories, pas un plafond independant par
+//    sous-categorie (sinon "6 competences" pourrait afficher jusqu'a 18
+//    elements au total).
+// ============================================================
+
+// Fusionne les 3 sous-listes de competences en une seule liste de textes
+// (pour reutiliser deciderListeTextes() telle quelle), en memorisant de
+// quelle sous-categorie chaque texte provient, puis re-scinde le resultat
+// une fois la decision appliquee.
+function appliquerDecisionCompetences(competencesObjetCV, recommandationsCompetences, capaciteCompetences) {
+  var sousCategorieParTexte = {};
+  var toutesCompetencesTexte = [];
+  ['savoirFaire', 'savoirEtre', 'savoirs'].forEach(function (sousCle) {
+    (competencesObjetCV[sousCle] || []).forEach(function (c) {
+      toutesCompetencesTexte.push(c);
+      var norm = normaliserPourComparaison(c);
+      if (!(norm in sousCategorieParTexte)) { sousCategorieParTexte[norm] = sousCle; }
+    });
+  });
+
+  var decision = deciderListeTextes(toutesCompetencesTexte, recommandationsCompetences, capaciteCompetences);
+
+  var parSousCategorie = { savoirFaire: [], savoirEtre: [], savoirs: [] };
+  decision.elementsRetenus.forEach(function (e) {
+    var sc = sousCategorieParTexte[normaliserPourComparaison(e.element)] || 'savoirFaire';
+    parSousCategorie[sc].push(e.element);
+  });
+
+  return { parSousCategorie: parSousCategorie, decisionComplete: decision };
+}
+
+// TACHE 4 : point d'entree CV-specifique. Prend l'objet CV DEJA normalise
+// (normaliserDonneesCV(dossier)) et retourne un NOUVEL objet, pret pour
+// rendreTemplate() -- ne modifie jamais l'objet recu en entree (copie
+// defensive), conforme au principe de fonction pure deja suivi partout
+// ailleurs dans ce moteur.
+// TACHE (ajustement : moteur conditionnel, pas systematique) : distingue
+// "l'objet recommandations existe" (toujours vrai, il est scaffolde des
+// la creation du dossier -- voir creerDossierIAVide()) de "l'IA a
+// reellement produit quelque chose d'exploitable". Seul ce second cas doit
+// declencher le moteur de decision -- sinon, le comportement historique
+// (tout afficher, aucune selection automatique) doit rester inchange.
+function recommandationsIAPresentes(recommandations) {
+  if (!recommandations) { return false; }
+  return !!(recommandations.typeCV && recommandations.typeCV.valeur) ||
+    (recommandations.experiencesAMettreEnAvant || []).length > 0 ||
+    (recommandations.competencesAValoriser || []).length > 0 ||
+    (recommandations.rubriquesMasquables || []).length > 0;
+}
+
+function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) {
+  var reco = recommandationsIA || {};
+  var capacites = capacitesModele || {};
+
+  // Traduction des recommandations brutes du CV vers la forme generique.
+  var rubriquesMasquables = reco.rubriquesMasquables || [];
+  var recommandationsGenerique = {
+    experiences: (reco.experiencesAMettreEnAvant || []).map(function (r) {
+      return { poste: r.poste, entreprise: r.entreprise, justification: r.justification };
+    }),
+    rubriquesMasquables: rubriquesMasquables
+  };
+
+  // TACHE (aucune anticipation artificielle) : le prompt CV V2 ne produit
+  // aujourd'hui de recommandations que pour experiences et competences.
+  // formations/langues/certifications/loisirs/engagements passent donc par
+  // decider() avec une liste de recommandations vide -- repli honnete
+  // (§5 de l'architecture), pas une erreur.
+  var specification = [
+    { cle: 'experiences', type: 'liste-objets', champsRapprochement: ['poste', 'entreprise'] },
+    { cle: 'formations', type: 'liste-objets', champsRapprochement: ['intitule', 'annee'] },
+    { cle: 'langues', type: 'liste-objets', champsRapprochement: ['langue'] },
+    { cle: 'certifications', type: 'liste-textes' },
+    { cle: 'loisirs', type: 'liste-textes' },
+    { cle: 'engagements', type: 'liste-textes' }
+  ];
+
+  var decisions = decider(objetCV, recommandationsGenerique, capacites, specification);
+
+  // Copie defensive : objetCV (deja normalise) n'est jamais modifie.
+  var objetDecide = {};
+  Object.keys(objetCV).forEach(function (cle) { objetDecide[cle] = objetCV[cle]; });
+
+  specification.forEach(function (spec) {
+    var d = decisions[spec.cle];
+    if (!d) { return; }
+    objetDecide[spec.cle] = d.rubriqueMasquee ? [] : d.elementsRetenus.map(function (e) { return e.element; });
+  });
+
+  // Cas particulier des competences (voir commentaire au-dessus de
+  // appliquerDecisionCompetences()).
+  var rubriqueCompetencesMasquee = rubriqueEstMasquee(rubriquesMasquables, 'competences');
+  if (rubriqueCompetencesMasquee) {
+    objetDecide.competences = { savoirFaire: [], savoirEtre: [], savoirs: [] };
+  } else {
+    var recommandationsCompetences = (reco.competencesAValoriser || []).map(function (r) {
+      return { texte: r.competence, justification: r.justification };
+    });
+    var resultatCompetences = appliquerDecisionCompetences(objetCV.competences || {}, recommandationsCompetences, capacites.competences);
+    objetDecide.competences = resultatCompetences.parSousCategorie;
+  }
+
+  return objetDecide;
+}
+
+function ouvrirEcranValidationImport(onImportTermine) {
+  if (!dossier.imports || !dossier.imports.courant) {
+    alert('Aucun import en attente de validation.');
+    return;
+  }
+  var resultatComparaison = comparerDonnees(dossier, dossier.imports.courant.donnees, SPECIFICATION_IMPORT);
+  var contenuEcran = genererEcranValidationImport(resultatComparaison, SPECIFICATION_IMPORT);
+
+  var fenetre = document.createElement('div');
+  fenetre.id = 'fenetreValidationImport';
+  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
+    'display:flex;align-items:center;justify-content:center;z-index:2100;padding:1rem;';
+  fenetre.innerHTML =
+    '<div style="background:white;border-radius:1rem;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:1.5rem;">' +
+    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+    '<h5 class="mb-0">Vérifiez les informations importées</h5>' +
+    '<button type="button" id="fermerValidationImportBtn" class="btn btn-sm btn-outline-secondary" style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
+    '</div>' +
+    '<p class="text-muted small">Décochez ce que vous ne souhaitez pas ajouter, modifiez librement le texte avant de valider.</p>' +
+    contenuEcran +
+    '<div class="d-flex justify-content-end mt-3">' +
+    '<button type="button" id="validerImportBtn" class="btn btn-primary">Valider ma sélection</button>' +
+    '</div></div>';
+  document.body.appendChild(fenetre);
+
+  document.getElementById('fermerValidationImportBtn').addEventListener('click', function () { fenetre.remove(); });
+  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fenetre.remove(); } });
+
+  document.getElementById('validerImportBtn').addEventListener('click', function () {
+    var decisions = lireDecisionsValidationImport(resultatComparaison, SPECIFICATION_IMPORT);
+    // TACHE 8 (moteur de fusion) : applique REELLEMENT les decisions dans
+    // dossier -- premiere fois que ce moteur ecrit dans dossier. L'import
+    // en attente est ensuite vide (il a ete consomme), pour eviter de le
+    // refusionner par erreur.
+    var resultatFusion = fusionnerDonnees(dossier, decisions, SPECIFICATION_IMPORT);
+    dossier.imports.courant = null;
+    // TACHE 9 (resume des operations) : remplace la confirmation generique
+    // par le detail reel de ce qui a ete ajoute/modifie.
+    var lignesResume = genererResumeFusionImport(resultatFusion, SPECIFICATION_IMPORT);
+
+    // TACHE (retour automatique au parcours) : la validation est desormais
+    // la FIN du processus, pas une etape intermediaire -- fermeture
+    // automatique apres une courte lecture du message, ou immediatement si
+    // la personne clique sur "Continuer maintenant". "termine()" ne peut
+    // etre appelee qu'une seule fois (garde-fou explicite), pour eviter un
+    // double appel du callback (clic + timer qui se declenchent tous les
+    // deux).
+    var dejaTermine = false;
+    function terminer() {
+      if (dejaTermine) { return; }
+      dejaTermine = true;
+      clearTimeout(minuteur);
+      fenetre.remove();
+      if (typeof onImportTermine === 'function') { onImportTermine(); }
+    }
+
+    fenetre.innerHTML =
+      '<div style="background:white;border-radius:1rem;max-width:480px;width:100%;padding:1.5rem;">' +
+      '<h5 class="mb-2">&#9989; Informations intégrées</h5>' +
+      '<p class="small mb-2">' + (lignesResume.length
+        ? 'Les informations sélectionnées ont été intégrées à votre dossier avec succès. Vous pouvez maintenant poursuivre votre parcours.'
+        : 'Aucune information n\'a été ajoutée à votre dossier. Vous pouvez poursuivre votre parcours.') + '</p>' +
+      (lignesResume.length
+        ? '<div class="mb-3">' + lignesResume.map(function (l) { return '<p class="mb-1 small">' + l + '</p>'; }).join('') + '</div>'
+        : '') +
+      '<div class="d-flex justify-content-end"><button type="button" id="fermerResumeImportBtn" class="btn btn-primary btn-sm">Continuer maintenant</button></div>' +
+      '</div>';
+    document.getElementById('fermerResumeImportBtn').addEventListener('click', terminer);
+    var minuteur = setTimeout(terminer, 2500);
+  });
 }
 
 function promptCache(type, profilTexte) {
@@ -5210,9 +6724,9 @@ function genererCSVCanva(inclureIdentite) {
     var experiencesPersoTxt = donnees.experiencesPersonnelles.map(function (e) {
       return e.intitule + (e.detail ? ' : ' + e.detail : '');
     }).join(' | ');
-    var formationTxt = donnees.formation
-      ? (donnees.formation.niveau + (donnees.formation.intitule ? ' - ' + donnees.formation.intitule : '') + (donnees.formation.annee ? ' (' + donnees.formation.annee + ')' : ''))
-      : '';
+    var formationTxt = donnees.formations.map(function (f) {
+      return f.niveau + (f.intitule ? ' - ' + f.intitule : '') + (f.annee ? ' (' + f.annee + ')' : '');
+    }).join(' | ');
     var certificationsTxt = donnees.certifications.join(', ');
     var languesTxt = donnees.langues.map(function (l) { return l.langue + ' (' + l.niveau + ')'; }).join(', ');
     var permisTxt = donnees.permis.possede
@@ -5353,6 +6867,46 @@ function ouvrirApercuCV(modele) {
   chargerEtAfficherApercuCV(modele);
 }
 
+// TACHE (indicateur de remplissage, generique) : construit le morceau de
+// JS (sous forme de texte) a injecter dans le <script> d'une fenetre
+// d'apercu (CV ou Lettre) pour mesurer, DANS LE NAVIGATEUR, la hauteur
+// reelle du contenu rendu et la comparer a la hauteur imprimable d'une
+// page A4 -- une seule logique, partagee, aucune duplication, aucune
+// dependance a un modele en particulier (elle ne connait que l'id d'un
+// element englobant, jamais une classe propre a Moderne/Classique/etc.).
+//
+// margeMm : la marge d'impression definie dans le @page CSS correspondant
+// (doit rester coherente avec elle, sinon la mesure serait fausse).
+function construireScriptIndicateurPage(margeMm) {
+  return (
+    'var MARGE_MM_PAGE=' + margeMm + ';' +
+    'var HAUTEUR_A4_MM=297;' +
+    'var PX_PAR_MM=96/25.4;' +
+    'var hauteurPageImprimablePx=(HAUTEUR_A4_MM-2*MARGE_MM_PAGE)*PX_PAR_MM;' +
+    'function calculerRemplissagePage(){' +
+      'var zone=document.getElementById("zoneMesurePage");' +
+      'var indicateur=document.getElementById("indicateurRemplissagePage");' +
+      'var repere=document.getElementById("reperePage");' +
+      'if(!zone||!indicateur){return;}' +
+      'var hauteurContenu=zone.scrollHeight;' +
+      'var pourcentage=Math.round((hauteurContenu/hauteurPageImprimablePx)*100);' +
+      'var icone=pourcentage<85?"\\uD83D\\uDFE2":(pourcentage<=100?"\\uD83D\\uDFE1":"\\uD83D\\uDD34");' +
+      'var texte=icone+" "+pourcentage+"% de la page utilisée";' +
+      'if(pourcentage>100){' +
+        'texte+=" — Le contenu dépasse d\'environ "+(pourcentage-100)+"% la première page.";' +
+      '}' +
+      'indicateur.textContent=texte;' +
+      'indicateur.style.color=pourcentage>100?"#b91c1c":(pourcentage>=85?"#92600a":"#15803d");' +
+      'if(repere){' +
+        'var positionRepere=Math.min(hauteurPageImprimablePx,hauteurContenu);' +
+        'repere.style.top=positionRepere+"px";' +
+      '}' +
+    '}' +
+    'calculerRemplissagePage();' +
+    'window.addEventListener("resize",calculerRemplissagePage);'
+  );
+}
+
 // Charge le template+style du modele demande, produit le rendu a partir de
 // "dossier", et reecrit ENTIEREMENT le contenu de la fenetre d'apercu deja
 // ouverte (barre de selection incluse) -- appelee a l'ouverture initiale ET
@@ -5383,7 +6937,20 @@ function chargerEtAfficherApercuCV(modele) {
     MODELES_CV_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
 
     var objetCV = normaliserDonneesCV(dossier);
-    var corpsRendu = rendreTemplate(objetCV, templateHtml);
+    // TACHE (ajustement : moteur conditionnel, pas systematique) : le
+    // moteur de decision ne s'applique QUE si l'IA a reellement produit
+    // des recommandations exploitables. Sinon, comportement historique
+    // inchange : tout s'affiche, aucune selection automatique -- l'IA
+    // n'intervient que lorsqu'elle apporte une valeur ajoutee, elle ne
+    // modifie jamais silencieusement le comportement de l'application.
+    var recommandationsIACV = (dossier.ia && dossier.ia.cv && dossier.ia.cv.recommandations) || {};
+    var modeOptimiseParIA = recommandationsIAPresentes(recommandationsIACV);
+    var objetPourRendu = objetCV;
+    if (modeOptimiseParIA) {
+      var capacitesModeleActuel = (metasParModele[modele] && metasParModele[modele].capacites) || {};
+      objetPourRendu = appliquerMoteurDecisionCV(objetCV, recommandationsIACV, capacitesModeleActuel);
+    }
+    var corpsRendu = rendreTemplate(objetPourRendu, templateHtml);
     var cartesHtml = genererCartesSelecteurCV(modele, metasParModele);
 
     var pageComplete = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
@@ -5406,6 +6973,18 @@ function chargerEtAfficherApercuCV(modele) {
       '.btn-imprimer-cv{margin-left:auto;align-self:center;background:#2563EB;color:#FFFFFF;border:none;' +
       'border-radius:6px;padding:0.6rem 1.1rem;font-size:0.9rem;cursor:pointer;}' +
       '.btn-imprimer-cv:hover{background:#1D4ED8;}' +
+      // TACHE (indicateur de remplissage + edition directe, generique) :
+      // bandeau d'indicateur, repere visuel de fin de page (ligne
+      // pointillee), et note sur l'edition directe -- rien de ceci ne
+      // depend du modele affiche.
+      '.apercu-cv-ligne-outils{display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;margin-top:0.6rem;}' +
+      '#indicateurRemplissagePage{font-size:0.85rem;font-weight:600;}' +
+      '.apercu-cv-note-edition{font-size:0.8rem;color:#6b7280;margin:0.4rem 0 0 0;}' +
+      '#zoneMesurePage{position:relative;outline:none;}' +
+      '#zoneMesurePage:focus{box-shadow:0 0 0 2px #93C5FD;border-radius:4px;}' +
+      '#reperePage{position:absolute;left:-12px;right:-12px;border-top:2px dashed #DC2626;pointer-events:none;}' +
+      '#reperePage::after{content:"Fin de la 1ère page A4";position:absolute;right:0;top:2px;' +
+      'font-size:0.7rem;color:#DC2626;background:#FFFFFF;padding:0 0.3rem;}' +
       styleCss +
       // TACHE (export PDF) : feuille @media print GENERIQUE, ajoutee une
       // seule fois ici -- AUCUNE modification des style.css des 6 modeles.
@@ -5418,6 +6997,13 @@ function chargerEtAfficherApercuCV(modele) {
       '.apercu-cv-barre { display: none !important; }' +
       'body { background: #FFFFFF !important; }' +
       '.apercu-cv-conteneur { padding: 0 !important; }' +
+      '#reperePage { display: none !important; }' +
+      // TACHE (police minimale 10pt) : empeche tout re-echelonnement du
+      // "rem" au moment de l'impression (certains navigateurs ajustent la
+      // taille racine a l'impression) -- garantit que les tailles deja
+      // definies par chaque modele (en rem) restent fideles a ce qui est
+      // affiche a l'ecran, jamais reduites silencieusement.
+      'html { font-size: 100% !important; }' +
       '@page { size: A4; margin: 15mm; }' +
       '* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }' +
       '.apercu-cv-conteneur section, ' +
@@ -5432,9 +7018,30 @@ function chargerEtAfficherApercuCV(modele) {
       '<div class="apercu-cv-cartes">' + cartesHtml +
       '<button type="button" class="btn-imprimer-cv" id="btnImprimerCV">&#128196; Télécharger / Imprimer le PDF</button>' +
       '</div>' +
+      '<div class="apercu-cv-ligne-outils">' +
+      '<span id="indicateurRemplissagePage"></span>' +
       '</div>' +
-      '<div class="apercu-cv-conteneur">' + corpsRendu + '</div>' +
+      (modeOptimiseParIA
+        // TACHE (transparence du moteur de decision) : rendu visible des
+        // que le moteur intervient reellement -- pour que la personne
+        // comprenne immediatement pourquoi elle ne voit pas tout son
+        // dossier, plutot que de croire que des informations ont disparu.
+        ? '<div class="mb-2" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:0.6rem 0.9rem;">' +
+          '<p class="mb-0 small"><strong>&#129302; Mode optimisé par l\'IA</strong> — Ce document a été optimisé pour ' +
+          'cette candidature. Certaines informations ont été volontairement masquées afin de respecter les contraintes ' +
+          'du modèle et de mettre en avant les éléments les plus pertinents.</p>' +
+          '</div>'
+        : '') +
+      '<p class="apercu-cv-note-edition">&#9997;&#65039; Le contenu ci-dessous est directement modifiable ' +
+      '(clic dans le texte). Ces ajustements ne sont pas enregistrés dans votre profil : ils ne concernent ' +
+      'que cet aperçu, avant impression.</p>' +
+      '</div>' +
+      '<div class="apercu-cv-conteneur">' +
+      '<div id="zoneMesurePage" contenteditable="true">' + corpsRendu + '<div id="reperePage"></div></div>' +
+      '</div>' +
       '<script>' +
+      construireScriptIndicateurPage(15) +
+      'document.getElementById("zoneMesurePage").addEventListener("input", calculerRemplissagePage);' +
       'document.querySelectorAll(".carte-modele-cv").forEach(function (carte) {' +
       'carte.addEventListener("click", function () {' +
       'window.opener.chargerEtAfficherApercuCV(this.dataset.modele);' +
@@ -5464,6 +7071,127 @@ function rafraichirApercuCVSiOuvert() {
   if (fenetreApercuCVOuverte && !fenetreApercuCVOuverte.closed) {
     chargerEtAfficherApercuCV(dernierModeleApercuAffiche);
   }
+}
+
+// TACHE (Lettre V2, tache 2 : moteur de rendu) : meme mecanique exacte que
+// ouvrirApercuCV()/chargerEtAfficherApercuCV() -- reutilise rendreTemplate()
+// tel quel (deja generique, aucune modification necessaire), meme technique
+// de fenetre, meme principe d'impression PDF (@media print). Seule
+// difference deliberee : le corps de la lettre est directement editable
+// (contenteditable) dans l'apercu, et toute modification est immediatement
+// repercutee dans dossier.ia.lettre.lettre.texte, pour que le PDF imprime
+// corresponde exactement a ce qui est affiche.
+var fenetreApercuLettreOuverte = null;
+var dernierModeleApercuLettreAffiche = 'sobre';
+
+function ouvrirApercuLettre(modele) {
+  if (!modele) { modele = 'sobre'; }
+
+  if (fenetreApercuLettreOuverte && !fenetreApercuLettreOuverte.closed) {
+    fenetreApercuLettreOuverte.focus();
+    chargerEtAfficherApercuLettre(modele);
+    return;
+  }
+
+  var win = window.open('', '_blank', 'width=900,height=900,scrollbars=yes');
+  if (!win) { alert('Autorisez les fenetres pop-up pour cet outil.'); return; }
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+    '<title>Aperçu de la lettre</title></head><body style="font-family:sans-serif;padding:2rem;">' +
+    '<p>Chargement de l\'aperçu...</p></body></html>');
+  win.document.close();
+  fenetreApercuLettreOuverte = win;
+
+  chargerEtAfficherApercuLettre(modele);
+}
+
+function chargerEtAfficherApercuLettre(modele) {
+  var win = fenetreApercuLettreOuverte;
+  if (!win || win.closed) { return; }
+  dernierModeleApercuLettreAffiche = modele;
+
+  var cheminTemplate = 'modules/lettre-editor/templates/' + modele + '/template.html';
+  var cheminStyle = 'modules/lettre-editor/templates/' + modele + '/style.css';
+
+  Promise.all([
+    fetch(cheminTemplate).then(function (r) {
+      if (!r.ok) { throw new Error('Modele "' + modele + '" introuvable.'); }
+      return r.text();
+    }),
+    fetch(cheminStyle).then(function (r) { return r.ok ? r.text() : ''; })
+  ]).then(function (resultats) {
+    var templateHtml = resultats[0];
+    var styleCss = resultats[1];
+    var objetLettre = normaliserDonneesLettre(dossier);
+    var corpsRendu = rendreTemplate(objetLettre, templateHtml);
+
+    var pageComplete = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
+      '<title>Aperçu de la lettre</title>' +
+      '<style>' +
+      'body{margin:0;background:#F3F4F6;font-family:Arial,sans-serif;}' +
+      '.apercu-lettre-barre{position:sticky;top:0;background:#FFFFFF;border-bottom:1px solid #E5E7EB;' +
+      'padding:0.8rem 1.2rem;z-index:10;display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;}' +
+      '.apercu-lettre-barre span{font-size:0.85rem;color:#6b7280;}' +
+      '.btn-imprimer-lettre{margin-left:auto;background:#2563EB;color:#FFFFFF;border:none;' +
+      'border-radius:6px;padding:0.6rem 1.1rem;font-size:0.9rem;cursor:pointer;}' +
+      '.btn-imprimer-lettre:hover{background:#1D4ED8;}' +
+      '.apercu-lettre-conteneur{padding:1.5rem 0;}' +
+      // TACHE (indicateur de remplissage, generique) : meme mecanique que
+      // le CV, memes classes/ids -- rien de specifique a la lettre.
+      '#indicateurRemplissagePage{font-size:0.85rem;font-weight:600;}' +
+      '#zoneMesurePage{position:relative;}' +
+      '#reperePage{position:absolute;left:-12px;right:-12px;border-top:2px dashed #DC2626;pointer-events:none;}' +
+      '#reperePage::after{content:"Fin de la 1ère page A4";position:absolute;right:0;top:2px;' +
+      'font-size:0.7rem;color:#DC2626;background:#FFFFFF;padding:0 0.3rem;}' +
+      styleCss +
+      // TACHE (Lettre V2, tache 2) : meme feuille @media print que le CV
+      // (memes principes : masquer l'interface, marges A4, conserver les
+      // couleurs, eviter les coupures de bloc) -- rien de nouveau a
+      // reinventer ici.
+      '@media print {' +
+      '.apercu-lettre-barre { display: none !important; }' +
+      'body { background: #FFFFFF !important; }' +
+      '.apercu-lettre-conteneur { padding: 0 !important; }' +
+      '#reperePage { display: none !important; }' +
+      // TACHE (police minimale 10pt) : voir la meme regle, memes raisons,
+      // que dans l'apercu CV.
+      'html { font-size: 100% !important; }' +
+      '@page { size: A4; margin: 20mm; }' +
+      '* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }' +
+      '.lettre-sobre-corps { break-inside: avoid; }' +
+      '}' +
+      '</style>' +
+      '</head><body>' +
+      '<div class="apercu-lettre-barre">' +
+      '<span>&#9997;&#65039; Le texte est directement modifiable ci-dessous.</span>' +
+      '<span id="indicateurRemplissagePage" style="margin-left:auto;"></span>' +
+      '<button type="button" class="btn-imprimer-lettre" id="btnImprimerLettre">&#128196; Télécharger / Imprimer le PDF</button>' +
+      '</div>' +
+      '<div class="apercu-lettre-conteneur">' +
+      '<div id="zoneMesurePage">' + corpsRendu + '<div id="reperePage"></div></div>' +
+      '</div>' +
+      '<script>' +
+      construireScriptIndicateurPage(20) +
+      'var zoneEditable=document.getElementById("lettreTexteEditable");' +
+      'if(zoneEditable){zoneEditable.addEventListener("input",function(){' +
+      'if(window.opener&&window.opener.dossier&&window.opener.dossier.ia&&window.opener.dossier.ia.lettre&&window.opener.dossier.ia.lettre.lettre){' +
+      'window.opener.dossier.ia.lettre.lettre.texte=this.innerText;' +
+      '}' +
+      'calculerRemplissagePage();' +
+      '});}' +
+      'var btnImprimerLettre=document.getElementById("btnImprimerLettre");' +
+      'if(btnImprimerLettre){btnImprimerLettre.addEventListener("click",function(){window.print();});}' +
+      '<\/script>' +
+      '</body></html>';
+
+    win.document.open();
+    win.document.write(pageComplete);
+    win.document.close();
+  }).catch(function (erreur) {
+    win.document.open();
+    win.document.write('<p style="font-family:sans-serif;padding:2rem;">Impossible de charger l\'aperçu de la lettre : ' +
+      erreur.message + '</p>');
+    win.document.close();
+  });
 }
 
 function ouvrirAideIA(type) {
@@ -5679,7 +7407,7 @@ function ouvrirAideIA(type) {
     (estLettre
       ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
         '<strong>&#129302; Importer la réponse de l\'assistant IA</strong> ' +
-        '<span style="color:#6b7280;font-size:0.85rem;">(accroche, arguments)</span>' +
+        '<span style="color:#6b7280;font-size:0.85rem;">(accroche, arguments, lettre complète)</span>' +
         '</summary>' +
         '<div style="margin-top:0.9rem;">' +
         '<p class="mb-2 small text-muted">Copiez l\'intégralité de la réponse de l\'assistant IA (obtenue avec le ' +
@@ -5689,6 +7417,26 @@ function ouvrirAideIA(type) {
         '</textarea>' +
         '<button class="btn-copy" id="btnAnalyserReponseIALettre" style="background:#0d9488;">Importer dans la lettre</button>' +
         '<div id="messageAnalyseIALettre" class="mt-2 small" style="min-height:1.2em;"></div>' +
+        '</div></details>'
+      : '') +
+    // TACHE (bandeau contextuel Impression) : le bouton "Apercu de ma
+    // lettre" a ete retire d'ici -- il vit desormais sur la page Action,
+    // dans le bandeau "Imprimer ma lettre de motivation", exactement comme
+    // pour le CV (dont le bouton d'apercu n'a jamais ete duplique dans sa
+    // propre popup non plus).
+    (estEntretien
+      ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
+        '<strong>&#129302; Importer le bilan de votre préparation</strong> ' +
+        '<span style="color:#6b7280;font-size:0.85rem;">(présentation, points à préparer, questions)</span>' +
+        '</summary>' +
+        '<div style="margin-top:0.9rem;">' +
+        '<p class="mb-2 small text-muted">Une fois votre séance de préparation terminée, copiez le <strong>dernier ' +
+        'message</strong> de l\'assistant IA (le bilan final de la séance) et collez-le ci-dessous.</p>' +
+        '<textarea class="form-control mb-2" id="texteReponseIAEntretien" rows="8" ' +
+        'placeholder="Collez ici le bilan final de votre séance de préparation...">' +
+        '</textarea>' +
+        '<button class="btn-copy" id="btnAnalyserReponseIAEntretien" style="background:#0d9488;">Importer la préparation</button>' +
+        '<div id="messageAnalyseIAEntretien" class="mt-2 small" style="min-height:1.2em;"></div>' +
         '</div></details>'
       : '') +
     '<script>(function(){' +
@@ -5839,11 +7587,12 @@ function ouvrirAideIA(type) {
     '}' +
     'var resultat=window.opener.analyserReponseIACV(texte);' +
     'if(!resultat.succes){messageAnalyseIACV.style.color="#b91c1c";messageAnalyseIACV.textContent="⚠️ "+resultat.erreur;return;}' +
-    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{}},lettre:{},entretien:{}};}' +
-    'if(!window.opener.dossier.ia.cv){window.opener.dossier.ia.cv={profil:"",pointsForts:[],motsCles:[],recommandations:{}};}' +
+    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
+    'if(!window.opener.dossier.ia.cv){window.opener.dossier.ia.cv={profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}};}' +
     'window.opener.dossier.ia.cv.profil=resultat.valeurs.profil;' +
     'window.opener.dossier.ia.cv.pointsForts=resultat.valeurs.pointsForts;' +
     'window.opener.dossier.ia.cv.motsCles=resultat.valeurs.motsCles;' +
+    'window.opener.dossier.ia.cv.recommandations=resultat.valeurs.recommandations;' +
     'if(typeof window.opener.rafraichirApercuCVSiOuvert==="function"){window.opener.rafraichirApercuCVSiOuvert();}' +
     'messageAnalyseIACV.style.color="inherit";' +
     'if(typeof window.opener.genererResumeImportCV==="function"){' +
@@ -5863,12 +7612,41 @@ function ouvrirAideIA(type) {
     '}' +
     'var resultatLettre=window.opener.analyserReponseIALettre(texte);' +
     'if(!resultatLettre.succes){messageAnalyseIALettre.style.color="#b91c1c";messageAnalyseIALettre.textContent="⚠️ "+resultatLettre.erreur;return;}' +
-    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{}},lettre:{},entretien:{}};}' +
+    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
     'if(!window.opener.dossier.ia.lettre){window.opener.dossier.ia.lettre={};}' +
     'window.opener.dossier.ia.lettre.accroche=resultatLettre.valeurs.accroche;' +
     'window.opener.dossier.ia.lettre.arguments=resultatLettre.valeurs.arguments;' +
-    'messageAnalyseIALettre.style.color="#15803d";' +
-    'messageAnalyseIALettre.textContent="✅ Import réussi ("+resultatLettre.valeurs.arguments.length+" argument(s) retenu(s)).";' +
+    'window.opener.dossier.ia.lettre.lettre=resultatLettre.valeurs.lettre;' +
+    'messageAnalyseIALettre.style.color="inherit";' +
+    'if(typeof window.opener.genererResumeGeneriqueImportIA==="function"&&window.opener.SPEC_AFFICHAGE_LETTRE){' +
+    'var valeursResumeLettre={accroche:resultatLettre.valeurs.accroche,arguments:resultatLettre.valeurs.arguments,texteLettre:resultatLettre.valeurs.lettre.texte};' +
+    'messageAnalyseIALettre.innerHTML=window.opener.genererResumeGeneriqueImportIA(valeursResumeLettre,window.opener.SPEC_AFFICHAGE_LETTRE);' +
+    '}else{messageAnalyseIALettre.textContent="✅ Import réussi ("+resultatLettre.valeurs.arguments.length+" argument(s) retenu(s)).";}' +
+    '});}' +
+    // TACHE (integration Entretien V2) : meme schema que le CV et la Lettre
+    // -- delegue tout le parsing a window.opener.analyserReponseIAEntretien(),
+    // et le resume a la fonction GENERIQUE window.opener.genererResumeGeneriqueImportIA()
+    // (reutilise SPEC_AFFICHAGE_ENTRETIEN, deja definie cote opener -- aucune
+    // duplication). Jamais d'exception brute, jamais de plantage.
+    'var btnAnalyserReponseIAEntretien=document.getElementById("btnAnalyserReponseIAEntretien");' +
+    'var messageAnalyseIAEntretien=document.getElementById("messageAnalyseIAEntretien");' +
+    'if(btnAnalyserReponseIAEntretien){btnAnalyserReponseIAEntretien.addEventListener("click",function(){' +
+    'var texte=document.getElementById("texteReponseIAEntretien").value;' +
+    'if(!(window.opener&&window.opener.analyserReponseIAEntretien&&window.opener.dossier)){' +
+    'messageAnalyseIAEntretien.style.color="#b91c1c";messageAnalyseIAEntretien.textContent="Impossible de communiquer avec la fenêtre principale.";return;' +
+    '}' +
+    'var resultatEntretien=window.opener.analyserReponseIAEntretien(texte);' +
+    'if(!resultatEntretien.succes){messageAnalyseIAEntretien.style.color="#b91c1c";messageAnalyseIAEntretien.textContent="⚠️ "+resultatEntretien.erreur;return;}' +
+    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
+    'if(!window.opener.dossier.ia.entretien){window.opener.dossier.ia.entretien={};}' +
+    'window.opener.dossier.ia.entretien.presentation=resultatEntretien.valeurs.presentation;' +
+    'window.opener.dossier.ia.entretien.pointsAPreparer=resultatEntretien.valeurs.pointsAPreparer;' +
+    'window.opener.dossier.ia.entretien.questionsAnticipees=resultatEntretien.valeurs.questionsAnticipees;' +
+    'window.opener.dossier.ia.entretien.questionsDuCandidat=resultatEntretien.valeurs.questionsDuCandidat;' +
+    'messageAnalyseIAEntretien.style.color="inherit";' +
+    'if(typeof window.opener.genererResumeGeneriqueImportIA==="function"&&window.opener.SPEC_AFFICHAGE_ENTRETIEN){' +
+    'messageAnalyseIAEntretien.innerHTML=window.opener.genererResumeGeneriqueImportIA(resultatEntretien.valeurs,window.opener.SPEC_AFFICHAGE_ENTRETIEN);' +
+    '}else{messageAnalyseIAEntretien.textContent="✅ Import réussi.";}' +
     '});}' +
     'var inputTexteAmelioreCanvaPopup=document.getElementById("texteAmelioreCanvaInputPopup");' +
     'if(inputTexteAmelioreCanvaPopup){inputTexteAmelioreCanvaPopup.addEventListener("input",function(){' +
@@ -5907,7 +7685,7 @@ function recommencer() {
     identite: { civilite: null, nom: '', prenom: '', adresse: '', telephone: '', email: '', ville: '', age: '' }, anonymiser: true,
     entretienDirect: { structure: '', poste: '' },
     rechercheEntreprise: { structure: '' },
-    catalogueActif: {}, experiences: [], experiencesPerso: [], niveauFormation: null,
+    catalogueActif: {}, experiences: [], experiencesPerso: [],
     formations: [], loisirs: [], engagements: [], certifications: [], langues: [], permis: { possede: null, categories: [], vehicule: null },
     contrat: [], tempsTravail: [], accepte: [], accepteAucune: false,
     offre: { lien: '', poste: '', structure: '', type: '', dispo: [] },
@@ -5920,7 +7698,12 @@ function recommencer() {
     lettreMotivation: { texte: '' },
     texteAmelioreCanva: '',
     ia: creerDossierIAVide(),
-    metiersHorsRepertoire: []
+    // TACHE (Tache 2 : preparation du moteur d'import) : voir les
+    // commentaires a l'initialisation principale de dossier, meme role.
+    logiciels: [],
+    imports: { courant: null },
+    metiersHorsRepertoire: [],
+    dernierDocumentPrepare: null
   };
   blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: false, metier: false };
   historiquePages = ['cv'];

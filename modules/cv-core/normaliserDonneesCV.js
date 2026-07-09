@@ -65,11 +65,10 @@ function normaliserDonneesCV(dossierSource) {
     competences: brut.competences,
     experiences: brut.experiences,
     experiencesPersonnelles: brut.experiencesPersonnelles,
-    // Tableau (et non une valeur unique) : "dossier" ne stocke aujourd'hui
-    // qu'un seul niveau de diplome (dossier.niveauFormation), mais un CV
-    // standardise doit pouvoir en accueillir plusieurs a l'avenir sans
-    // casser sa structure.
-    formations: brut.formation ? [brut.formation] : [],
+    // TACHE (Tache 1 : formations en tableau) : "dossier" stocke desormais
+    // un veritable tableau de formations (dossier.formations), plus besoin
+    // d'envelopper artificiellement une valeur unique.
+    formations: brut.formations,
     certifications: brut.certifications,
     langues: brut.langues,
     permis: brut.permis,

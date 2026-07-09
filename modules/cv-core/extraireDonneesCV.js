@@ -34,7 +34,6 @@ function extraireDonneesCV(dossierSource) {
   var d = dossierSource || {};
   var id = d.identite || {};
   var permis = d.permis || {};
-  var niveauFormation = d.niveauFormation || null;
 
   var competences = (typeof deduireCompetences === 'function') ? deduireCompetences() : [];
   var savoirFaire = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; });
@@ -72,13 +71,12 @@ function extraireDonneesCV(dossierSource) {
     experiencesPersonnelles: (d.experiencesPerso || []).map(function (e) {
       return { intitule: e.intitule || '', detail: e.detail || '' };
     }),
-    // Un seul niveau de diplome existe aujourd'hui dans "dossier"
-    // (dossier.niveauFormation) : null si aucun renseigne.
-    formation: niveauFormation ? {
-      niveau: niveauFormation.niveauVisible || '',
-      intitule: niveauFormation.intitule || '',
-      annee: niveauFormation.annee || ''
-    } : null,
+    // TACHE (Tache 1 : formations en tableau) : dossier.formations est
+    // desormais un veritable tableau (plusieurs formations possibles),
+    // remplace l'ancien dossier.niveauFormation (valeur unique).
+    formations: (d.formations || []).map(function (f) {
+      return { niveau: f.niveau || '', intitule: f.intitule || '', annee: f.annee || '' };
+    }),
     certifications: (d.certifications || []).slice(),
     langues: (d.langues || []).map(function (l) { return { langue: l.langue, niveau: l.niveau }; }),
     permis: {

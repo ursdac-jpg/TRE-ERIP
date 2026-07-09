@@ -1220,11 +1220,241 @@ function appliquerAnalyseCV(res) {
   dossier.cvAnalyse = true;
 }
 
+// ============================================================
+// MOTEUR D'EXTRACTION DOCUMENTAIRE (Tache 2a)
+// ------------------------------------------------------------
+// Meme role que analyserReponseImport() (app.js, extraction par IA) :
+// produit une sortie conforme a SPECIFICATION_IMPORT, pour traverser
+// EXACTEMENT le meme pipeline ensuite (comparerDonnees() -> ecran de
+// validation -> fusionnerDonnees()), sans aucune adaptation. Seule la
+// METHODE d'extraction differe -- ici, expressions regulieres et
+// comparaison au catalogue de metiers deja connu, pas d'IA.
+//
+// Nomme volontairement de facon generique ("documentaire", pas "locale") :
+// demain, une partie de cette extraction pourrait reposer sur de l'OCR, un
+// modele IA embarque, ou toute autre technique, sans avoir a renommer
+// cette brique ni le pipeline qui la consomme.
+//
+// LIMITE ASSUMEE, PAS UN OUBLI : cette premiere version sait detecter, avec
+// une confiance suffisante, l'e-mail/telephone, les langues (liste fixe
+// connue), le permis, et les competences deja repertoriees dans la base de
+// metiers. Les experiences, formations, logiciels, certifications
+// distinctes, loisirs et engagements restent hors de portee d'une simple
+// analyse de texte par mots-cles -- listes vides, jamais devinees. Ce
+// moteur est concu pour ameliorer PROGRESSIVEMENT ces categories plus
+// tard, jamais pour etre remplace par une seconde implementation.
+//
+// TACHE (rigueur "jamais deviner") : contrairement a l'ancien mecanisme
+// (appliquerAnalyseCV(), qui affectait un niveau de langue "B1" par
+// defaut et une categorie de permis "B" par defaut si aucune lettre
+// n'etait trouvee), ce moteur reste plus strict sur le niveau de langue
+// (jamais devine, laisse vide) mais conserve le choix "B par defaut" pour
+// le permis, deja documente comme une convention raisonnable (la plupart
+// des permis mentionnes sans precision sont des permis B).
+function extraireDocumentaire(texte) {
+  if (!(texte || '').trim()) {
+    return { succes: false, erreur: 'Aucun texte disponible pour l\'analyse.' };
+  }
+
+  var t = ' ' + normaliserTexte(texte).replace(/\s+/g, ' ') + ' ';
+
+  function chercher(label, tableau) {
+    var l = normaliserTexte(label);
+    if (l.length >= 4 && t.indexOf(l) !== -1 && tableau.indexOf(label) === -1) {
+      tableau.push(label);
+    }
+  }
+
+  // Competences : reutilise exactement la meme comparaison au catalogue
+  // de metiers que l'ancien analyserCV() -- aucune logique dupliquee,
+  // juste une sortie differente (conforme a SPECIFICATION_IMPORT au lieu
+  // d'une ecriture directe dans dossier).
+  var savoirFaire = [], savoirEtre = [], savoirs = [];
+  (typeof baseMetiers !== 'undefined' ? baseMetiers : []).forEach(function (m) {
+    (m.savoirFaire || []).forEach(function (c) { chercher(c, savoirFaire); });
+    (m.savoirEtre || []).forEach(function (c) { chercher(c, savoirEtre); });
+    (m.savoirs || []).forEach(function (c) { chercher(c, savoirs); });
+  });
+
+  // Langues : meme liste fixe que l'ancien mecanisme, mais le niveau
+  // n'est plus devine (voir commentaire au-dessus de la fonction).
+  var languesConnues = ['Anglais', 'Espagnol', 'Allemand', 'Italien', 'Portugais', 'Russe', 'Arabe', 'Chinois', 'Neerlandais'];
+  var languesDetectees = [];
+  languesConnues.forEach(function (lg) {
+    if (t.indexOf(normaliserTexte(lg)) !== -1) {
+      languesDetectees.push({ langue: lg, niveau: '' });
+    }
+  });
+
+  // Permis : meme detection par expression reguliere que l'ancien mecanisme.
+  var permisDetecte = { possede: null, categories: [], vehicule: null };
+  if (/\bpermis\b/.test(t)) {
+    var cats = [];
+    ['a', 'b', 'c', 'd', 'e'].forEach(function (c) {
+      var re = new RegExp('permis[^.]{0,20}\\b' + c + '\\b');
+      if (re.test(t)) { cats.push(c.toUpperCase()); }
+    });
+    if (cats.length === 0) { cats.push('B'); }
+    permisDetecte = { possede: true, categories: cats, vehicule: null };
+  }
+
+  // Identite : uniquement e-mail/telephone (deja fiables par expression
+  // reguliere) -- jamais de tentative de deviner nom/prenom/adresse.
+  var contact = extraireContact(texte);
+
+  return {
+    succes: true,
+    valeurs: {
+      identite: { civilite: '', nom: '', prenom: '', telephone: contact.telephone || '', email: contact.email || '', adresse: '', ville: '' },
+      experiences: [],
+      formations: [],
+      competences: { savoirFaire: savoirFaire, savoirEtre: savoirEtre, savoirs: savoirs },
+      langues: languesDetectees,
+      certifications: [],
+      logiciels: [],
+      permis: permisDetecte,
+      loisirs: [],
+      engagements: [],
+      informationsNonClassees: []
+    }
+  };
+}
+
 function chargerScript(url) {
   return new Promise(function (ok, ko) {
     var s = document.createElement('script');
     s.src = url; s.onload = ok; s.onerror = ko;
     document.head.appendChild(s);
+  });
+}
+
+// ============================================================
+// DETECTION INTELLIGENTE DU DOCUMENT DEPOSE (Tache 1)
+// ------------------------------------------------------------
+// Objectif unique de cette tache : DETECTER, jamais BLOQUER ni MODIFIER
+// l'interface (Tache 2) ni le champ de depot lui-meme (accept=".pdf,.docx,
+// .txt" -- l'elargir aux images fait partie de la Tache 2, pas de celle-ci).
+// Ces fonctions sont pensees pour etre testables independamment de tout
+// depot reel de fichier.
+// ============================================================
+
+// Seuil INDICATIF, pas une regle rigide -- sert uniquement a distinguer
+// "peu de texte" de "texte detecte". Un chiffre de depart raisonnable,
+// ajustable si l'usage reel montre qu'il est mal calibre (aucune science
+// exacte derriere ce nombre).
+var SEUIL_MOTS_PEU_DE_TEXTE = 30;
+
+// Type de fichier, uniquement d'apres son nom -- ne prejuge jamais de son
+// contenu reel (un .pdf peut etre du texte ou un scan, voir plus bas).
+function detecterTypeFichier(nomFichier) {
+  var nom = (nomFichier || '').toLowerCase();
+  if (nom.endsWith('.txt')) { return 'txt'; }
+  if (nom.endsWith('.docx')) { return 'docx'; }
+  if (nom.endsWith('.pdf')) { return 'pdf'; }
+  if (/\.(jpe?g|png|webp|heic|heif|gif|bmp)$/.test(nom)) { return 'image'; }
+  return 'inconnu';
+}
+
+// Evaluation PROGRESSIVE du texte extrait -- jamais un simple seuil
+// binaire "assez/pas assez". 3 niveaux, comme demande : aucun, peu,
+// detecte. Compte les mots plutot que les caracteres (plus robuste face a
+// des espaces multiples issus de l'extraction PDF).
+function evaluerNiveauTexte(texteExtrait) {
+  var texte = (texteExtrait || '').trim();
+  if (!texte) { return 'aucun'; }
+  var nbMots = texte.split(/\s+/).filter(Boolean).length;
+  if (nbMots === 0) { return 'aucun'; }
+  if (nbMots < SEUIL_MOTS_PEU_DE_TEXTE) { return 'peu'; }
+  return 'detecte';
+}
+
+// Construit la recommandation (jamais un blocage, sauf le cas image/scan
+// certain ou l'analyse rapide n'a tout simplement aucune matiere pour
+// fonctionner -- ce n'est pas une restriction arbitraire, c'est un fait
+// technique : l'analyse rapide ne sait lire que du texte).
+//
+// niveau : 'analyse_rapide_suffisante' | 'ia_fortement_recommandee' | 'ia_uniquement'
+// analyseRapideDisponible : est-ce que le parcours "Analyse rapide" a
+// seulement un sens a proposer pour ce document ?
+function determinerRecommandationDocument(typeFichier, niveauTexte) {
+  if (typeFichier === 'image') {
+    return {
+      niveau: 'ia_uniquement',
+      analyseRapideDisponible: false,
+      message: 'Votre document est une image ou un scan. Nous vous recommandons fortement l\'analyse assistée ' +
+        'par IA, beaucoup plus fiable pour ce type de document.'
+    };
+  }
+  if (typeFichier === 'pdf') {
+    if (niveauTexte === 'aucun') {
+      return {
+        niveau: 'ia_uniquement',
+        analyseRapideDisponible: false,
+        message: 'Votre document semble être un scan (aucun texte n\'a pu être lu directement). Nous vous ' +
+          'recommandons l\'analyse assistée par IA.'
+      };
+    }
+    if (niveauTexte === 'peu') {
+      return {
+        niveau: 'ia_fortement_recommandee',
+        analyseRapideDisponible: true,
+        message: 'Votre document semble contenir peu de texte directement lisible (peut-être un scan partiel ' +
+          'ou une mise en page complexe). L\'analyse assistée par IA sera probablement plus fiable, mais vous ' +
+          'pouvez tout de même essayer l\'analyse rapide.'
+      };
+    }
+    return {
+      niveau: 'analyse_rapide_suffisante',
+      analyseRapideDisponible: true,
+      message: 'Votre CV semble être un document texte. L\'analyse rapide de l\'application devrait être ' +
+        'suffisante dans la plupart des cas. Vous pourrez toujours utiliser l\'analyse assistée par IA si ' +
+        'certaines informations ne sont pas correctement détectées ou si vous souhaitez une extraction plus complète.'
+    };
+  }
+  // .docx et .txt : toujours consideres comme du texte, aucune ambiguite
+  // possible pour ces formats (pas de notion de "docx scanne").
+  return {
+    niveau: 'analyse_rapide_suffisante',
+    analyseRapideDisponible: true,
+    message: 'Votre CV semble être un document texte. L\'analyse rapide de l\'application devrait être ' +
+      'suffisante dans la plupart des cas. Vous pourrez toujours utiliser l\'analyse assistée par IA si ' +
+      'certaines informations ne sont pas correctement détectées ou si vous souhaitez une extraction plus complète.'
+  };
+}
+
+// Point d'entree unique de cette tache : detecte le type, tente
+// l'extraction si pertinent (reutilise lireFichierCV(), aucune logique
+// d'extraction dupliquee), et retourne une recommandation structuree.
+// Ne modifie jamais rien dans dossier -- fonction d'analyse pure, la
+// decision de l'utiliser revient a la Tache 2 (interface).
+function analyserDocumentDepose(fichier) {
+  var typeFichier = detecterTypeFichier(fichier.name);
+
+  if (typeFichier === 'image') {
+    // Aucune tentative d'extraction : techniquement impossible aujourd'hui
+    // (pas d'OCR cote client), et sans objet pour une image.
+    return Promise.resolve({
+      typeFichier: 'image',
+      niveauTexte: null,
+      texteExtrait: '',
+      recommandation: determinerRecommandationDocument('image', null)
+    });
+  }
+
+  if (typeFichier === 'inconnu') {
+    return Promise.reject(new Error('Format non pris en charge.'));
+  }
+
+  return lireFichierCV(fichier).then(function (texte) {
+    // .docx/.txt : toujours "detecte" (pas d'ambiguite pour ces formats).
+    // .pdf : evaluation progressive reelle du texte obtenu.
+    var niveauTexte = (typeFichier === 'pdf') ? evaluerNiveauTexte(texte) : 'detecte';
+    return {
+      typeFichier: typeFichier,
+      niveauTexte: niveauTexte,
+      texteExtrait: texte,
+      recommandation: determinerRecommandationDocument(typeFichier, niveauTexte)
+    };
   });
 }
 
@@ -1342,21 +1572,119 @@ function ouvrirFenetreCV(mode, options) {
     btnAnalyser.disabled = true;
     lireFichierCV(input.files[0]).then(function (texte) {
       dossier.cvTexte = texte;
-      var res = analyserCV(texte);
-      appliquerAnalyseCV(res);
-      var nb = res.savoirFaire.length + res.savoirEtre.length + res.savoirs.length;
-      var detail = '';
-      if (nb > 0) {
-        detail = '<strong>' + nb + ' competences reconnues</strong>' +
-          (res.metiers.length ? ' et ' + res.metiers.length + ' metier(s) identifie(s) : ' + res.metiers.join(', ') : '') + '.';
-      } else {
-        detail = 'Aucune competence de la base n\'a ete reconnue automatiquement. ' +
-          'Vous pourrez completer votre profil a l\'etape suivante.';
-      }
+      // TACHE 10 (suppression progressive d'appliquerAnalyseCV) : cette
+      // fenetre a desormais un vrai remplacement (l'accordeon "Importer
+      // automatiquement toutes les informations de mon CV" juste en
+      // dessous, construit en Tache 5) -- l'ancienne analyse directe par
+      // expression reguliere (analyserCV/appliquerAnalyseCV, qui ecrivait
+      // dans dossier SANS validation) n'est donc plus utilisee ici.
+      // dossier.cvAnalyse reste mis a true : ce champ signifie "un CV a ete
+      // depose et lu", independamment de la methode d'extraction utilisee
+      // ensuite, et plusieurs endroits de l'application en dependent deja
+      // (navigation, cvDisponible()...).
+      dossier.cvAnalyse = true;
       zoneResultat.innerHTML =
-        '<div class="alert alert-success mb-0">&#10004; CV analyse. ' + detail +
-        '<div class="mt-2"><button type="button" id="continuerApresCV" class="btn btn-success btn-sm">Continuer &#8594;</button></div></div>';
+        '<div class="alert alert-success mb-0">&#10004; CV lu avec succès. Utilisez la section ci-dessous pour en extraire ' +
+        'automatiquement toutes les informations (expériences, formations, compétences...), ou continuez directement.' +
+        '<div class="mt-2"><button type="button" id="continuerApresCV" class="btn btn-success btn-sm">Continuer &#8594;</button></div></div>' +
+        // TACHE 5 (moteur d'import, conforme a docs/ARCHITECTURE_MOTEUR_IMPORT.md) :
+        // extrait TOUTES les informations factuelles du CV via un
+        // assistant IA externe, et les depose dans dossier.imports.courant,
+        // en attente de validation. Le pipeline complet (comparaison,
+        // ecran de validation, fusion) est construit (Taches 6 a 9) et
+        // accessible via le bouton "Verifier et valider" qui apparait
+        // apres l'import.
+        '<details class="mt-3" style="border:1px solid #E5E7EB;border-radius:8px;padding:0.6rem 0.9rem;">' +
+        '<summary style="cursor:pointer;"><strong>&#129302; Importer automatiquement toutes les informations de mon CV</strong> ' +
+        '<span class="text-muted small">(experiences, formations, competences, langues...)</span></summary>' +
+        '<div class="mt-2">' +
+        '<p class="small fw-bold mb-2">Choisissez votre assistant IA</p>' +
+        '<div class="d-flex flex-wrap gap-2 mb-2" id="carteAssistantsIA">' +
+        ASSISTANTS_IA.map(function (a) {
+          return '<div class="carte carte-selection-compacte" data-assistant-id="' + a.id + '" ' +
+            'style="cursor:pointer;padding:0.5rem 1rem;">' + a.nom + '</div>';
+        }).join('') +
+        '</div>' +
+        '<button type="button" class="btn btn-sm btn-primary mb-3" id="btnContinuerVersAssistantIA" disabled>Continuer</button>' +
+        '<p class="small text-muted mb-2">Une fois revenu(e) avec la réponse de l\'assistant IA, collez-la ci-dessous.</p>' +
+        '<textarea class="form-control form-control-sm mb-2" id="texteReponseExtractionCV" rows="6" ' +
+        'placeholder="Collez ici la reponse complete de l\'assistant IA..."></textarea>' +
+        '<button type="button" class="btn btn-sm btn-primary" id="btnImporterExtractionCV">Importer ces informations</button>' +
+        '<div id="messageImportExtractionCV" class="mt-2 small"></div>' +
+        '</div></details>';
       document.getElementById('continuerApresCV').addEventListener('click', etapeSuivante);
+
+      // TACHE (standard IA, integration import CV) : selection de l'assistant
+      // (cartes, meme principe que pageChoixCV()) -- le bouton Continuer
+      // reste desactive tant qu'aucune carte n'est active. Au clic sur
+      // Continuer, ouvre le composant generique ouvrirFenetreAssistantIA()
+      // (app.js), qui devient l'UNIQUE declencheur de la copie + ouverture.
+      var assistantChoisi = null;
+      var btnContinuerVersAssistantIA = document.getElementById('btnContinuerVersAssistantIA');
+      document.querySelectorAll('#carteAssistantsIA [data-assistant-id]').forEach(function (carte) {
+        carte.addEventListener('click', function () {
+          document.querySelectorAll('#carteAssistantsIA [data-assistant-id]').forEach(function (c) {
+            c.classList.remove('active-card');
+          });
+          carte.classList.add('active-card');
+          assistantChoisi = ASSISTANTS_IA.filter(function (a) { return a.id === carte.dataset.assistantId; })[0];
+          btnContinuerVersAssistantIA.disabled = false;
+        });
+      });
+      btnContinuerVersAssistantIA.addEventListener('click', function () {
+        if (!assistantChoisi) { return; }
+        ouvrirFenetreAssistantIA({
+          nomAssistant: assistantChoisi.nom,
+          urlAssistant: assistantChoisi.url,
+          afficherAnonymisation: true,
+          construireTexteACopier: function (anonymiserActif) {
+            var texteCV = anonymiserActif ? anonymiserTexte(dossier.cvTexte) : dossier.cvTexte;
+            return promptCache('extraction-cv', texteCV);
+          }
+        });
+      });
+
+      // TACHE 5 (moteur d'import) : delegue tout le parsing a
+      // analyserReponseImport() + SPECIFICATION_IMPORT (deja construits,
+      // app.js) -- aucune logique dupliquee ici. S'arrete a
+      // dossier.imports.courant : aucun ecran de validation construit a ce
+      // stade (Tache 6), rien n'est encore ecrit dans dossier lui-meme.
+      var btnImporterExtractionCV = document.getElementById('btnImporterExtractionCV');
+      if (btnImporterExtractionCV) {
+        btnImporterExtractionCV.addEventListener('click', function () {
+          var messageImport = document.getElementById('messageImportExtractionCV');
+          var texteColle = document.getElementById('texteReponseExtractionCV').value;
+          var resultatImport = analyserReponseImport(texteColle, SPECIFICATION_IMPORT);
+          if (!resultatImport.succes) {
+            messageImport.style.color = '#b91c1c';
+            messageImport.textContent = '⚠️ ' + resultatImport.erreur;
+            return;
+          }
+          var nomFichier = (input.files[0] && input.files[0].name) || '';
+          var typeSource = /\.docx$/i.test(nomFichier) ? 'cv_word' : (/\.pdf$/i.test(nomFichier) ? 'cv_pdf' : 'autre');
+          dossier.imports.courant = {
+            schemaVersion: 1,
+            typeSource: typeSource,
+            date: new Date().toISOString(),
+            donnees: resultatImport.valeurs
+          };
+          messageImport.innerHTML = '<span style="color:#15803d;">✅ Informations importées et en attente de vérification.</span> ' +
+            '<button type="button" class="btn btn-sm btn-success ms-2" id="btnVerifierImportCV">Vérifier et valider</button>';
+          // TACHE 7 (moteur d'import, ecran de validation) : ouvre l'ecran
+          // de vue d'ensemble construit dans app.js -- rien n'est encore
+          // ecrit dans dossier avant que la personne valide explicitement.
+          var btnVerifierImportCV = document.getElementById('btnVerifierImportCV');
+          if (btnVerifierImportCV) {
+            // TACHE (retour automatique au parcours) : la validation
+            // devient la fin du processus, pas une etape intermediaire.
+            // etapeSuivante() ferme deja fenetreCV et poursuit le parcours
+            // normal (naviguerVers('objectif') ou contexte.onTerminer()) --
+            // exactement la meme fonction que le bouton "Continuer"
+            // classique, aucune logique de reprise dupliquee ici.
+            btnVerifierImportCV.addEventListener('click', function () { ouvrirEcranValidationImport(etapeSuivante); });
+          }
+        });
+      }
     }).catch(function (erreur) {
       btnAnalyser.disabled = false;
       zoneResultat.innerHTML = '<div class="alert alert-warning mb-0">Impossible de lire ce fichier (' +
@@ -1497,6 +1825,12 @@ function ouvrirFenetreEntretienDirect() {
 
     lireFichierCV(champCv.files[0]).then(function (texteCv) {
       dossier.cvTexte = texteCv;
+      // TACHE 10 (suppression progressive, en attente pour cette fenetre) :
+      // cette fenetre (preparation d'entretien, parcours direct) n'a pas
+      // encore le nouveau mecanisme d'import (Tache 5 ne l'a construit que
+      // pour ouvrirFenetreCV()). Le retirer ici sans remplacement priverait
+      // la personne de toute pre-remplissage -- conserve donc
+      // volontairement pour l'instant, a migrer dans une tache separee.
       appliquerAnalyseCV(analyserCV(texteCv));
       if (champLettre.files.length) {
         return lireFichierCV(champLettre.files[0]).then(function (texteLettre) {
@@ -1573,6 +1907,9 @@ function ouvrirFenetreEntretien(onTerminer) {
 
     lireFichierCV(inputCV.files[0]).then(function (texteCV) {
       dossier.cvTexte = texteCV;
+      // TACHE 10 (suppression progressive, en attente pour cette fenetre) :
+      // meme remarque que dans ouvrirFenetreEntretienDirect() -- pas encore
+      // migree vers le nouveau moteur d'import, conserve volontairement.
       appliquerAnalyseCV(analyserCV(texteCV));
       if (inputLettre.files.length) {
         return lireFichierCV(inputLettre.files[0]).then(function (texteLettre) {

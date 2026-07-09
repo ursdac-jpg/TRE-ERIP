@@ -27,6 +27,16 @@ Ta stratégie de sélection doit notamment te permettre de :
 
 Ne cherche jamais à faire tenir toutes les informations disponibles. Choisis.
 
+## Contrainte de format : une seule page
+
+Le CV final s'affiche sur une seule page A4, avec une police jamais inférieure à 10 pt : ce n'est pas la mise en page qui s'adaptera en réduisant le texte, c'est ta sélection qui doit être suffisamment ciblée pour y tenir naturellement. Concrètement :
+- Limite le nombre d'expériences détaillées à celles qui servent réellement cette candidature (au-delà de 4 à 5 expériences, les moins pertinentes doivent être écartées ou regroupées en une ligne, pas détaillées).
+- Limite le nombre de missions décrites par expérience à l'essentiel (2 à 3 par expérience suffisent presque toujours).
+- Ne choisis que les compétences les plus utiles pour ce métier ou ce secteur, jamais une liste exhaustive de tout ce qui a été déduit du profil.
+- Évite toute information redondante entre les rubriques (une même idée ne doit pas apparaître à la fois dans l'accroche, les points forts et une expérience détaillée).
+
+Un CV qui déborde sur une deuxième page n'est presque jamais lu en entier par un recruteur : ce n'est pas un détail de mise en forme, c'est une vraie perte d'efficacité pour la candidature.
+
 ## Cohérence d'ensemble
 
 L'accroche, les points forts et les mots-clés ne sont pas trois exercices indépendants : ils doivent se répondre. L'accroche annonce ce que les points forts développent ; les points forts s'appuient sur le vocabulaire réel du parcours (missions réellement exercées, intitulés réels) plutôt que sur des formules génériques déconnectées de ce que la personne a réellement fait ; les mots-clés reflètent des éléments véritablement présents dans le profil, choisis à l'intersection de ce que la personne a réellement à offrir et de ce que ce métier ou ce secteur attend. Relis l'ensemble avant de conclure : les trois éléments doivent donner l'impression d'une seule stratégie cohérente, pas d'une liste de trois réponses séparées.
@@ -36,6 +46,12 @@ L'accroche, les points forts et les mots-clés ne sont pas trois exercices indé
 1. Rédige une accroche professionnelle courte (2 à 4 phrases), qui reflète la stratégie retenue pour cette candidature précise (pas une accroche générique interchangeable d'un profil à l'autre).
 2. Sélectionne 3 à 5 points forts : uniquement les éléments qui servent le mieux cette candidature, expériences professionnelles ou personnelles confondues. Une liste plus courte mais réellement ciblée vaut mieux qu'une liste exhaustive.
 3. Identifie 5 à 10 mots-clés pertinents pour ce métier ou ce secteur, utiles pour la lisibilité par les recruteurs et les logiciels de tri de candidatures.
+4. Recommande si un CV spécifique (ciblé sur ce métier précis) ou général (polyvalent) sert mieux cette candidature, avec une justification courte — même si un mode a déjà été choisi, ton avis reste utile pour le confirmer ou le nuancer.
+5. Parmi les expériences présentes dans le profil, identifie celles qui méritent d'être mises en avant en priorité pour cette candidature précise (pas nécessairement les plus récentes). Pour chacune, indique le poste et l'entreprise exactement comme ils figurent dans le profil (pour qu'on puisse la reconnaître sans ambiguïté), avec une justification courte.
+6. Parmi les compétences présentes dans le profil, identifie celles qui méritent d'être valorisées en priorité pour cette candidature précise, avec une justification courte par compétence.
+7. Si une rubrique entière (formations, langues, certifications, logiciels, loisirs, engagements...) n'apporte rien à cette candidature précise, identifie-la comme masquable, avec une justification courte. Ne propose de masquer une rubrique que si elle est réellement sans valeur ici — pas par défaut.
+
+Ces recommandations (points 4 à 7) ne sont jamais des inventions : elles ne portent que sur des éléments déjà présents dans le profil, jamais sur des faits nouveaux.
 
 ## Consignes de fiabilité
 
@@ -50,5 +66,23 @@ D'abord quelques phrases lisibles à destination de la personne, présentant l'a
 Termine ensuite IMPÉRATIVEMENT ta réponse par un bloc de code contenant uniquement du JSON strictement valide, exactement selon ce format, sans aucun texte après ce bloc :
 
 ```json
-{"profil": "...", "pointsForts": ["...", "..."], "motsCles": ["...", "..."]}
+{
+  "profil": "...",
+  "pointsForts": ["...", "..."],
+  "motsCles": ["...", "..."],
+  "recommandations": {
+    "typeCV": { "valeur": "specifique", "justification": "..." },
+    "experiencesAMettreEnAvant": [
+      { "poste": "...", "entreprise": "...", "justification": "..." }
+    ],
+    "competencesAValoriser": [
+      { "competence": "...", "justification": "..." }
+    ],
+    "rubriquesMasquables": [
+      { "rubrique": "...", "justification": "..." }
+    ]
+  }
+}
 ```
+
+Si tu n'as aucune recommandation à faire pour l'une de ces 4 sous-parties (par exemple aucune rubrique à masquer), laisse simplement une liste vide — n'invente jamais une recommandation pour remplir le champ.

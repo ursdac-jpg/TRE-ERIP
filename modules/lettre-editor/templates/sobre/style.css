@@ -1,0 +1,46 @@
+/* modules/lettre-editor/templates/sobre/style.css
+   Presentation sobre et professionnelle, format lettre classique. */
+
+.lettre-sobre {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  color: #1a1a1a;
+  background: #FFFFFF;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2.5rem 3rem;
+  box-sizing: border-box;
+  line-height: 1.6;
+}
+
+.lettre-sobre-expediteur {
+  margin-bottom: 2rem;
+}
+
+.lettre-sobre-expediteur p {
+  margin: 0.1rem 0;
+  font-size: 0.95rem;
+}
+
+.lettre-sobre-date {
+  text-align: right;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  color: #444444;
+}
+
+.lettre-sobre-objet {
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+}
+
+.lettre-sobre-corps {
+  white-space: pre-wrap;
+  font-size: 1rem;
+  min-height: 300px;
+  outline: none;
+}
+
+.lettre-sobre-corps:focus {
+  box-shadow: 0 0 0 2px #93C5FD;
+  border-radius: 4px;
+}
