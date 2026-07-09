@@ -1,0 +1,95 @@
+/* ============================================================
+   modules/cv-editor/templates/moderne/style.css
+   ------------------------------------------------------------
+   Presentation du modele "Moderne" : bandeau lateral + colonne
+   principale. Aucune logique ici, uniquement de la mise en forme.
+   ============================================================ */
+
+.cv-moderne {
+  display: flex;
+  font-family: 'Open Sans', Arial, sans-serif;
+  color: #222222;
+  background: #FFFFFF;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.cv-moderne-colonne-laterale {
+  width: 30%;
+  background: #F3F4F6;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.cv-moderne-contenu {
+  width: 70%;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.cv-moderne-photo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: #E5E7EB;
+  background-size: cover;
+  background-position: center;
+  margin: 0 auto 1rem auto;
+}
+
+.cv-moderne-nom {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.3rem;
+  text-align: center;
+  margin: 0 0 0.3rem 0;
+  color: #2563EB;
+}
+
+.cv-moderne-objectif {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #4B5563;
+  margin: 0 0 1.5rem 0;
+}
+
+.cv-moderne-bloc {
+  margin-bottom: 1.5rem;
+}
+
+.cv-moderne-bloc h2 {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  color: #2563EB;
+  border-bottom: 2px solid #2563EB;
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.cv-moderne-bloc h3 {
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0.2rem 0;
+}
+
+.cv-moderne-bloc ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.cv-moderne-bloc p {
+  margin: 0.2rem 0;
+}
+
+.cv-moderne-experience {
+  margin-bottom: 1rem;
+}
+
+.cv-moderne-experience h3 {
+  font-size: 1rem;
+  margin: 0 0 0.2rem 0;
+}
+
+.cv-moderne-experience-meta {
+  font-size: 0.85rem;
+  color: #6B7280;
+  font-style: italic;
+}

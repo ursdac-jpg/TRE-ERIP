@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assistant Parcours Professionnel</title>
+
+  <!-- Bootstrap + icones -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Styles de l'application -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div id="app"></div>
+
+  <!-- Ordre important : du plus stable (donnees + moteur) au plus mouvant (interface) -->
+  <!-- charset UTF-8 explicite : garantit un affichage correct des accents en ouverture locale -->
+  <script src="data/metiers.js" charset="UTF-8"></script>
+  <script src="data/actionsProfessionnelles.js" charset="UTF-8"></script>
+  <script src="data/personnesMaterielsLieux.js" charset="UTF-8"></script>
+  <script src="data/environnementsTravail.js" charset="UTF-8"></script>
+  <script src="data/valeursProfessionnelles.js" charset="UTF-8"></script>
+  <script src="data/baseConnaissancesERIP.js" charset="UTF-8"></script>
+  <script src="data/referentielMetiersERIP.js" charset="UTF-8"></script>
+  <script src="data/metiersComplementaires.js" charset="UTF-8"></script>
+  <script src="data/dictionnaireLexicalERIP.js" charset="UTF-8"></script>
+  <script src="data/toleranceOrthographiqueERIP.js" charset="UTF-8"></script>
+  <script src="data/extractionConceptsERIP.js" charset="UTF-8"></script>
+  <script src="data/moteurPertinenceRechercheERIP.js" charset="UTF-8"></script>
+  <script src="modules/cv-core/extraireDonneesCV.js" charset="UTF-8"></script>
+  <script src="modules/cv-core/normaliserDonneesCV.js" charset="UTF-8"></script>
+  <script src="modules/cv-editor/rendreTemplate.js" charset="UTF-8"></script>
+  <script src="modules/cv-editor/modelesDisponibles.js" charset="UTF-8"></script>
+  <script src="modules/lettre-core/normaliserDonneesLettre.js" charset="UTF-8"></script>
+  <script src="modules/lettre-editor/modelesDisponiblesLettre.js" charset="UTF-8"></script>
+  <script src="js/app.js" charset="UTF-8"></script>
+
+</body>
+</html>

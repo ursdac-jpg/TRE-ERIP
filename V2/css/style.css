@@ -1,0 +1,1120 @@
+/* ============================================================
+   style.css — Assistant Parcours Professionnel (ERIP)
+   Un seul fichier de styles. Charge par index.html.
+   ============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #f0f4fa;
+  font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+}
+
+#app {
+  max-width: 100%;
+  padding: 2rem 3rem;
+  min-height: 100vh;
+  background: white;
+}
+
+/* ===== BARRE DE PROGRESSION CLIQUABLE ===== */
+.progression {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+  font-size: 1.1rem;
+}
+
+/* barre superieure : progression a gauche, actions globales a droite */
+.barre-superieure {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+.barre-superieure .progression { margin-bottom: 0; flex: 1 1 auto; }
+.actions-session { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-session { border-radius: 30px !important; font-weight: 600; white-space: nowrap; }
+
+/* fenetre de confirmation (Reinitialiser / Restaurer) */
+.modal-confirmation {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(11, 26, 51, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.modal-boite {
+  background: #fff;
+  border-radius: 1.2rem;
+  padding: 1.8rem 2rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.modal-boite h3 { font-size: 1.4rem; font-weight: 800; color: #0b1a33; margin-bottom: 0.6rem; }
+.modal-boite p { color: #3a4a5e; margin-bottom: 1.4rem; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; flex-wrap: wrap; }
+.import-option { display: block; margin: 0.5rem 0; cursor: pointer; font-weight: 600; color: #0b1a33; }
+.import-option input { margin-right: 0.5rem; }
+
+/* etape en cours */
+.progression .etape.active {
+  padding: 10px 24px;
+  border-radius: 40px;
+  background: #0d6efd;
+  color: white;
+  font-weight: 700;
+  border: 2px solid #0d6efd;
+  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.35);
+}
+
+/* etape deja visitee : cliquable, couleur douce */
+.progression .etape.visited {
+  padding: 10px 24px;
+  border-radius: 40px;
+  background: #d5e5ff;
+  color: #0b3d91;
+  border: 2px solid #9dc2ff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: 0.15s;
+}
+.progression .etape.visited:hover {
+  background: #b9d5ff;
+  transform: translateY(-2px);
+}
+
+/* etape pas encore accessible : grisee, non cliquable */
+.progression .etape.future {
+  padding: 10px 24px;
+  border-radius: 40px;
+  background: #eef1f6;
+  color: #9aa7b6;
+  border: 2px solid transparent;
+  cursor: not-allowed;
+}
+
+/* ===== TITRES ===== */
+h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
+.sousTitre { font-size: 1.2rem; color: #3a4a5e; max-width: 760px; margin: 0 auto 1.5rem; }
+
+/* titre de categorie (Question 1 : Personnes / Objets / Lieux) */
+.categorie-titre {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #0b1a33;
+  text-align: center;
+  margin: 1.8rem 0 0.4rem;
+}
+
+/* Question 1 : 3 colonnes (une par groupe), 2 cartes par ligne dans chaque colonne */
+.colonnes-cat {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 1rem 0 2rem;
+}
+.colonne-cat {
+  flex: 1 1 300px;
+  max-width: 380px;
+}
+.colonne-cat .categorie-titre { margin-top: 0.4rem; }
+.grille-cat {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.grille-cat .carte {
+  min-width: 0;
+  max-width: none;
+  flex: none;
+  padding: 1.2rem 0.6rem;
+}
+
+/* carte non selectionnable quand la limite de choix est atteinte */
+.carte-desactivee {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Curseur "interdit" coherent sur tout element desactive (boutons compris).
+   pointer-events: auto est necessaire pour que le survol (et donc le curseur)
+   soit pris en compte : l'attribut HTML "disabled" empeche deja tout clic
+   nativement, donc aucun risque de rendre le bouton a nouveau actionnable. */
+.btn:disabled, .btn[disabled] {
+  cursor: not-allowed;
+  pointer-events: auto !important;
+}
+
+/* message de limite de choix atteinte */
+.message-limite {
+  background: #fff8e6;
+  border-left: 6px solid #f0ad4e;
+  padding: 0.9rem 1.4rem;
+  border-radius: 1rem;
+  margin: 1rem auto 1.2rem;
+  max-width: 760px;
+  text-align: center;
+  font-weight: 600;
+  color: #7a5b00;
+}
+
+/* ===== CARTES ===== */
+.objectifs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: center;
+  margin: 2rem 0;
+}
+.carte {
+  background: white;
+  border: 3px solid #e2e8f0;
+  border-radius: 1.5rem;
+  padding: 1.6rem 1.2rem;
+  min-width: 190px;
+  flex: 1 0 190px;
+  max-width: 260px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.25s;
+}
+.carte:hover { transform: translateY(-6px); border-color: #0d6efd; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+.carte.active-card { border-color: #0d6efd; background: #edf4ff; box-shadow: 0 0 0 4px rgba(13,110,253,0.18); }
+.carte i { font-size: 2.6rem; color: #0d6efd; display: block; margin-bottom: 0.5rem; }
+.carte h3 { font-size: 1.25rem; font-weight: 700; margin: 0.5rem 0; }
+.carte h5 { font-size: 1.05rem; font-weight: 600; margin: 0.4rem 0 0; }
+.carte p { font-size: 0.95rem; color: #4a5b6e; }
+
+/* TACHE (complement, ecrans 3-4-5-6 : Experience/Actions/Environnement/
+   Valeurs) : hauteur minimale reservee (la page ne s'effondre plus en
+   changeant d'onglet ou en selectionnant un element) + cartes un peu plus
+   compactes (moins d'espace perdu autour de chaque carte). Scope uniquement
+   a .objectifs-catalogue -- n'affecte pas .objectifs ailleurs (pageCartes,
+   ecrans simples type "objectif"/permis/vehicule, inchanges). */
+.objectifs-catalogue {
+  min-height: 220px;
+  align-content: flex-start;
+}
+.objectifs-catalogue .carte {
+  padding: 1rem 0.9rem;
+  min-width: 150px;
+  max-width: 200px;
+}
+.objectifs-catalogue .carte i { font-size: 2.1rem; margin-bottom: 0.3rem; }
+.objectifs-catalogue .carte h5 { font-size: 0.95rem; margin-top: 0.2rem; }
+
+/* TACHE 18 : carte "Ateliers & visites d'entreprise" sur la page d'accueil.
+   Harmonise la hauteur entre les 3 cartes principales et cette carte plus large,
+   sans toucher au style de .carte utilise sur les autres ecrans. */
+.objectifs-accueil .carte {
+  min-height: 230px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* TACHE (mise en page accueil) : ligne Ateliers ERIP (gauche) / Preparer un
+   entretien (droite), remontee legerement par rapport aux 3 cartes
+   principales (qui restent totalement inchangees, dans leur propre bloc
+   .objectifs-accueil ci-dessus). Le decalage reste modere : les deux lignes
+   ne se touchent jamais et ne se chevauchent jamais. */
+.zone-ateliers-entretien {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: -2.2rem;
+  margin-bottom: 1.5rem;
+}
+.carte-erip {
+  max-width: 300px;
+  min-height: 260px;
+  flex: 1 0 260px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* TACHE 36 : carte d'acces direct au parcours "Preparer un entretien" */
+.carte-entretien-direct {
+  max-width: 300px;
+  min-height: 260px;
+  flex: 1 0 260px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* TACHE (mise en page accueil) : grande barre de recherche horizontale,
+   sous les deux cartes ci-dessus, centree entre elles. N'est plus presentee
+   comme une carte. */
+.zone-recherche-erip-large {
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto 1.5rem;
+  margin-top: -189px; /* ~5 cm plus haut */
+}
+.zone-recherche-erip-large input {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border-radius: 2rem;
+  border: 2px solid #e2e8f0;
+  font-size: 1rem;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+.zone-recherche-erip-large input:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: 0 4px 16px rgba(13,110,253,0.18);
+}
+/* Resultats : liste superposee au-dessus de toute la page (haut z-index),
+   affichee au-dessus de la barre de recherche. */
+.resultats-erip-dropdown:not(:empty) {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  top: auto;
+  margin-bottom: 0.6rem;
+  background: white;
+  border-radius: 1.2rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  padding: 1.2rem;
+  z-index: 2001;
+  max-height: 65vh;
+  overflow-y: auto;
+  text-align: left;
+}
+/* Overlay transparent : intercepte les clics sur le reste de la page tant que
+   des resultats sont affiches. Invisible par defaut (aucun assombrissement
+   demande), juste sous le panneau de resultats en z-index. */
+.overlay-recherche-erip { display: none; }
+.overlay-recherche-erip.actif {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: transparent;
+}
+
+/* TACHE 33A : resultats de l'Explorateur, groupes par categorie */
+.groupe-resultats-erip { margin: 1.5rem 0; }
+.groupe-resultats-erip h4 { font-size: 1.1rem; color: #0b1a33; margin-bottom: 0.8rem; }
+.grille-resultats-erip { display: flex; flex-wrap: wrap; gap: 1rem; }
+.carte-resultat-erip {
+  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 1rem;
+  padding: 1rem 1.2rem; min-width: 220px; max-width: 300px; flex: 1 0 220px;
+}
+.carte-resultat-erip h5 { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; color: #0b1a33; }
+.carte-resultat-texte {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 140px; max-width: none; flex: 0 1 auto; font-weight: 600; color: #0d6efd;
+  background: #edf4ff; border-color: #cfe0fb;
+}
+
+/* TACHE (recherche assistant) : elements de resultat cliquables (metier,
+   competence) ouvrant le parcours guide. */
+.carte-resultat-cliquable { cursor: pointer; transition: 0.15s; }
+.carte-resultat-cliquable:hover { border-color: #0d6efd; box-shadow: 0 4px 12px rgba(13,110,253,0.15); }
+
+.ligne-metier-associe {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.8rem;
+  padding: 0.6rem 1rem; margin-bottom: 0.5rem; cursor: pointer; font-weight: 600; color: #0b1a33;
+}
+.ligne-metier-associe:hover { border-color: #0d6efd; background: #edf4ff; }
+.ligne-metier-associe a { color: #0d6efd; text-decoration: none; }
+
+.pastilles-parcours-guide { margin: 0.8rem 0; }
+.pastille-parcours {
+  display: block; padding: 0.7rem 1rem; margin-bottom: 0.5rem; border-radius: 0.8rem;
+  border: 2px solid #e2e8f0; cursor: pointer; font-weight: 600; color: #0b1a33; transition: 0.15s;
+}
+.pastille-parcours:hover { border-color: #0d6efd; background: #f8fafc; }
+.pastille-parcours input { margin-right: 0.5rem; }
+.carte-erip:hover { color: inherit; }
+.carte-erip-action { font-size: 0.9rem; font-weight: 700; color: #0d6efd; margin-top: 0.8rem; }
+
+/* ===== BOUTONS ===== */
+.btn-lg { padding: 0.6rem 2rem !important; font-size: 1.05rem !important; border-radius: 40px !important; }
+
+/* bouton maison centre */
+.btn-accueil { border-radius: 40px !important; font-weight: 600; }
+
+/* bouton tout deselectionner (rectangulaire, arrondi, discret) */
+.btn-effacer {
+  border-radius: 30px !important;
+  font-weight: 600;
+  padding: 0.4rem 1.4rem !important;
+  font-size: 0.95rem !important;
+}
+
+/* ===== MESSAGES ===== */
+.message-competences {
+  background: #eef6ff;
+  border-left: 6px solid #0d6efd;
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  margin: 1.5rem 0;
+}
+/* TACHE (complement) : le message VAE est desormais un accordeon (voir
+   .accordeon plus bas) -- on reprend ici sa teinte jaune d'origine, plutot
+   que le gris neutre par defaut de .accordeon, pour continuer a le
+   distinguer visuellement comme une information a part. */
+.message-vae-accordeon .accordeon {
+  background: #fff8e6;
+  border-color: #f0ad4e;
+}
+
+/* ===== OUTILS ===== */
+.outils-grid { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 1.5rem 0; }
+.outil-item {
+  background: #f8fafc; border-radius: 1.5rem; padding: 1.2rem 1.5rem; min-width: 160px;
+  text-align: center; border: 2px solid #e2e8f0; cursor: pointer; transition: 0.2s;
+}
+.outil-item:hover { background: #edf4ff; border-color: #0d6efd; }
+.outil-item i { font-size: 2.2rem; color: #0d6efd; display: block; margin-bottom: 0.3rem; }
+
+/* TACHE (complement, page Action) : les 3 cartes IA (Créer votre CV, Lettre
+   de motivation, Préparer un entretien) légèrement agrandies par rapport aux
+   autres cartes "outil-item" (ex. Ressources et liens utiles), qui restent
+   inchangées. */
+.outil-item.outil-ia-grand {
+  padding: 1.6rem 2rem; min-width: 190px; font-size: 1.05rem; font-weight: 600;
+}
+.outil-item.outil-ia-grand i { font-size: 2.7rem; }
+
+/* Complement tache 8 : carte outil non disponible (ex : "Creer votre CV" sans CV).
+   TACHE (demande : bouton "Je valide") : regle elargie pour s'appliquer aussi
+   a des elements hors ".outil-item" (ex. bouton "Je valide" du bloc "Vous",
+   page Action), meme comportement (transparent + curseur interdit). */
+.outil-desactive {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Complement tache 8 : choix exclusif CV general / CV specifique */
+.type-cv-choix {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.type-cv-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: #0b1a33;
+  cursor: pointer;
+}
+.type-cv-option input { margin: 0; }
+
+/* Etape 3 : composant generique catalogue + pastilles (Loisirs, Engagements,
+   Experiences et savoir-faire personnels). Prepare a l'avance, sans impact
+   visuel avant son branchement effectif (etapes 4/5/6). */
+.catalogue-categorie { margin-bottom: 1rem; }
+.catalogue-categorie h6 { font-weight: 700; color: #0b1a33; margin-bottom: 0.5rem; }
+.catalogue-case { display: block; margin: 0.3rem 0; cursor: pointer; color: #3a4a5e; }
+.catalogue-case input { margin-right: 0.5rem; }
+.pastilles-detail { display: flex; flex-direction: column; gap: 0.6rem; }
+.pastille-detail-bloc { max-width: 420px; }
+
+/* ===== SECTION CV ===== */
+.cv-section { background: #f8fafc; border-radius: 1.5rem; padding: 1.5rem; margin: 1.5rem 0; border: 2px solid #e2e8f0; }
+
+/* TACHE (point 6, refonte Mon projet) : 2 rangees explicites plutot qu'une
+   grille automatique — l'ordre et le regroupement (Vous+Candidature en haut,
+   Projet+Parcours+Complements en dessous) sont desormais fixes et fiables,
+   quelle que soit la largeur d'ecran (une grille auto-fit ne garantissait
+   pas ce regroupement precis). Les blocs pouvant desormais se plier
+   (point 5), la hauteur reste maitrisee independamment de cette disposition. */
+.grille-mon-projet { display: flex; flex-direction: column; gap: 0.9rem; padding-bottom: 5.5rem; }
+
+/* TACHE (complement) : barre de navigation fixee en bas de l'ecran, toujours
+   visible sans defilement — uniquement sur "Mon projet" (le padding-bottom
+   ci-dessus reserve la place necessaire pour ne rien recouvrir). */
+.barre-navigation-fixe {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: white; padding: 1rem 3rem; box-shadow: 0 -4px 12px rgba(11,26,51,0.08);
+  z-index: 500;
+}
+.rangee-mon-projet { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: flex-start; }
+.rangee-mon-projet > .cv-section,
+.rangee-mon-projet > .bloc-preferences {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  flex: 1 1 260px;
+  min-width: 260px;
+}
+.rangee-mon-projet > .cv-section h5,
+.rangee-mon-projet > .bloc-preferences h5 {
+  font-size: 0.95rem;
+  margin-bottom: 0.6rem;
+}
+.rangee-mon-projet > .cv-section p.text-muted.small {
+  font-size: 0.8rem;
+}
+@media (max-width: 700px) {
+  .rangee-mon-projet { flex-direction: column; }
+  .rangee-mon-projet > .cv-section,
+  .rangee-mon-projet > .bloc-preferences { min-width: 0; }
+}
+
+/* TACHE (refonte Mon projet, bloc 1) : rubrique "Mon identite" compactee
+   (environ 1/3 de la hauteur precedente : padding reduit, champs plus
+   petits, tout sur une seule ligne). */
+.bloc-identite-compact { padding: 1rem 1.2rem; margin: 1rem 0; }
+.bloc-identite-compact h5 { margin-bottom: 0.6rem; font-size: 1rem; }
+.bloc-identite-compact .pastille { padding: 0.3rem 0.85rem; font-size: 0.82rem; }
+.bloc-identite-compact input { font-size: 0.85rem; }
+.bloc-identite-compact hr { border-color: #e2e8f0; }
+
+/* Bouton discret mais qui attire l'oeil (leger halo pulsant), invite a
+   comprendre l'usage des informations d'identite avant de les saisir. */
+.btn-info-confidentialite {
+  background: #fff8e6; border: 2px solid #ffc107; color: #7a5c00; border-radius: 20px;
+  padding: 0.35rem 0.9rem; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  animation: pulseInfoIdentite 2.4s ease-in-out infinite;
+}
+.btn-info-confidentialite:hover { background: #ffedb8; }
+@keyframes pulseInfoIdentite {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+}
+.cv-item { background: white; border-radius: 0.8rem; padding: 0.5rem 1rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0; }
+.remove-item { color: #dc3545; cursor: pointer; font-weight: 700; }
+.tag-metier { display: inline-block; background: #e9ecef; border-radius: 30px; padding: 0.2rem 0.8rem; margin: 0.2rem 0.4rem 0.2rem 0; }
+.tag-metier .remove-tag { margin-left: 0.5rem; cursor: pointer; color: #dc3545; }
+
+/* TACHE 47 : composant generique accordeon (replie par defaut), reutilisable */
+.accordeon { background: #f8fafc; border-radius: 1.2rem; border: 2px solid #e2e8f0; padding: 1rem 1.2rem; margin: 1.2rem 0; }
+.accordeon-entete {
+  background: none; border: none; width: 100%; display: flex; justify-content: space-between;
+  align-items: center; padding: 0; cursor: pointer; font-size: 1rem; color: #0b1a33; text-align: left;
+}
+.accordeon-fleche { color: #0d6efd; font-size: 0.85rem; }
+.accordeon-intro { margin: 0.5rem 0 0; }
+.accordeon.ouvert .accordeon-intro { margin-bottom: 0.5rem; }
+.accordeon-corps { margin-top: 0.5rem; }
+
+/* TACHE (refonte Mon projet, Etape A) : composant generique "Bloc ERIP".
+   Distinct de .accordeon ci-dessus (qui reste utilise par "Ressources et
+   liens utiles" sur l'ecran Action, non touche). */
+.bloc-erip { padding: 1rem 1.2rem; }
+.bloc-erip-entete {
+  display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; cursor: pointer;
+}
+.bloc-erip-entete h5 { margin: 0; flex: 1; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.02em; }
+.bloc-erip-compteur {
+  font-size: 0.8rem; font-weight: 700; color: #4a5b6e; background: #eef1f6;
+  border-radius: 20px; padding: 0.2rem 0.7rem;
+}
+.bloc-erip-fleche { color: #0d6efd; font-size: 0.85rem; }
+.bloc-erip-complet { font-size: 0.9rem; }
+
+/* TACHE (refonte Potentiel, Etape A) : bandeau "Metier cible", toujours
+   visible en haut de la page Potentiel. */
+.banniere-metier-cible {
+  position: relative;
+  background: #eef1f6; border: 2px solid #d5dbe4; border-radius: 1rem;
+  padding: 0.9rem 1.3rem; margin: 1rem 0 1.5rem;
+}
+.banniere-metier-cible-titre { font-weight: 700; color: #0b1a33; font-size: 1.05rem; padding-right: 4rem; }
+.banniere-metier-cible-actif {
+  background: #e7f1fd; border-color: #0d6efd;
+}
+.banniere-metier-cible-actif .pastille.actif { background: #0d6efd; border-color: #0d6efd; }
+
+/* TACHE (complement, limite 5 metiers) : compteur X/5 en badge fixe au coin
+   superieur droit DU RECTANGLE (position absolue) -- reste toujours au meme
+   endroit, quelle que soit la longueur du titre ou le contenu du bandeau.
+   TACHE (demande : distinction visuelle) : en bleu (au lieu de neutre), pour
+   bien le distinguer du compteur jaune des metiers hors repertoire. Passe en
+   vert plein une fois la selection complete (5/5). */
+.banniere-metier-cible-compteur {
+  position: absolute; top: -14px; right: 18px;
+  font-size: 0.95rem; font-weight: 700; color: #0d6efd;
+  background: #ffffff; border: 2px solid #0d6efd; border-radius: 20px;
+  padding: 0.25rem 0.85rem; white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(11,26,51,0.12);
+}
+.banniere-metier-cible-compteur-complet {
+  background: #198754; border-color: #198754; color: white;
+}
+/* TACHE (demande) : compteur jaune distinct pour les metiers hors
+   repertoire (1/3, 2/3, 3/3) -- juste a gauche du compteur bleu, pour faire
+   le lien visuel sans se superposer. */
+.banniere-metier-cible-compteur-hr {
+  position: absolute; top: -14px; right: 100px;
+  font-size: 0.95rem; font-weight: 700; color: #7a5c00;
+  background: #fff8e6; border: 2px solid #ffc107; border-radius: 20px;
+  padding: 0.25rem 0.85rem; white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(11,26,51,0.12);
+}
+
+/* Message affiche a la place de l'ancienne alerte, une fois les 5 metiers
+   selectionnes -- ton positif plutot qu'un simple constat de blocage. */
+.banniere-metier-cible-max {
+  color: #157347; font-weight: 600;
+}
+
+/* TACHE (complement) : texte de confirmation du metier cible, agrandi pour
+   etre bien visible juste sous la zone de recherche. */
+.banniere-metier-cible-confirmation {
+  font-size: 1rem; color: #0b1a33;
+}
+
+/* TACHE (demande : distinction visuelle) : variante jaune du bandeau actif,
+   quand le metier cible est un metier hors repertoire. */
+.banniere-metier-cible-actif-jaune {
+  background: #fff8e6; border-color: #ffc107;
+}
+.banniere-metier-cible-actif-jaune .pastille.actif { background: #ffc107; border-color: #ffc107; color: #4a3800; }
+
+/* TACHE (demande) : boutons "Ce métier" / "Secteur(s) d'activité" en jaune,
+   un peu plus grands que les autres pastilles, avec un texte d'invitation
+   au-dessus. */
+.banniere-metier-cible-invite {
+  color: #7a5c00;
+}
+.pastille.pastille-choix-mode {
+  background: #ffc107; color: #4a3800; border-color: #ffc107;
+  font-size: 1rem; padding: 0.55rem 1.3rem;
+}
+.pastille.pastille-choix-mode:hover { background: #ffca2c; }
+.pastille.pastille-choix-mode.actif {
+  background: #7a5c00; color: #fff; border-color: #7a5c00;
+}
+
+/* TACHE (demande : mise en avant au milieu du bandeau) : bloc centre,
+   place au milieu du bandeau "Metier(s) cible(s)" (apres la liste des
+   candidats), avec une invitation en plus gros caractere (plus petit que
+   le titre h1 de la page) et des boutons "Ce metier"/"Secteur(s)
+   d'activite" agrandis, pour vraiment inviter a finaliser le choix. */
+.banniere-metier-cible-action-centre {
+  text-align: center;
+  margin: 1.6rem 0;
+}
+.banniere-metier-cible-invite-grand {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0b1a33;
+  margin-bottom: 0.9rem;
+}
+.pastille.pastille-choix-mode-grand {
+  font-size: 1.15rem;
+  padding: 0.7rem 1.8rem;
+}
+
+/* TACHE (demande : metiers hors repertoire) : bouton discret en jaune clair
+   sous la zone de recherche, saisie libre en dessous si clique. */
+.banniere-metier-cible-hors-repertoire { margin-top: 0.8rem; }
+.btn-hors-repertoire {
+  background: #fff8e6; border: 2px solid #ffe08a; color: #7a5c00;
+  border-radius: 30px; padding: 0.4rem 1rem; font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; transition: 0.15s;
+}
+.btn-hors-repertoire:hover { background: #ffefc2; }
+
+/* Pastille d'un metier hors repertoire : meme forme que les candidats
+   classiques, en jaune plutot qu'en bleu, pour bien les distinguer. */
+.metier-resume-chip-hr {
+  background: #ffc107 !important; color: #4a3800 !important;
+}
+.metier-resume-chip-hr.metier-resume-cible-hr { background: #e0a800 !important; box-shadow: 0 0 0 2px #fff8e6 inset; }
+.metier-resume-chip-hr .metier-resume-suppr,
+.metier-resume-chip-hr .metier-resume-nom { color: #4a3800; }
+
+/* TACHE (demande) : bandeau "Je postule", visible plus bas sur la page une
+   fois qu'un metier ou un secteur a ete choisi -- reprend la confirmation du
+   bandeau "Metier(s) cible(s)" dans un encart separe, bien visible. */
+.banniere-je-postule {
+  background: #eaf7f0; border: 2px solid #198754; border-radius: 1rem;
+  padding: 1.1rem 1.4rem; margin: 0 0 1.5rem;
+}
+.banniere-je-postule-titre {
+  font-weight: 700; font-size: 1.2rem; color: #157347; margin-bottom: 0.4rem;
+}
+/* TACHE (demande : distinction visuelle) : variante jaune quand le metier
+   valide vient du circuit "hors repertoire". */
+.banniere-je-postule-jaune {
+  background: #fff8e6; border-color: #ffc107;
+}
+.banniere-je-postule-jaune .banniere-je-postule-titre { color: #7a5c00; }
+
+/* TACHE (refonte Metier(s) cible(s)) : zone de detail (savoir-etre/
+   savoir-faire/savoirs + fiche ROME) affichee au clic sur le nom d'un candidat. */
+.detail-metier-candidat {
+  background: white; border: 1px solid #e2e8f0; border-radius: 0.8rem; padding: 0.7rem 0.9rem;
+}
+/* TACHE (complement) : le detail d'un metier candidat s'ouvre desormais en
+   popup independante, rattachee a SA pastille (position absolue, juste en
+   dessous), au premier plan (z-index), sans faire bouger le reste du
+   bandeau vert (elle sort du flux normal du document). */
+.metier-resume-chip-candidat { position: relative; }
+.metier-resume-chip-candidat .detail-metier-candidat {
+  position: absolute; top: 100%; left: 0; margin-top: 0.4rem;
+  min-width: 280px; max-width: 380px; z-index: 20;
+  box-shadow: 0 10px 30px rgba(11,26,51,0.18);
+  color: initial; font-weight: normal; white-space: normal;
+}
+/* TACHE (demande) : en-tete du detail -- nom (gauche), bouton "Ce métier"
+   et croix de fermeture (droite). */
+.detail-metier-candidat-entete {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.detail-metier-candidat-nom { font-weight: 700; font-size: 0.95rem; color: #0b1a33; }
+.detail-metier-candidat-entete .pastille.pastille-choix-mode {
+  font-size: 0.78rem; padding: 0.3rem 0.7rem; white-space: nowrap;
+}
+.detail-metier-candidat-fermer {
+  cursor: pointer; color: #6b7a90; font-size: 0.9rem; padding: 0.1rem 0.3rem;
+}
+.detail-metier-candidat-fermer:hover { color: #dc3545; }
+.detail-metier-candidat-confirmation { color: #157347; }
+
+/* TACHE (complement) : zone de recherche du metier cible, volontairement
+   plus grande et visible -- invite clairement a l'utiliser. */
+.banniere-metier-cible-recherche { margin-top: 0.6rem; }
+.banniere-metier-cible-recherche input {
+  font-size: 1.05rem;
+  padding: 0.65rem 1rem;
+  border: 2px solid #0d6efd;
+  border-radius: 0.8rem;
+}
+.banniere-metier-cible-recherche input:focus {
+  box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
+  border-color: #0a58ca;
+}
+.bloc-erip-reset {
+  background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem;
+  padding: 0.1rem 0.3rem; border-radius: 50%; line-height: 1;
+}
+.bloc-erip-reset:hover { background: #fdeaea; }
+/* TACHE (point 5, refonte Mon projet) : bloc plie -> le resume suit toujours
+   l'en-tete (complement demande), donc la marge normale est conservee. */
+.bloc-erip-ferme .resume-bloc-erip { margin-bottom: 0; }
+
+.resume-bloc-erip { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
+/* TACHE (complement) : toutes les informations deja renseignees, affichees en
+   haut de chaque bloc, passent au vert -- plus parlant visuellement qu'une
+   pastille bleue "active" classique (qui, elle, reste bleue partout ailleurs
+   dans l'application, y compris a l'interieur des accordeons). */
+.resume-bloc-erip .pastille.actif {
+  font-size: 0.8rem; padding: 0.3rem 0.7rem;
+  background: #198754; border-color: #198754; color: white;
+}
+.resume-bloc-erip .pastille.actif:hover { background: #157347; }
+/* TACHE (refonte Potentiel, Etape C) : pastilles de resume informatives
+   (aucune suppression possible, ex. competences derivees automatiquement) --
+   pas de curseur "cliquable" trompeur, sans effet de survol change. */
+.resume-bloc-erip .pastille-lecture { cursor: default; }
+.resume-bloc-erip .pastille-lecture:hover { background: #198754; }
+
+/* TACHE (correction/homogeneisation, page Potentiel) : composant unique pour
+   un metier (resume Metiers recommandes, resume Autres pistes, "Voir tous
+   les metiers") -- croix a gauche, nom cliquable au milieu, trombone ROME a
+   droite. En BLEU (les competences restent en VERT, pour bien les distinguer
+   visuellement, comme demande). */
+.metier-resume-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: #0d6efd; color: white; border-radius: 20px;
+  padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 600;
+}
+.metier-resume-chip.metier-resume-cible { background: #0a58ca; box-shadow: 0 0 0 2px #eef1f6 inset; }
+.metier-resume-suppr { cursor: pointer; opacity: 0.85; }
+.metier-resume-suppr:hover { opacity: 1; }
+.metier-resume-nom { cursor: pointer; }
+.metier-resume-rome { color: white; text-decoration: none; opacity: 0.9; }
+.metier-resume-rome:hover { opacity: 1; }
+
+/* TACHE (complement, limite 5 metiers) : une fois les 5 metiers cibles
+   selectionnes, tous les AUTRES metiers proposes ailleurs sur la page
+   (Metiers recommandes, Autres pistes, Voir tous les metiers, Ce qui vous
+   correspond) passent en transparence et deviennent non cliquables -- le
+   curseur "interdit" confirme visuellement l'impossibilite d'en ajouter un
+   6e sans en retirer un d'abord. Le lien fiche ROME, lui, reste utilisable
+   (simple consultation, pas un ajout). */
+.metier-resume-chip.metier-resume-bloque,
+.metier-chip.metier-chip-bloque {
+  opacity: 0.4;
+}
+.metier-resume-chip.metier-resume-bloque .metier-resume-nom,
+.metier-chip.metier-chip-bloque {
+  cursor: not-allowed;
+}
+.metier-resume-chip.metier-resume-bloque .metier-resume-suppr {
+  cursor: pointer; /* le retrait reste possible s'il s'agit d'un metier deja liste ailleurs */
+}
+
+/* Resultats de recherche (bandeau Metier(s) cible(s)) : meme traitement. */
+.option-metier-ajout.option-metier-ajout-bloque {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Competences cliquables (Analyse de votre profil) -- ouvrent les metiers
+   associes, comme avant. */
+/* TACHE (complement, visibilite) : l'ancien style (juste cursor:pointer +
+   leger changement au survol) etait trop discret pour signaler clairement
+   qu'un badge est cliquable -- particulierement genant au pave tactile
+   (portable), ou le survol n'est pas fiable. Icone toujours visible, SANS
+   bordure en pointilles (contour propre, comme demande -- l'icone loupe
+   suffit a signaler que c'est cliquable). */
+.badge-cliquable {
+  cursor: pointer;
+  transition: 0.15s;
+}
+.badge-cliquable::after { content: ' \1F50D'; font-size: 0.75em; }
+.badge-cliquable:hover, .badge-cliquable:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+  opacity: 1;
+}
+
+/* TACHE (complement, ecran de choix competences) : bouton simple et propre
+   (pas les boutons Bootstrap "outline" bruts, dont le contour en pointilles
+   au focus manquait d'elegance). */
+.choix-panneau-competence {
+  display: block; width: 100%; text-align: left;
+  background: #f8fafc; border: 2px solid #d5dbe4; border-radius: 0.9rem;
+  padding: 0.75rem 1rem; font-weight: 600; color: #0b1a33;
+  cursor: pointer; transition: 0.15s;
+}
+.choix-panneau-competence:hover, .choix-panneau-competence:focus {
+  background: #edf4ff; border-color: #0d6efd; outline: none;
+}
+
+/* Resultats de "Ajouter un metier" : clic direct, comme sur l'accueil.
+   TACHE (demande : plus visible) : nom du metier agrandi, lien fiche ROME
+   colle juste apres (plus pousse a l'extreme droite). */
+.option-metier-ajout {
+  display: flex; align-items: center;
+  padding: 0.55rem 0.7rem; border-radius: 0.4rem; cursor: pointer;
+}
+.option-metier-ajout-nom { font-size: 1.05rem; font-weight: 600; color: #0b1a33; }
+.option-metier-ajout-rome { margin-left: 0.4rem; text-decoration: none; }
+.option-metier-ajout:hover { background: #edf4ff; }
+
+.accordeon-erip { border-top: 1px solid #e2e8f0; }
+
+/* TACHE (homogeneite Mon projet) : a l'interieur des accordeons, toutes les
+   options cliquables (pastilles rondes ET permis-cat circulaires) adoptent
+   le meme style carre que les boutons Oui/Non deja utilises pour Loisirs/
+   Engagements/Mobilite -- coherence visuelle demandee. Uniquement scope a
+   .accordeon-erip-corps : le style .pastille/.permis-cat "pilule/rond"
+   habituel reste inchange partout ailleurs dans l'application. */
+.accordeon-erip-corps .pastille,
+.accordeon-erip-corps .permis-cat {
+  border-radius: 0.375rem;
+}
+.accordeon-erip-corps .permis-cat {
+  width: auto; height: auto; line-height: normal; padding: 0.35rem 0.9rem;
+}
+.accordeon-erip:first-of-type { border-top: none; }
+.accordeon-erip-entete {
+  background: none; border: none; width: 100%; display: flex; justify-content: space-between;
+  align-items: center; padding: 0.5rem 0; cursor: pointer; font-size: 0.88rem; color: #0b1a33; text-align: left;
+}
+.accordeon-erip-icone { font-size: 1rem; cursor: help; }
+.accordeon-erip-corps { padding: 0 0 0.6rem; }
+
+.confirmation-reset-bloc {
+  background: #fff5f5; border: 2px solid #f8d7da; border-radius: 0.8rem; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;
+}
+
+/* ===== PERMIS (cases cliquables) ===== */
+.permis-cat {
+  display: inline-block; width: 48px; height: 48px; line-height: 44px; text-align: center;
+  border-radius: 50%; border: 2px solid #cbd5e1; margin: 0 0.4rem 0.4rem 0;
+  font-weight: 700; cursor: pointer; transition: 0.15s; user-select: none;
+}
+.permis-cat.active { background: #0d6efd; color: white; border-color: #0d6efd; }
+
+.badge { font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.suggestion-loisirs .badge { cursor: pointer; }
+.suggestion-loisirs .badge:hover { background: #0d6efd; color: white; }
+
+/* ===== PASTILLES (choix multiple : contrat, temps de travail, disponibilite) ===== */
+.bloc-preferences {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 1.2rem;
+  padding: 1.2rem 1.5rem;
+}
+
+/* Complement tache 8 : mise en evidence generique (contour rouge) reutilisee pour
+   plusieurs blocs de l'ecran Revelation (candidature, mobilite, formation, metier)
+   quand ils manquent d'informations. L'outline ne modifie pas la mise en page,
+   ce qui permet de l'appliquer a des blocs de styles differents. */
+.a-completer {
+  outline: 3px solid #dc3545;
+  outline-offset: 2px;
+  border-radius: 1rem;
+}
+.label-fort {
+  font-weight: 700;
+  color: #0b1a33;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.2rem 0 0.2rem;
+}
+.label-fort i { color: #0d6efd; font-size: 1.15rem; }
+.pastilles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
+.pastille {
+  display: inline-block;
+  background: #e9ecef;
+  color: #3a4a5e;
+  border: 2px solid #d5dbe4;
+  border-radius: 30px;
+  padding: 0.4rem 1.1rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.15s;
+  user-select: none;
+}
+.pastille:hover { background: #dce3ec; transform: translateY(-2px); }
+.pastille.actif { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+
+/* TACHE (complement) : bouton rouge "Tout effacer" du bandeau Métier(s)
+   cible(s) -- remplace l'ancienne croix ronde discrete, reutilise le style
+   .btn-effacer deja existant ailleurs dans l'application (coherence). */
+.banniere-metier-cible-effacer { border-radius: 30px; }
+
+/* TACHE (complement) : option Intérim mise en avant en jaune dans le panneau
+   "Choisissez un secteur d'activité", distincte des autres pastilles de
+   secteur (detectees automatiquement, restees neutres). */
+.pastille-interim {
+  background: #fff3cd; border-color: #ffc107; color: #7a5c00;
+}
+.pastille-interim:hover { background: #ffe8a1; }
+
+/* ===== PUCES METIERS RECOMMANDES (selection du metier cible) ===== */
+.metiers-chips { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.metier-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: #eef1f6; color: #1f2d3d; border: 2px solid #d5dbe4;
+  border-radius: 30px; padding: 0.45rem 1rem; cursor: pointer; transition: 0.15s;
+  font-weight: 600;
+}
+.metier-chip:hover { background: #e2e8f2; transform: translateY(-2px); }
+.metier-chip.metier-actif { background: #0d6efd; color: white; border-color: #0d6efd; }
+.metier-chip .rome-link { color: inherit; text-decoration: none; }
+.metier-chip.metier-actif .rome-link { color: #fff; }
+
+@media (max-width: 768px) {
+  #app { padding: 1rem; }
+  h1 { font-size: 2rem; }
+  .carte { min-width: 140px; flex: 1 0 140px; }
+  .progression { gap: 8px; font-size: 0.85rem; }
+  .progression .etape.active, .progression .etape.visited, .progression .etape.future { padding: 7px 14px; }
+}
+
+/* TACHE (adaptation ecran portable) : entre un ordinateur portable (souvent
+   1024-1366px de large, parfois moins en fenetre non maximisee) et un ecran
+   fixe large, la disposition n'est pas la meme -- notamment les decalages
+   negatifs calibres pour un grand ecran (.zone-ateliers-entretien,
+   .zone-recherche-erip-large, ci-dessus) qui presument que le contenu au-
+   dessus tient sur une seule ligne. Sur un ecran plus etroit, ce contenu se
+   replie plus tot (flex-wrap) et ces decalages fixes provoqueraient un
+   chevauchement. Neutralises ici, et le confort general (marges, padding)
+   est resserre pour eviter le gaspillage d'espace sur un ecran plus petit. */
+@media (max-width: 1024px) {
+  .zone-ateliers-entretien { margin-top: 0.75rem; }
+  .zone-recherche-erip-large { margin-top: 0.75rem; }
+  /* TACHE (complement) : sur un ecran de laptop, les libelles longs ("Passer
+     a l'action", "Reveler mon potentiel"...) se repliaient sur 2 lignes a
+     l'interieur du bouton, ce qui faisait grossir toute la barre et donnait
+     l'impression qu'elle "descendait". Boutons plus compacts + texte force
+     sur une seule ligne (nowrap), pour que les 3 boutons restent alignes. */
+  .barre-navigation { flex-wrap: nowrap; gap: 0.5rem; }
+  .barre-navigation .btn { white-space: nowrap; }
+  .barre-navigation .btn-lg {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.85rem !important;
+  }
+  .barre-navigation .btn-accueil { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  #app { padding: 1.5rem 1.75rem; }
+  .barre-navigation-fixe { padding: 1rem 1.75rem; }
+}
+
+/* TACHE 42 : information de confidentialite, ecran d'accueil uniquement.
+   Discrete, fixee en bas a gauche, visible quelle que soit la taille d'ecran. */
+.lien-confidentialite {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 1500;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d5dbe4;
+  border-radius: 30px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  color: #4a5b6e;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: 0.15s;
+}
+.lien-confidentialite:hover { background: #fff; border-color: #0d6efd; color: #0d6efd; }
+
+.confid-overlay {
+  position: fixed; inset: 0; background: rgba(11,26,51,0);
+  display: flex; align-items: center; justify-content: center; z-index: 2100; padding: 1rem;
+  transition: background 0.2s ease;
+}
+.confid-overlay.visible { background: rgba(11,26,51,0.55); }
+.confid-carte {
+  background: white; border-radius: 1.5rem; max-width: 480px; width: 100%; padding: 1.5rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  opacity: 0; transform: translateY(12px) scale(0.97);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.confid-overlay.visible .confid-carte { opacity: 1; transform: translateY(0) scale(1); }
+.confid-carte p { color: #4a5b6e; font-size: 0.95rem; }
+
+@media (max-width: 480px) {
+  .lien-confidentialite { font-size: 0.78rem; padding: 0.4rem 0.7rem; left: 0.6rem; bottom: 0.6rem; }
+}
+
+/* TACHE 21A : ecran "Que faisiez-vous souvent ?" - onglets + recherche */
+.recherche-actions { max-width: 420px; margin: 0 auto 1.2rem; }
+.onglets-actions {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-bottom: 1.5rem;
+}
+.onglet-action {
+  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 30px;
+  padding: 0.5rem 1.1rem; font-weight: 600; color: #4a5b6e; cursor: pointer; transition: 0.15s;
+}
+.onglet-action:hover { background: #edf4ff; border-color: #0d6efd; color: #0d6efd; }
+.onglet-action.actif { background: #0d6efd; border-color: #0d6efd; color: white; }
+
+/* TACHE 21B : compteur de selection + animation legere d'apparition des cartes */
+.compteur-actions {
+  text-align: center; font-weight: 700; color: #0d6efd; font-size: 1.05rem; margin-bottom: 0.8rem;
+}
+@keyframes actionCarteApparition {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.action-carte-anim { animation: actionCarteApparition 0.22s ease; }
+
+/* TACHE (suite) : cartes compactes dans la zone "priorites"/"selection" des
+   ecrans catalogue (Actions, Personnes/Materiels/Lieux, Environnements de
+   travail, Valeurs). Meme rendu pour les 4 ecrans (composant partage). */
+.grille-selection-compacte {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-start;
+  min-height: 76px;
+  align-content: flex-start;
+}
+.carte-selection-compacte {
+  min-width: 110px;
+  max-width: 150px;
+  flex: 0 1 130px;
+  padding: 0.6rem 0.5rem;
+  text-align: center;
+}
+.carte-selection-compacte span { font-size: 1.5rem; display: block; margin-bottom: 0.2rem; }
+
+/* TACHE (complement) : icone des cartes de catalogue (Activites, Actions,
+   Environnement, Valeurs...), remplace un style en ligne fixe par une classe
+   nommee -- plus facile a retrouver et modifier (voir aussi la reduction
+   pour ecran portable, dans le bloc "adaptation ecran portable" plus haut). */
+.icone-grille-cat { font-size: 2.5rem; display: block; }
+
+/* TACHE (complement, icones trop grandes sur un ecran de laptop standard) :
+   toutes les icones/emoji de grande taille regroupees ici, reduites sur un
+   ecran de laptop standard (jusqu'a 1024px de large). Pour ajuster vous-
+   meme ces tailles : chaque valeur ci-dessous correspond a UNE seule icone
+   a la fois (ex. .carte i = icone des 3 grandes cartes d'accueil), modifiable
+   independamment sans toucher aux autres. */
+@media (max-width: 1024px) {
+  .carte i { font-size: 2rem; }
+  .outil-item i { font-size: 1.8rem; }
+  .carte-selection-compacte span { font-size: 1.2rem; }
+  .icone-grille-cat { font-size: 1.9rem; }
+}
+.carte-selection-compacte h5 { font-size: 0.82rem; margin: 0; line-height: 1.25; }
+
+/* ============================================================
+   TACHE (hierarchie visuelle, Metier(s) cible(s) -> Candidature) :
+   regles ajoutees a la fin de css/style.css. N'ecrase aucune regle
+   existante -- a coller telle quelle a la suite du fichier.
+   ============================================================ */
+
+/* --- 1. Bandeau "Metier(s) cible(s)" : version compacte une fois un choix
+   valide (moins de hauteur, moins d'espaces verticaux, moins imposant). */
+.banniere-metier-cible-compacte {
+  padding: 0.6rem 1.1rem;
+  margin: 1rem 0 1rem;
+}
+.banniere-metier-cible-compacte .banniere-metier-cible-titre {
+  font-size: 0.95rem;
+}
+
+/* Le bloc invite + boutons "Ce métier"/"Secteur(s) d'activité" restent
+   visibles (elements a conserver), mais moins imposants une fois le choix
+   deja valide. */
+.banniere-metier-cible-action-compacte {
+  margin: 0.7rem 0 0.2rem;
+}
+.banniere-metier-cible-invite-compacte {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* --- 2. Bandeau "Votre candidature est prête" : devient l'element principal
+   de l'ecran une fois affiche -- plus de hauteur, plus de marge interne,
+   plus visible que le bandeau "Metier(s) cible(s)" ci-dessus. */
+.banniere-je-postule-accent {
+  padding: 1.8rem 2rem;
+  margin: 0.5rem 0 2rem;
+  border-width: 3px;
+  box-shadow: 0 8px 24px rgba(21, 115, 71, 0.18);
+}
+.banniere-je-postule-accent.banniere-je-postule-jaune {
+  box-shadow: 0 8px 24px rgba(122, 92, 0, 0.18);
+}
+.banniere-je-postule-accent .banniere-je-postule-titre {
+  font-size: 1.5rem;
+  margin-bottom: 0.7rem;
+}
+.banniere-je-postule-accent p {
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+/* --- 3. Apparition animee, legere et discrete (fade-in + leger glissement
+   vertical). Se joue automatiquement des que l'element est insere dans la
+   page -- aucun Javascript necessaire. */
+@keyframes banniereCandidatureApparition {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.banniere-je-postule-accent {
+  animation: banniereCandidatureApparition 0.4s ease-out;
+}

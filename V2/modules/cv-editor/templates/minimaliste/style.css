@@ -1,0 +1,67 @@
+/* modules/cv-editor/templates/minimaliste/style.css
+   Presentation la plus depouillee possible : pas de couleur d'accent,
+   pas de photo, lignes fines, typographie unique. */
+
+.cv-minimaliste {
+  font-family: Helvetica, Arial, sans-serif;
+  color: #1A1A1A;
+  background: #FFFFFF;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2.5rem;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.cv-minimaliste-entete {
+  margin-bottom: 2rem;
+}
+
+.cv-minimaliste-entete h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0 0 0.3rem 0;
+}
+
+.cv-minimaliste-entete p {
+  margin: 0.1rem 0;
+  color: #444444;
+}
+
+.cv-minimaliste-coordonnees {
+  font-size: 0.85rem;
+  color: #777777;
+}
+
+.cv-minimaliste section {
+  margin-bottom: 1.3rem;
+  border-top: 1px solid #E5E5E5;
+  padding-top: 0.8rem;
+}
+
+.cv-minimaliste h2 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555555;
+  margin: 0 0 0.6rem 0;
+}
+
+.cv-minimaliste p {
+  margin: 0.2rem 0;
+}
+
+.cv-minimaliste-ligne {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.cv-minimaliste-detail {
+  font-size: 0.85rem;
+  color: #555555;
+  margin: 0.1rem 0 0 0;
+}
