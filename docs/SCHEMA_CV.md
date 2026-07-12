@@ -159,9 +159,10 @@ Expériences professionnelles classiques (`dossier.experiences`).
 | `dateDebut` | `string` | Date de début (format `AAAA-MM`). |
 | `dateFin` | `string` | Date de fin. Chaîne vide si le poste est toujours en cours. |
 | `missions` | `string` | Description des missions/tâches principales (facultatif). |
+| `contrat` | `string` | Intitulé du contrat de CETTE expérience (ex. `"CDI"`, `"Stage"`, `"Alternance"`). Facultatif, chaîne vide si non renseigné. À ne pas confondre avec `dossier.contrat` (types de contrat recherchés, global, hors de ce schéma). |
 
 ```json
-"experiences": [ { "poste": "Assistante", "entreprise": "ACME", "lieu": "Bordeaux", "dateDebut": "2020-01", "dateFin": "2022-06", "missions": "Accueil" } ]
+"experiences": [ { "poste": "Assistante", "entreprise": "ACME", "lieu": "Bordeaux", "dateDebut": "2020-01", "dateFin": "2022-06", "missions": "Accueil", "contrat": "CDI" } ]
 ```
 
 ---
@@ -194,9 +195,10 @@ d'accueillir plusieurs formations à l'avenir sans casser la structure.
 | `niveau` | `string` | Niveau du diplôme (ex. `"Bac +2"`). |
 | `intitule` | `string` | Intitulé précis (ex. `"BTS Gestion"`). |
 | `annee` | `string` | Année d'obtention. |
+| `etablissement` | `string` | École ou centre de formation (facultatif, chaîne vide si non renseigné). |
 
 ```json
-"formations": [ { "niveau": "Bac +2", "intitule": "BTS Gestion", "annee": "2019" } ]
+"formations": [ { "niveau": "Bac +2", "intitule": "BTS Gestion", "annee": "2019", "etablissement": "IUT de Bordeaux" } ]
 ```
 
 ---

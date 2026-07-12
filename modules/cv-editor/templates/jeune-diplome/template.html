@@ -16,6 +16,10 @@
   entiere (titre inclus) disparait. Limite assumee : "Experiences
   personnelles et engagements" reste un titre unique couvrant deux
   donnees, non masque si une seule des deux est vide.
+
+  TACHE (retour utilisateur : permis/vehicule en fin de Coordonnees) : la
+  section "Permis" separee est retiree -- ses informations rejoignent la
+  ligne de coordonnees de l'en-tete, en derniere position.
 -->
 <div class="cv-jeune-diplome">
 
@@ -26,7 +30,10 @@
     <div>
       <h1>{{identite.prenom}} {{identite.nom}}</h1>
       <p class="cv-jeune-diplome-objectif">{{objectifProfessionnel}}</p>
-      <p class="cv-jeune-diplome-coordonnees">{{identite.telephone}} · {{identite.email}} · {{identite.ville}}</p>
+      <p class="cv-jeune-diplome-coordonnees">
+        {{identite.telephone}} · {{identite.email}} · {{identite.ville}}
+        {{#if permis.possede}} · Permis {{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}{{/if}}
+      </p>
     </div>
   </header>
 
@@ -88,11 +95,6 @@
     <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
   </section>
   {{/if}}
-
-  <section class="cv-jeune-diplome-bloc">
-    <h2>Permis</h2>
-    <p>{{permis.possede}} — {{permis.categories}}</p>
-  </section>
 
   {{#if loisirs}}
   <section class="cv-jeune-diplome-bloc">

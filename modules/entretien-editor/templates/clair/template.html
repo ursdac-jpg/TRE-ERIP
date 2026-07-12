@@ -1,0 +1,59 @@
+<!--
+  modules/entretien-editor/templates/clair/template.html
+  ----------------------------------------------------------------
+  Gabarit du modele "Clair" pour la fiche de preparation a l'entretien.
+  Aucune donnee en dur : uniquement des marqueurs {{...}} remplaces par
+  rendreTemplate() avec l'objet produit par normaliserDonneesEntretien().
+
+  Choix de presentation (pas de logique metier) : une fiche synthetique,
+  pensee pour etre imprimee et emportee en entretien -- pas un CV, un
+  pense-bete. Les "Questions a poser au recruteur" sont mises en valeur
+  (bloc accentue) car c'est l'element le plus souvent oublie.
+-->
+<div class="entretien-clair">
+
+  <header class="entretien-clair-entete">
+    <h1>Préparation à l'entretien</h1>
+    <p class="entretien-clair-sous-titre">{{identite.civilite}} {{identite.prenom}} {{identite.nom}}</p>
+    {{#if metierVise}}
+    <p class="entretien-clair-contexte">
+      Poste visé : {{metierVise}}{{#if entreprise}} — {{entreprise}}{{/if}}
+    </p>
+    {{/if}}
+  </header>
+
+  {{#if presentation}}
+  <section class="entretien-clair-bloc">
+    <h2>Ma présentation</h2>
+    <p>{{presentation}}</p>
+  </section>
+  {{/if}}
+
+  {{#if pointsAPreparer}}
+  <section class="entretien-clair-bloc">
+    <h2>Points à préparer</h2>
+    <ul>
+      {{#each pointsAPreparer}}<li>{{.}}</li>{{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  {{#if questionsAnticipees}}
+  <section class="entretien-clair-bloc">
+    <h2>Questions anticipées</h2>
+    <ul>
+      {{#each questionsAnticipees}}<li>{{.}}</li>{{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  {{#if questionsDuCandidat}}
+  <section class="entretien-clair-bloc entretien-clair-bloc-accent">
+    <h2>Questions à poser au recruteur</h2>
+    <ul>
+      {{#each questionsDuCandidat}}<li>{{.}}</li>{{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+</div>

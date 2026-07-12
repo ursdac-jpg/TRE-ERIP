@@ -14,6 +14,10 @@
   Profil : les deux champs profilUtilisateur et profilIA sont affiches
   tels quels, sans logique de priorite entre les deux (cette regle
   d'affichage sera decidee lors d'une prochaine tache).
+
+  TACHE (retour utilisateur : permis/vehicule en fin de Coordonnees) :
+  "Permis" n'est plus une rubrique separee -- ses informations (possede/
+  categories/vehicule) sont desormais la DERNIERE ligne de "Coordonnees".
 -->
 <div class="cv-moderne">
 
@@ -31,7 +35,9 @@
       <p>{{identite.email}}</p>
       <p>{{identite.adresse}}</p>
       <p>{{identite.ville}}</p>
-      <p>{{identite.age}}</p>
+      {{#if permis.possede}}
+      <p>Permis {{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}</p>
+      {{/if}}
     </div>
 
     <div class="cv-moderne-bloc">
@@ -56,13 +62,6 @@
       <ul>{{#each langues}}<li>{{langue}} ({{niveau}})</li>{{/each}}</ul>
     </div>
     {{/if}}
-
-    <div class="cv-moderne-bloc">
-      <h2>Permis</h2>
-      <p>{{permis.possede}}</p>
-      <p>{{permis.categories}}</p>
-      <p>{{permis.vehicule}}</p>
-    </div>
 
     {{#if loisirs}}
     <div class="cv-moderne-bloc">

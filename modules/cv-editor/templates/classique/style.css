@@ -25,8 +25,9 @@
 }
 
 .cv-classique-objectif {
-  font-size: 1rem;
-  color: #333333;
+  font-size: 1.15rem;
+  font-weight: bold;
+  color: #000000;
   margin: 0 0 0.5rem 0;
   font-style: italic;
 }

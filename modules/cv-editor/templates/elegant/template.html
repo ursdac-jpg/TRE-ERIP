@@ -14,6 +14,10 @@
   entiere (titre inclus) disparait. Limite assumee de l'engine (pas de
   "ou" entre deux champs) : "Loisirs et engagements" reste un titre unique
   couvrant deux listes, non masque si une seule des deux est vide.
+
+  TACHE (retour utilisateur : permis/vehicule en fin de Coordonnees) :
+  la rubrique "Permis" separee est retiree -- ses informations rejoignent
+  la ligne de coordonnees de l'en-tete, en derniere position.
 -->
 <div class="cv-elegant">
 
@@ -25,6 +29,7 @@
     <p class="cv-elegant-objectif">{{objectifProfessionnel}}</p>
     <p class="cv-elegant-coordonnees">
       {{identite.telephone}} &nbsp;•&nbsp; {{identite.email}} &nbsp;•&nbsp; {{identite.ville}}
+      {{#if permis.possede}}&nbsp;•&nbsp; Permis {{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}{{/if}}
     </p>
   </header>
 
@@ -85,11 +90,6 @@
     <ul>{{#each certifications}}<li>{{.}}</li>{{/each}}</ul>
   </section>
   {{/if}}
-
-  <section class="cv-elegant-bloc">
-    <h2>Permis</h2>
-    <p>{{permis.possede}} — {{permis.categories}}</p>
-  </section>
 
   <section class="cv-elegant-bloc">
     <h2>Loisirs et engagements</h2>

@@ -517,17 +517,21 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 /* TACHE (refonte Mon projet, Etape A) : composant generique "Bloc ERIP".
    Distinct de .accordeon ci-dessus (qui reste utilise par "Ressources et
    liens utiles" sur l'ecran Action, non touche). */
-.bloc-erip { padding: 1rem 1.2rem; }
+/* TACHE (accessibilite : accordeons plus grands, zone cliquable plus
+   confortable) : pense pour des personnes ayant des difficultes visuelles
+   et pour un ecran partage a plusieurs -- tailles et espacements agrandis. */
+.bloc-erip { padding: 1.4rem 1.6rem; }
 .bloc-erip-entete {
-  display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; cursor: pointer;
+  display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; cursor: pointer;
+  padding: 0.5rem 0; min-height: 2.6rem;
 }
-.bloc-erip-entete h5 { margin: 0; flex: 1; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.02em; }
+.bloc-erip-entete h5 { margin: 0; flex: 1; font-size: 1.15rem; text-transform: uppercase; letter-spacing: 0.02em; }
 .bloc-erip-compteur {
-  font-size: 0.8rem; font-weight: 700; color: #4a5b6e; background: #eef1f6;
-  border-radius: 20px; padding: 0.2rem 0.7rem;
+  font-size: 0.95rem; font-weight: 700; color: #4a5b6e; background: #eef1f6;
+  border-radius: 20px; padding: 0.3rem 0.9rem;
 }
-.bloc-erip-fleche { color: #0d6efd; font-size: 0.85rem; }
-.bloc-erip-complet { font-size: 0.9rem; }
+.bloc-erip-fleche { color: #0d6efd; font-size: 1.1rem; }
+.bloc-erip-complet { font-size: 1.05rem; }
 
 /* TACHE (refonte Potentiel, Etape A) : bandeau "Metier cible", toujours
    visible en haut de la page Potentiel. */
@@ -601,26 +605,6 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .pastille.pastille-choix-mode:hover { background: #ffca2c; }
 .pastille.pastille-choix-mode.actif {
   background: #7a5c00; color: #fff; border-color: #7a5c00;
-}
-
-/* TACHE (demande : mise en avant au milieu du bandeau) : bloc centre,
-   place au milieu du bandeau "Metier(s) cible(s)" (apres la liste des
-   candidats), avec une invitation en plus gros caractere (plus petit que
-   le titre h1 de la page) et des boutons "Ce metier"/"Secteur(s)
-   d'activite" agrandis, pour vraiment inviter a finaliser le choix. */
-.banniere-metier-cible-action-centre {
-  text-align: center;
-  margin: 1.6rem 0;
-}
-.banniere-metier-cible-invite-grand {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #0b1a33;
-  margin-bottom: 0.9rem;
-}
-.pastille.pastille-choix-mode-grand {
-  font-size: 1.15rem;
-  padding: 0.7rem 1.8rem;
 }
 
 /* TACHE (demande : metiers hors repertoire) : bouton discret en jaune clair
@@ -804,15 +788,20 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 }
 
 /* Resultats de "Ajouter un metier" : clic direct, comme sur l'accueil.
-   TACHE (demande : plus visible) : nom du metier agrandi, lien fiche ROME
-   colle juste apres (plus pousse a l'extreme droite). */
+   TACHE (autocompletion moderne) : rendu plus visible -- fond colore, bordure,
+   coins arrondis, ombre legere, hauteur confortable, hover marque, curseur
+   pointeur, mise en evidence <mark> de la partie recherchee. */
 .option-metier-ajout {
   display: flex; align-items: center;
-  padding: 0.55rem 0.7rem; border-radius: 0.4rem; cursor: pointer;
+  padding: 0.7rem 0.9rem; margin-bottom: 0.4rem;
+  background: #f4f8ff; border: 1px solid #dbe6fb; border-radius: 0.6rem;
+  box-shadow: 0 1px 3px rgba(11, 26, 51, 0.08);
+  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
 }
 .option-metier-ajout-nom { font-size: 1.05rem; font-weight: 600; color: #0b1a33; }
+.option-metier-ajout-nom mark { background: #ffe08a; color: inherit; padding: 0 0.15em; border-radius: 0.2em; }
 .option-metier-ajout-rome { margin-left: 0.4rem; text-decoration: none; }
-.option-metier-ajout:hover { background: #edf4ff; }
+.option-metier-ajout:hover { background: #e3edff; border-color: #a9c4f5; cursor: pointer; }
 
 .accordeon-erip { border-top: 1px solid #e2e8f0; }
 
@@ -832,10 +821,11 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .accordeon-erip:first-of-type { border-top: none; }
 .accordeon-erip-entete {
   background: none; border: none; width: 100%; display: flex; justify-content: space-between;
-  align-items: center; padding: 0.5rem 0; cursor: pointer; font-size: 0.88rem; color: #0b1a33; text-align: left;
+  align-items: center; padding: 0.9rem 0.2rem; cursor: pointer; font-size: 1.05rem; color: #0b1a33; text-align: left;
+  min-height: 2.4rem;
 }
-.accordeon-erip-icone { font-size: 1rem; cursor: help; }
-.accordeon-erip-corps { padding: 0 0 0.6rem; }
+.accordeon-erip-icone { font-size: 1.15rem; cursor: help; }
+.accordeon-erip-corps { padding: 0 0 0.9rem; font-size: 1.02rem; }
 
 .confirmation-reset-bloc {
   background: #fff5f5; border: 2px solid #f8d7da; border-radius: 0.8rem; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;
@@ -1058,63 +1048,3 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   .icone-grille-cat { font-size: 1.9rem; }
 }
 .carte-selection-compacte h5 { font-size: 0.82rem; margin: 0; line-height: 1.25; }
-
-/* ============================================================
-   TACHE (hierarchie visuelle, Metier(s) cible(s) -> Candidature) :
-   regles ajoutees a la fin de css/style.css. N'ecrase aucune regle
-   existante -- a coller telle quelle a la suite du fichier.
-   ============================================================ */
-
-/* --- 1. Bandeau "Metier(s) cible(s)" : version compacte une fois un choix
-   valide (moins de hauteur, moins d'espaces verticaux, moins imposant). */
-.banniere-metier-cible-compacte {
-  padding: 0.6rem 1.1rem;
-  margin: 1rem 0 1rem;
-}
-.banniere-metier-cible-compacte .banniere-metier-cible-titre {
-  font-size: 0.95rem;
-}
-
-/* Le bloc invite + boutons "Ce métier"/"Secteur(s) d'activité" restent
-   visibles (elements a conserver), mais moins imposants une fois le choix
-   deja valide. */
-.banniere-metier-cible-action-compacte {
-  margin: 0.7rem 0 0.2rem;
-}
-.banniere-metier-cible-invite-compacte {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-/* --- 2. Bandeau "Votre candidature est prête" : devient l'element principal
-   de l'ecran une fois affiche -- plus de hauteur, plus de marge interne,
-   plus visible que le bandeau "Metier(s) cible(s)" ci-dessus. */
-.banniere-je-postule-accent {
-  padding: 1.8rem 2rem;
-  margin: 0.5rem 0 2rem;
-  border-width: 3px;
-  box-shadow: 0 8px 24px rgba(21, 115, 71, 0.18);
-}
-.banniere-je-postule-accent.banniere-je-postule-jaune {
-  box-shadow: 0 8px 24px rgba(122, 92, 0, 0.18);
-}
-.banniere-je-postule-accent .banniere-je-postule-titre {
-  font-size: 1.5rem;
-  margin-bottom: 0.7rem;
-}
-.banniere-je-postule-accent p {
-  font-size: 1.05rem;
-  line-height: 1.55;
-}
-
-/* --- 3. Apparition animee, legere et discrete (fade-in + leger glissement
-   vertical). Se joue automatiquement des que l'element est insere dans la
-   page -- aucun Javascript necessaire. */
-@keyframes banniereCandidatureApparition {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.banniere-je-postule-accent {
-  animation: banniereCandidatureApparition 0.4s ease-out;
-}

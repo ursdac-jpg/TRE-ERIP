@@ -1,0 +1,38 @@
+{
+  "id": "moderne-green",
+  "nom": "Moderne Vert",
+  "description": "CV deux colonnes avec bandeau lateral vert et decor organique en en-tete.",
+  "layout": {
+    "type": "sidebar-left",
+    "sidebarWidth": "34%",
+    "contentWidth": "66%"
+  },
+  "colors": {
+    "primary": "#3FA34D",
+    "secondary": "#A9CC7C",
+    "text": "#1f2a1f",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Poppins",
+    "body": "Inter"
+  },
+  "sections": [
+    "photo",
+    "identite",
+    "profil",
+    "competences",
+    "langues",
+    "permis",
+    "loisirs",
+    "engagements",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "certifications"
+  ],
+  "capacites": {
+    "experiences": 4, "formations": 3, "competences": 6,
+    "langues": 4, "certifications": 3, "loisirs": 3, "engagements": 2
+  }
+}

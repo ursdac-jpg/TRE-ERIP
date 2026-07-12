@@ -1,0 +1,17 @@
+{
+  "id": "clair",
+  "nom": "Clair",
+  "description": "Fiche de préparation à l'entretien claire et synthétique, pensée pour être imprimée et emportée en entretien.",
+  "layout": {
+    "type": "single-column"
+  },
+  "colors": {
+    "primary": "#0d6efd",
+    "secondary": "#4B5563",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Arial",
+    "body": "Arial"
+  }
+}

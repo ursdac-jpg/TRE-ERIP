@@ -1,0 +1,11 @@
+{
+  "id": "creatif",
+  "nom": "Créatif",
+  "description": "Bandeau plein-largeur colore + colonne laterale teintee (communication, design, marketing).",
+  "colors": {
+    "primary": "#6D28D9",
+    "secondary": "#6D28D9",
+    "background": "#F5F3FF"
+  },
+  "sections": ["identite", "profil", "competences", "langues", "permis", "loisirs", "experiences", "experiencesPersonnelles", "formations", "certifications"]
+}

@@ -12,13 +12,20 @@
   TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
   est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
   entiere (titre inclus) disparait.
+
+  TACHE (retour utilisateur : permis/vehicule en fin de Coordonnees) : la
+  section "Permis" separee est retiree -- ses informations rejoignent la
+  ligne de coordonnees de l'en-tete, en derniere position.
 -->
 <div class="cv-minimaliste">
 
   <header class="cv-minimaliste-entete">
     <h1>{{identite.prenom}} {{identite.nom}}</h1>
     <p>{{objectifProfessionnel}}</p>
-    <p class="cv-minimaliste-coordonnees">{{identite.telephone}} — {{identite.email}} — {{identite.ville}}</p>
+    <p class="cv-minimaliste-coordonnees">
+      {{identite.telephone}} — {{identite.email}} — {{identite.ville}}
+      {{#if permis.possede}} — Permis {{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}{{/if}}
+    </p>
   </header>
 
   <section>
@@ -76,11 +83,6 @@
     <p>{{#each langues}}{{langue}} ({{niveau}}) {{/each}}</p>
   </section>
   {{/if}}
-
-  <section>
-    <h2>Permis</h2>
-    <p>{{permis.possede}} — {{permis.categories}}</p>
-  </section>
 
   {{#if certifications}}
   <section>

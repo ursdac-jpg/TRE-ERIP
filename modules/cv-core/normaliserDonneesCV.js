@@ -34,12 +34,16 @@ function normaliserDonneesCV(dossierSource) {
       modele: null
     },
     identite: brut.identite,
-    // TACHE (emplacement photo, infrastructure de rendu) : reserve
-    // uniquement la place dans le schema. Aucune logique d'upload ni
-    // d'affichage conditionnel ici -- ce sera une tache independante,
-    // ulterieure. "dossier" ne contient aujourd'hui aucune donnee photo.
+    // TACHE (photo optionnelle) : lit desormais dossier.photo (upload
+    // + case "inclure" separee, voir contenuIdentite()/wireIdentite(),
+    // js/app.js). "inclure" est un choix EXPLICITE et distinct du simple
+    // fait d'avoir televerse une photo -- jamais d'inclusion automatique
+    // (public sensible aux CV avec photo, retour utilisateur explicite).
+    // Si "inclure" est faux, url reste null : les templates/generateurs
+    // n'ont rien de special a gerer, le meme {{#if photo.url}} (ou
+    // equivalent DOCX) continue de fonctionner tel quel.
     photo: {
-      url: null
+      url: (dossierSource.photo && dossierSource.photo.inclure && dossierSource.photo.url) || null
     },
     objectifProfessionnel: brut.titreCV,
     // TACHE (demande) : deux champs distincts plutot qu'un seul "profil" --
@@ -68,7 +72,11 @@ function normaliserDonneesCV(dossierSource) {
     // TACHE (Tache 1 : formations en tableau) : "dossier" stocke desormais
     // un veritable tableau de formations (dossier.formations), plus besoin
     // d'envelopper artificiellement une valeur unique.
-    formations: brut.formations,
+    // TACHE (retour utilisateur) : "Sans diplome" n'est jamais valorisant a
+    // afficher sur un CV -- filtre uniquement ici (rendu CV), la donnee
+    // reste intacte dans dossier.formations (toujours utilisee ailleurs :
+    // Mon Projet, texteProfil()/IA).
+    formations: (brut.formations || []).filter(function (f) { return f.niveau !== 'Sans diplôme'; }),
     certifications: brut.certifications,
     langues: brut.langues,
     permis: brut.permis,

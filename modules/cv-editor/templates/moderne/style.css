@@ -3,6 +3,10 @@
    ------------------------------------------------------------
    Presentation du modele "Moderne" : bandeau lateral + colonne
    principale. Aucune logique ici, uniquement de la mise en forme.
+
+   TACHE (retour utilisateur : poste vise plus visible) : .cv-moderne-objectif
+   agrandi (0.95rem -> 1.15rem) et mis en gras -- c'est l'information la
+   plus importante pour un recruteur qui parcourt rapidement le CV.
    ============================================================ */
 
 .cv-moderne {
@@ -47,8 +51,9 @@
 
 .cv-moderne-objectif {
   text-align: center;
-  font-size: 0.95rem;
-  color: #4B5563;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1D4ED8;
   margin: 0 0 1.5rem 0;
 }
 

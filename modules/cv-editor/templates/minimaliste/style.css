@@ -1,6 +1,11 @@
 /* modules/cv-editor/templates/minimaliste/style.css
    Presentation la plus depouillee possible : pas de couleur d'accent,
-   pas de photo, lignes fines, typographie unique. */
+   pas de photo, lignes fines, typographie unique.
+
+   TACHE (retour utilisateur : poste vise plus visible) : le poste vise
+   (2e <p> de l'en-tete) est desormais explicitement plus grand/gras via
+   .cv-minimaliste-entete p:first-of-type + une regle dediee, tout en
+   respectant l'esprit "depouille" du modele (pas de couleur ajoutee). */
 
 .cv-minimaliste {
   font-family: Helvetica, Arial, sans-serif;
@@ -27,6 +32,13 @@
 .cv-minimaliste-entete p {
   margin: 0.1rem 0;
   color: #444444;
+}
+
+.cv-minimaliste-entete p:not(.cv-minimaliste-coordonnees) {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1A1A1A;
+  margin-bottom: 0.3rem;
 }
 
 .cv-minimaliste-coordonnees {

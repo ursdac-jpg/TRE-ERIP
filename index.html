@@ -34,8 +34,72 @@
   <script src="modules/cv-core/normaliserDonneesCV.js" charset="UTF-8"></script>
   <script src="modules/cv-editor/rendreTemplate.js" charset="UTF-8"></script>
   <script src="modules/cv-editor/modelesDisponibles.js" charset="UTF-8"></script>
+  <!-- TACHE (Option C : export Word natif) : genere de vrais .docx par
+       modele (au lieu de convertir le HTML deja rendu) -- voir le
+       commentaire d'en-tete du fichier pour le detail. -->
+  <script src="modules/cv-editor/exportDocxNatifCV.js" charset="UTF-8"></script>
+  <!-- TACHE (nouveaux modeles CV, absents de la base) : etend
+       GENERATEURS_DOCX_NATIFS_CV/MODELES_AVEC_DOCX_NATIF_CV, doit donc
+       charger APRES exportDocxNatifCV.js. -->
+  <script src="modules/cv-editor/exportDocxNatifCV_NouveauxModeles.js" charset="UTF-8"></script>
+  <!-- TACHE (refonte "Aperçu et finalisation" : palette de couleurs) :
+       ajoute la recoloration par-dessus les generateurs existants --
+       doit charger APRES exportDocxNatifCV.js ET
+       exportDocxNatifCV_NouveauxModeles.js (utilise leurs fonctions). -->
+  <script src="modules/cv-editor/coloriationDocxNatifCV.js" charset="UTF-8"></script>
+  <!-- TACHE (format A5) : mini-CV, contenu recadre par le meme moteur de
+       decision IA que le format complet (capacites plus serrees) + page
+       reelle A5 -- doit charger APRES exportDocxNatifCV.js,
+       exportDocxNatifCV_NouveauxModeles.js et coloriationDocxNatifCV.js
+       (reutilise leurs fonctions et constantes). -->
+  <script src="modules/cv-editor/formatA5CV.js" charset="UTF-8"></script>
+  <!-- TACHE (Mini CV (A5), mise en page dediee) : structure propre (photo
+       centree, 2 colonnes compactes), plus une reduction du modele A4
+       choisi -- doit charger avant ou apres formatA5CV.js (peu importe,
+       resolution des fonctions au moment de l'appel, pas du chargement). -->
+  <script src="modules/cv-editor/miniCvA5.js" charset="UTF-8"></script>
+  <!-- TACHE (5 nouveaux modeles CV, references PowerPoint) : "Chic",
+       premier des 5 -- doit charger APRES exportDocxNatifCV.js,
+       coloriationDocxNatifCV.js, formatA5CV.js et miniCvA5.js (utilise
+       leurs fonctions/listes, etend GENERATEURS_DOCX_NATIFS_CV et
+       MODELES_AVEC_DOCX_NATIF_CV/COULEURS/FORMAT_A5). -->
+  <script src="modules/cv-editor/exportDocxNatifCV_Chic.js" charset="UTF-8"></script>
+  <!-- TACHE (Option pdfmake : export PDF natif) : genere de vrais PDF
+       vectoriels par modele, en repli sur "Imprimer" du navigateur si
+       indisponible -- voir le commentaire d'en-tete du fichier. -->
+  <!-- TACHE (simplification : DOCX seul) : exportPdfNatifCV.js retire --
+       le bouton PDF a ete supprime de l'export CV (voir app.js), ce
+       fichier n'est plus jamais appele. -->
+  <!-- <script src="modules/cv-editor/exportPdfNatifCV.js" charset="UTF-8"></script> -->
+  <!-- TACHE (Option GrapesJS : personnalisation visuelle, premiere
+       version) : editeur plein ecran, voir le commentaire d'en-tete du
+       fichier pour la limite assumee sur l'export. -->
+  <!-- TACHE (simplification : DOCX seul) : personnalisationCV.js retire --
+       le bouton Personnaliser a ete supprime de l'export CV (voir
+       app.js), ce fichier n'est plus jamais appele. -->
+  <!-- <script src="modules/cv-editor/personnalisationCV.js" charset="UTF-8"></script> -->
+  <!-- TACHE (simplification : DOCX seul + filet de secours + apercu
+       integre) : voir le commentaire d'en-tete de chaque fichier. -->
+  <script src="modules/cv-editor/exportBlocsTexteCV.js" charset="UTF-8"></script>
+  <script src="modules/cv-editor/apercuDocxIntegre.js" charset="UTF-8"></script>
   <script src="modules/lettre-core/normaliserDonneesLettre.js" charset="UTF-8"></script>
   <script src="modules/lettre-editor/modelesDisponiblesLettre.js" charset="UTF-8"></script>
+  <!-- TACHE (traitement DOCX natif etendu a la lettre) : meme principe
+       que exportDocxNatifCV.js, reutilise sa fonction de chargement de
+       la librairie docx (chargee juste au-dessus). -->
+  <script src="modules/lettre-editor/exportDocxNatifLettre.js" charset="UTF-8"></script>
+  <script src="modules/entretien-editor/normaliserDonneesEntretien.js" charset="UTF-8"></script>
+  <script src="modules/entretien-editor/modelesDisponiblesEntretien.js" charset="UTF-8"></script>
+  <!-- TACHE (traitement DOCX natif etendu a l'entretien) : idem. -->
+  <script src="modules/entretien-editor/exportDocxNatifEntretien.js" charset="UTF-8"></script>
+  <!-- TACHE (couleurs + 3 formats pour la lettre et l'entretien, comme
+       pour le CV) : reutilise PALETTES_COULEURS_CV (coloriationDocxNatifCV.js)
+       et _dnTronquerTexte()/_dnTaillePageA5() (formatA5CV.js), deja
+       charges avant ce point -- voir le commentaire d'en-tete du fichier. -->
+  <script src="modules/cv-editor/formatsLettreEntretien.js" charset="UTF-8"></script>
+  <!-- TACHE (filet de secours etendu a la lettre et l'entretien) : meme
+       principe que exportBlocsTexteCV.js. -->
+  <script src="modules/cv-editor/exportBlocsTexteLettreEntretien.js" charset="UTF-8"></script>
   <script src="js/app.js" charset="UTF-8"></script>
 
 </body>

@@ -36,8 +36,17 @@ function extraireDonneesCV(dossierSource) {
   var permis = d.permis || {};
 
   var competences = (typeof deduireCompetences === 'function') ? deduireCompetences() : [];
-  var savoirFaire = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; });
-  var savoirEtre = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; });
+  // TACHE (retour utilisateur : "Compétences professionnelles" vide sur le
+  // CV genere) : utilisait categorieCompetence[c] en direct -- la table
+  // figee interne (~50 libelles) ne connait presque aucune competence
+  // importee depuis un vrai CV, donc ce filtre les ecartait presque toutes
+  // (categorieCompetence[c] === undefined, ni Savoir-faire ni Savoir-etre).
+  // categorieReelleCompetence() (app.js) corrige deja ce point ailleurs
+  // (Analyse de votre profil, score des metiers, texte transmis a l'IA) --
+  // ce fichier n'avait pas ete mis a jour en meme temps, d'ou le decalage
+  // observe entre "Analyse de votre profil" (correct) et le CV genere (vide).
+  var savoirFaire = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-faire' || categorieReelleCompetence(c) === undefined; });
+  var savoirEtre = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; });
   var savoirs = (typeof obtenirSavoirs === 'function') ? obtenirSavoirs() : [];
 
   return {
@@ -48,8 +57,8 @@ function extraireDonneesCV(dossierSource) {
       telephone: id.telephone || '',
       email: id.email || '',
       adresse: id.adresse || '',
-      ville: id.ville || '',
-      age: id.age || ''
+      codePostal: id.codePostal || '',
+      ville: id.ville || ''
     },
     // Metier ou secteur cible, tel que choisi sur la page Potentiel.
     titreCV: d.metierCible || d.secteurCible || '',
@@ -65,7 +74,14 @@ function extraireDonneesCV(dossierSource) {
         lieu: e.lieu || '',
         dateDebut: e.dateDebut || '',
         dateFin: e.dateFin || '',
-        missions: e.missions || ''
+        missions: e.missions || '',
+        // TACHE (extension schema, groupe A) : intitule de contrat propre a
+        // CETTE experience passee (ex. "CDI", "Stage", "Alternance") --
+        // distinct de dossier.contrat (types de contrat RECHERCHES,
+        // deja existant, tableau global). Facultatif : chaine vide si non
+        // renseigne, la rubrique disparait alors normalement cote template
+        // (meme convention generique {{#if}} que tous les autres champs).
+        contrat: e.contrat || ''
       };
     }),
     experiencesPersonnelles: (d.experiencesPerso || []).map(function (e) {
@@ -75,7 +91,9 @@ function extraireDonneesCV(dossierSource) {
     // desormais un veritable tableau (plusieurs formations possibles),
     // remplace l'ancien dossier.niveauFormation (valeur unique).
     formations: (d.formations || []).map(function (f) {
-      return { niveau: f.niveau || '', intitule: f.intitule || '', annee: f.annee || '' };
+      // TACHE (extension schema, groupe A) : etablissement facultatif
+      // (ecole/centre de formation) -- chaine vide si non renseigne.
+      return { niveau: f.niveau || '', intitule: f.intitule || '', annee: f.annee || '', etablissement: f.etablissement || '' };
     }),
     certifications: (d.certifications || []).slice(),
     langues: (d.langues || []).map(function (l) { return { langue: l.langue, niveau: l.niveau }; }),

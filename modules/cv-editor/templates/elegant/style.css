@@ -1,5 +1,8 @@
 /* modules/cv-editor/templates/elegant/style.css
-   Presentation premium, en-tete centre, beaucoup d'espace blanc. */
+   Presentation premium, en-tete centre, beaucoup d'espace blanc.
+
+   TACHE (retour utilisateur : poste vise plus visible) : .cv-elegant-objectif
+   agrandi (1.05rem -> 1.2rem). */
 
 .cv-elegant {
   font-family: 'Lato', Arial, sans-serif;
@@ -35,11 +38,12 @@
 }
 
 .cv-elegant-objectif {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   color: #D4AF37;
   margin: 0 0 0.8rem 0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
 .cv-elegant-coordonnees {

@@ -1,0 +1,38 @@
+{
+  "id": "geometrique",
+  "nom": "Géométrique",
+  "description": "CV deux colonnes, bandeau lateral bleu et decor de triangles en en-tete.",
+  "layout": {
+    "type": "sidebar-left",
+    "sidebarWidth": "36%",
+    "contentWidth": "64%"
+  },
+  "colors": {
+    "primary": "#4B57C9",
+    "secondary": "#6D89EA",
+    "text": "#1B2340",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Poppins",
+    "body": "Inter"
+  },
+  "sections": [
+    "photo",
+    "identite",
+    "profil",
+    "competences",
+    "langues",
+    "permis",
+    "loisirs",
+    "engagements",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "certifications"
+  ],
+  "capacites": {
+    "experiences": 4, "formations": 3, "competences": 6,
+    "langues": 4, "certifications": 3, "loisirs": 3, "engagements": 2
+  }
+}

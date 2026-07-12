@@ -35,12 +35,21 @@ function normaliserDonneesLettre(dossierSource) {
       nom: id.nom || '',
       prenom: id.prenom || '',
       adresse: id.adresse || '',
+      codePostal: id.codePostal || '',
       ville: id.ville || '',
       telephone: id.telephone || '',
       email: id.email || ''
     },
     date: dateAujourdhui,
     objet: lettreIA.objet || '',
-    texte: lettreIA.texte || ''
+    // TACHE (retour utilisateur : grand vide dans l'apercu) : le style.css
+    // du modele utilise "white-space: pre-wrap" (deliberement, pour
+    // respecter les retours a la ligne voulus par l'IA) -- il affiche donc
+    // AUSSI, telles quelles, d'eventuelles lignes vides en exces renvoyees
+    // par l'IA (3 sauts de ligne ou plus d'affilee), ce qui produisait un
+    // grand espace blanc au milieu de la lettre. Normalise ici (jamais plus
+    // de 2 sauts de ligne consecutifs = 1 ligne vide entre paragraphes),
+    // sans toucher au template ni au style -- les deux etaient corrects.
+    texte: (lettreIA.texte || '').replace(/\n{3,}/g, '\n\n').trim()
   };
 }

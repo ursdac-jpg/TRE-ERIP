@@ -80,8 +80,7 @@ var dossier = {
   typeCV: 'general',     // Complement tache 8 : 'general' ou 'specifique'
   // TACHE 43 : identite du candidat. email/telephone peuvent etre pre-remplis
   // automatiquement (extraction fiable) ; nom/prenom/adresse jamais devines.
-  identite: { civilite: null, nom: '', prenom: '', adresse: '', telephone: '', email: '', ville: '', age: '' },
-  anonymiser: true,      // option de confidentialite pour CV/Lettre (l'entretien est toujours anonymise, sans option)
+  identite: { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' },
   entretienDirect: { structure: '', poste: '' },  // TACHE 36 : parcours autonome "Preparer un entretien"
   rechercheEntreprise: { structure: '' },  // TACHE (recherche assistant) : entreprise saisie depuis le parcours guide
   catalogueActif: {},    // Etape 3 : suivi Oui/Non par catalogue (cle = nom du champ, ex. 'loisirs')
@@ -147,7 +146,36 @@ var dossier = {
   // n'afficher qu'un seul bandeau d'impression a la fois sur la page
   // Action -- jamais les deux en meme temps, aucun tant que rien n'est
   // commence.
-  dernierDocumentPrepare: null
+  dernierDocumentPrepare: null,
+  // TACHE (page Action, verrouillage progressif des cartes) : poses a true
+  // la premiere fois que le document concerne atteint reellement l'etape
+  // "Exporter" (voir btnContinuerApercu) -- pilotent le deverrouillage des
+  // cartes Lettre/Entretien selon le parcours choisi (modeCreation).
+  cvTermine: false,
+  lettreTerminee: false,
+  // TACHE (refonte page Action, architecture) : preferences globales de
+  // redaction, definies UNE FOIS par la personne et reutilisees par tous les
+  // modules generateurs de contenu (CV, lettre, entretien, futurs modules).
+  // Valeurs possibles :
+  // niveauPoste : 'employe' | 'ouvrier_qualifie' | 'technicien' | 'agent_maitrise' | 'cadre' | 'direction' | null
+  // niveauLangage : 'naturel' | 'professionnel' | 'tres_professionnel' | null
+  // adaptationMetier : 'standard' | 'adaptee' | 'specialisee' | null
+  // ton : 'dynamique' | 'equilibre' | 'institutionnel' | null
+  // longueur : 'synthetique' | 'equilibree' | 'detaillee' | null
+  // Ne sont JAMAIS affichees telles quelles dans un document : elles servent
+  // uniquement de contexte transmis a l'IA (aucune logique de prompt cablee
+  // a ce stade, voir tache dediee).
+  preferencesIA: {
+    niveauPoste: null,
+    niveauLangage: null,
+    adaptationMetier: null,
+    ton: null,
+    longueur: null
+  },
+  // TACHE (retour utilisateur : "Verifier les informations") : override
+  // manuel du texte transmis a l'IA (texteProfilEffectif()) -- null tant
+  // que la personne n'a rien valide depuis la fenetre de verification.
+  profilTexteManuel: null
   // champs remplis par l'analyse CV (voir metiers.js) :
   // competencesCV, savoirsCV, cvAnalyse
 };
@@ -162,6 +190,15 @@ var blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: f
 // tant que la personne n'a pas clique sur "+ Ajouter" -- uniquement en
 // memoire, memes garanties que blocsAMettreEnEvidence ci-dessus.
 var brouillonFormationEnCours = null;
+// TACHE (retour utilisateur : animation "cliquez ici") : petite icone
+// animee (CSS pur, sans JS), reutilisee partout ou l'on invite a cliquer
+// sur une pastille de metier -- rend le geste attendu plus intuitif,
+// notamment pour un public peu autonome en informatique.
+function animationCliquezIci() {
+  return '<span style="display:inline-block;animation:pointerCliquezIci 1.2s ease-in-out infinite;">&#128070;</span>' +
+    '<style>@keyframes pointerCliquezIci{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}</style>';
+}
+
 function doitMettreEnEvidence(cle) { return !!blocsAMettreEnEvidence[cle]; }
 // Retire la mise en evidence d'un bloc des que l'utilisateur clique dedans ou y saisit
 // quelque chose ; chaque bloc redevient normal independamment des autres.
@@ -222,6 +259,7 @@ var CATEGORIES_PERMIS = ['A', 'B', 'C', 'D', 'E'];
 // chiffre RNCP directement : il est toujours derive automatiquement, ce qui
 // rend impossible une incoherence (ex. "CAP" associe au niveau 8).
 var NIVEAUX_DIPLOME_SIMPLES = [
+  { id: 'sansdiplome', label: 'Sans diplôme', rncp: 1, placeholder: 'Facultatif' },
   { id: 'cap', label: 'CAP / BEP', rncp: 3, placeholder: 'CAP Cuisine, BEP Vente...' },
   { id: 'bac', label: 'Bac', rncp: 4, placeholder: 'Bac général, Bac pro Commerce, Bac techno STMG...' },
   { id: 'bac2', label: 'Bac +2', rncp: 5, placeholder: 'BTS Commerce, DUT GEA, BTS Management...' },
@@ -296,6 +334,20 @@ var categorieCompetence = {
   // Etape 3 : nouveaux termes introduits par les exemples d'enrichissement loisirs
   'Perseverance': 'Savoir-etre', 'Respect des regles': 'Savoir-etre', 'Sens du detail': 'Savoir-faire'
 };
+
+// TACHE (retour utilisateur : aucun savoir-être identifié depuis un CV
+// importé) : la table figee ci-dessus ne connait qu'un referentiel interne
+// (~50 libelles) -- un savoir-etre importe et reconnu comme tel par l'IA
+// (extraction-cv.md) mais absent de cette table etait donc traite comme un
+// savoir-faire par defaut (cf. correction precedente). Ce helper priorise
+// desormais dossier.savoirEtreCV (rempli a la fusion, voir plus bas) : un
+// element qui s'y trouve est un VRAI savoir-etre, meme absent de la table
+// figee. Utiliser CE helper partout plutot que categorieCompetence[c] en
+// direct, pour rester coherent.
+function categorieReelleCompetence(c) {
+  if ((dossier.savoirEtreCV || []).indexOf(c) !== -1) { return 'Savoir-etre'; }
+  return categorieCompetence[c];
+}
 
 // TACHE 33A : complete la reference manquante dans BASE_CONNAISSANCES_ERIP
 // (categorieCompetence n'existait pas encore lorsque data/baseConnaissancesERIP.js
@@ -450,6 +502,61 @@ function ouvrirPanneauGuide(titre, contenuHTML) {
   document.getElementById('fermerPanneauGuideBtn').addEventListener('click', fermerPanneauGuide);
   fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerPanneauGuide(); } });
   return fenetre;
+}
+
+// TACHE (retour utilisateur : CV specifique sans quitter la page) : reutilise
+// ouvrirPanneauGuide() (deja en page, pas une popup) + contenuCandidature()/
+// wireObjectifDetails() (deja existantes, memes champs que sur "Mon Projet")
+// -- aucune logique dupliquee. Remplace la navigation vers "Mon Projet".
+function ouvrirFenetreCandidatureRapide(rerender, onRetour) {
+  var panneau = ouvrirPanneauGuide('&#128221; Votre candidature',
+    '<p class="text-muted small">Ces informations permettront de personnaliser votre CV, votre lettre et votre entretien.</p>' +
+    contenuCandidature() +
+    '<div class="d-flex justify-content-between mt-3">' +
+    (onRetour ? '<button type="button" id="btnRetourCandidatureRapide" class="btn btn-outline-secondary">&#8592; Retour</button>' : '<span></span>') +
+    '<button type="button" id="btnValiderCandidatureRapide" class="btn btn-primary">Valider</button></div>');
+  wireObjectifDetails();
+  // TACHE (retour utilisateur : bouton Valider desactive sans info) : le
+  // clavier (majuscule auto, Entree -> champ suivant) est deja cable par
+  // wireObjectifDetails() -> activerChampsStandardises() (#zoneCandidatureChamps,
+  // deja existant). Ici, uniquement : (1) etat du bouton selon
+  // informationsCandidatureSuffisantes(), reevalue a chaque saisie ; (2) sur
+  // le DERNIER champ, Entree declenche Valider (comme un clic), pas juste
+  // une perte de focus.
+  var btnValider = panneau.querySelector('#btnValiderCandidatureRapide');
+  var zoneCandidature = panneau.querySelector('#zoneCandidatureChamps');
+  function actualiserBoutonValider() {
+    if (!btnValider) { return; }
+    var suffisant = informationsCandidatureSuffisantes();
+    btnValider.disabled = !suffisant;
+    btnValider.style.opacity = suffisant ? '1' : '0.4';
+    btnValider.style.cursor = suffisant ? 'pointer' : 'not-allowed';
+  }
+  actualiserBoutonValider();
+  if (zoneCandidature) {
+    zoneCandidature.addEventListener('input', actualiserBoutonValider);
+    zoneCandidature.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') { return; }
+      var champs = Array.prototype.slice.call(zoneCandidature.querySelectorAll(
+        'input[type="text"], input[type="url"], input[type="tel"], input[type="email"]'));
+      var dernier = champs[champs.length - 1];
+      if (e.target === dernier && btnValider && !btnValider.disabled) { btnValider.click(); }
+    });
+  }
+  if (btnValider) {
+    btnValider.addEventListener('click', function () {
+      if (btnValider.disabled) { return; }
+      fermerPanneauGuide();
+      if (typeof rerender === 'function') { rerender(); }
+    });
+  }
+  var btnRetour = panneau.querySelector('#btnRetourCandidatureRapide');
+  if (btnRetour) {
+    btnRetour.addEventListener('click', function () {
+      fermerPanneauGuide();
+      onRetour();
+    });
+  }
 }
 
 // Etape 2 : competence cliquee -> jusqu'a 5 metiers qui la mentionnent.
@@ -682,24 +789,35 @@ function ouvrirPanneauMajCv() {
       ? function () { naviguerVers('resultats'); }
       : (reponse === 'oui' ? function () { naviguerVers('projet'); } : function () { naviguerVers('resultats'); });
     if (rechercheGuidee.parcours === 'entretien') {
-      // Reutilise entierement la fenetre existante : CV obligatoire + lettre
-      // facultative (avec possibilite de continuer sans lettre), meme fenetre
-      // que sur l'ecran Action.
-      ouvrirFenetreEntretien(destination);
+      // TACHE (migration parcours Entretien) : le nouveau parcours gere
+      // deja lui-meme CV + lettre + entreprise/poste puis lance l IA --
+      // remplace l ancienne fenetre + la navigation separee vers
+      // 'resultats' (l IA est desormais lancee directement, comportement
+      // simplifie et assume).
+      ouvrirParcoursEntretien();
     } else {
-      ouvrirFenetreCV(dossier.modeCreation, { onTerminer: destination });
+      ouvrirAssistantDepotCV(dossier.modeCreation, { onTerminer: destination });
     }
   });
 }
 
 // Destination finale une fois le CV disponible sans reimport necessaire :
-// ecran ACTION pour le CV, assistant IA direct pour la lettre et l'entretien
-// (reutilise entierement ouvrirAideIA()).
+// ecran ACTION pour le CV et la lettre, parcours moderne dedie pour
+// l'entretien.
+// TACHE (retour utilisateur : regression grave, vieil ecran ouvrirAideIA()
+// revenu) : ce dernier appel a ouvrirAideIA() est retire -- c'etait le
+// SEUL chemin restant vers cet ecran legacy dans toute l'application (deja
+// deconnecte partout ailleurs), jamais raccorde au parcours moderne
+// (page Action, accordeons) contrairement au reste. 'lettre' et 'entretien'
+// routent desormais vers leurs equivalents modernes, exactement comme 'cv'.
 function lancerParcoursGuide() {
   if (rechercheGuidee.parcours === 'cv') {
     naviguerVers('resultats');
-  } else if (rechercheGuidee.parcours) {
-    ouvrirAideIA(rechercheGuidee.parcours);
+  } else if (rechercheGuidee.parcours === 'entretien') {
+    ouvrirParcoursEntretien();
+  } else if (rechercheGuidee.parcours === 'lettre') {
+    dossier.dernierDocumentPrepare = 'lettre';
+    naviguerVers('resultats');
   }
 }
 
@@ -806,6 +924,120 @@ var mappingLoisirsCompetences = {
 // sans risquer de casser le markup si l'utilisateur saisit des guillemets.
 function echapperAttribut(t) {
   return String(t || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// TACHE (retour utilisateur : coller en un clic, generalise a tous les
+// ecrans de collage de reponse IA) : composant partage -- gros bouton qui
+// lit directement le presse-papiers (navigator.clipboard.readText()),
+// affiche le resultat en LECTURE SEULE (jamais modifiable par erreur),
+// Entree (ecouteur GLOBAL document, fonctionne quelle que soit la
+// position de la souris/le focus) declenche l'import. Filet de secours
+// (collage manuel Ctrl+V, editable) si la lecture automatique echoue ou
+// n'est pas supportee par ce navigateur (Firefox notamment). Un seul
+// endroit a maintenir pour ce comportement, partage par : l'assistant
+// pas-a-pas Etape 4 (metiers.js), la recuperation entretien (metiers.js),
+// et l'accordeon "Importer les informations IA" de la page Action (app.js).
+//
+// TACHE (correction bug : fenetres qui s'assombrissent en boucle) : un
+// ecouteur Entree PAR idTextarea (version precedente) restait actif meme
+// une fois l'ecran de collage recouvert par un AUTRE ecran (ex. "Verifiez
+// les informations importees", ouvert PAR-DESSUS sans fermer le wizard
+// en dessous, cf. bouton Retour). Chaque Entree redeclenchait alors
+// l'import du DESSOUS, qui rouvrait un NOUVEL ecran de validation
+// empile sur l'ancien -- assombrissement progressif, plus aucun bouton
+// cliquable (ce n'etait plus le bon calque au-dessus). Corrige : un seul
+// ecouteur global (jamais duplique), qui ne verifie que le SEUL
+// "collage actif" du moment (_configCollageActif) -- desactiverCollageInstantane()
+// permet a tout ecran ouvert par-dessus de le neutraliser pendant qu'il
+// est affiche.
+//
+// config attendu (tous des id d'elements deja presents dans le DOM) :
+// idBoutonColler, idZoneAuto, idZoneApercu, idTextarea, idBoutonImporter
+// -- obligatoires ; idBoutonCollerManuel, idBoutonEffacerRecoller,
+// onErreur(message), onEffacer() -- facultatifs.
+var _configCollageActif = null;
+var _ecouteurEntreeCollageInstantaneInstalle = false;
+function desactiverCollageInstantane() { _configCollageActif = null; }
+function activerCollageInstantane(config) {
+  var zoneAuto = document.getElementById(config.idZoneAuto);
+  var zoneApercu = document.getElementById(config.idZoneApercu);
+  var texteArea = document.getElementById(config.idTextarea);
+  var btnColler = document.getElementById(config.idBoutonColler);
+  if (!zoneAuto || !zoneApercu || !texteArea || !btnColler) { return; }
+  var btnCollerManuel = config.idBoutonCollerManuel && document.getElementById(config.idBoutonCollerManuel);
+  var btnEffacer = config.idBoutonEffacerRecoller && document.getElementById(config.idBoutonEffacerRecoller);
+
+  _configCollageActif = config;
+
+  function afficherApercu(texte) {
+    texteArea.value = texte;
+    zoneAuto.style.display = 'none';
+    zoneApercu.style.display = 'block';
+  }
+  function activerCollageManuel() {
+    zoneAuto.style.display = 'none';
+    zoneApercu.style.display = 'block';
+    texteArea.removeAttribute('readonly');
+    texteArea.style.background = '';
+    texteArea.value = '';
+    texteArea.focus();
+  }
+
+  btnColler.addEventListener('click', function () {
+    if (!(navigator.clipboard && navigator.clipboard.readText)) { activerCollageManuel(); return; }
+    navigator.clipboard.readText().then(function (texte) {
+      if (!texte || !texte.trim()) {
+        if (typeof config.onErreur === 'function') {
+          config.onErreur('Le presse-papiers semble vide. Copiez la réponse de l\'assistant, puis réessayez.');
+        }
+        return;
+      }
+      afficherApercu(texte);
+    }).catch(activerCollageManuel);
+  });
+  if (btnCollerManuel) { btnCollerManuel.addEventListener('click', activerCollageManuel); }
+  if (btnEffacer) {
+    btnEffacer.addEventListener('click', function () {
+      texteArea.value = '';
+      texteArea.setAttribute('readonly', 'readonly');
+      texteArea.style.background = '#F9FAFB';
+      zoneApercu.style.display = 'none';
+      zoneAuto.style.display = 'block';
+      if (typeof config.onEffacer === 'function') { config.onEffacer(); }
+    });
+  }
+
+  if (!_ecouteurEntreeCollageInstantaneInstalle) {
+    _ecouteurEntreeCollageInstantaneInstalle = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || !_configCollageActif) { return; }
+      var cfg = _configCollageActif;
+      var ta = document.getElementById(cfg.idTextarea);
+      var btn = document.getElementById(cfg.idBoutonImporter);
+      if (ta && btn && ta.hasAttribute('readonly')) { e.preventDefault(); btn.click(); }
+    });
+  }
+}
+
+// Petit HTML reutilisable pour la zone "collage instantane" (gros bouton +
+// apercu lecture seule), a inserer dans le contenuHTML de chaque ecran --
+// seuls les id changent (suffixe fourni), pour coexister sur une meme page
+// si besoin. idBoutonImporter/libelleImporter restent definis par l'appelant
+// (texte et logique d'import different selon l'ecran).
+function htmlCollageInstantane(suffixe, boutonsApercuHTML) {
+  return '<div id="zoneCollageAuto' + suffixe + '" class="text-center py-3">' +
+    '<button type="button" id="btnCollerAuto' + suffixe + '" title="Coller la réponse copiée" ' +
+    'style="width:96px;height:96px;border-radius:50%;border:none;background:#0d6efd;color:#FFFFFF;' +
+    'font-size:2.2rem;box-shadow:0 4px 14px rgba(13,110,253,.4);cursor:pointer;">&#128203;</button>' +
+    '<p class="small text-muted mt-2 mb-0">Cliquez pour coller la réponse copiée</p>' +
+    '<button type="button" id="btnCollerManuel' + suffixe + '" class="btn btn-link mt-2" style="font-size:1rem;">' +
+    'Coller manuellement à la place</button>' +
+    '</div>' +
+    '<div id="zoneApercuCollage' + suffixe + '" style="display:none;">' +
+    '<textarea class="form-control form-control-sm mb-2" id="texteCollage' + suffixe + '" rows="8" readonly ' +
+    'style="background:#F9FAFB;" placeholder="Collez ici la réponse complète de l\'assistant IA..."></textarea>' +
+    (boutonsApercuHTML || '') +
+    '</div>';
 }
 
 // Pastilles simples (Loisirs, Engagements) : dossier[config.cle] est un tableau de chaines.
@@ -1081,18 +1313,23 @@ function construireProfil() {
     actions: dossier.actions,
     environnement: dossier.environnement,
     valeurs: dossier.valeurs,
-    savoirFaire: comps.filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; }),
-    savoirEtre: comps.filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; }),
+    // TACHE (retour utilisateur : compétences invisibles après import) :
+    // meme correction que savoirFaireActuels() -- une competence non
+    // reconnue dans la table figee categorieCompetence (typiquement
+    // importee depuis un vrai CV) est rattachee par defaut a "Savoir-faire"
+    // plutot que d'etre silencieusement exclue du score de recommandation.
+    savoirFaire: comps.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-faire' || categorieReelleCompetence(c) === undefined; }),
+    savoirEtre: comps.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; }),
     savoirs: dossier.savoirsCV || [],
     accepte: dossier.accepte || []
   };
 }
 
-function suggererMetiers() {
-  var noms = metiersPourAffichage().map(function (m) { return m.nom; });
-  dossier.metiersAjoutes.forEach(function (m) { if (noms.indexOf(m) === -1) { noms.push(m); } });
-  return noms;
-}
+// TACHE (retour utilisateur : suggestions != metiers vises) : suggererMetiers()
+// retiree -- elle n'etait plus utilisee que par texteProfil() pour la ligne
+// "Metiers envisages", elle-meme retiree (les suggestions ne doivent pas
+// nourrir le prompt IA). L'affichage des metiers recommandes continue de
+// fonctionner via metiersPourAffichage(), inchangee.
 
 function obtenirSavoirs() {
   var set = {};
@@ -1141,25 +1378,41 @@ function construireMessageAime() {
   if (dossier.activites.indexOf('enfants') !== -1) ajoute('vous occuper des enfants');
   if (dossier.activites.indexOf('personnes_agees') !== -1) ajoute('accompagner les personnes');
   if (dossier.activites.indexOf('exterieur') !== -1 || dossier.valeurs.indexOf('exterieur') !== -1) ajoute('travailler dehors');
-  // Complement : on pioche dans les savoir-etre detectes pour atteindre jusqu'a 10
+  // TACHE (retour utilisateur : "1 seule valeur" pour un profil importe) :
+  // le repli se limitait aux competences EXACTEMENT reconnues "Savoir-etre"
+  // dans la table figee categorieCompetence (~15 libelles internes) --
+  // pour un CV importe, la quasi-totalite des competences (souvent des
+  // savoir-faire non reconnus dans cette table) etaient donc ignorees ici,
+  // meme si "Analyse de votre profil" les affichait deja correctement par
+  // ailleurs (cf. correction precedente). Elargi a TOUTES les competences
+  // identifiees (deduireCompetences(), sans filtre de categorie) -- phrase
+  // neutre ("X", pas "faire preuve de X") pour rester grammaticalement
+  // correcte quelle que soit la nature reelle de la competence.
   if (aime.length < 10) {
-    var savoirEtre = deduireCompetences().filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; });
-    savoirEtre.forEach(function (c) { ajoute('faire preuve de ' + c.toLowerCase()); });
+    deduireCompetences().forEach(function (c) { ajoute(c.toLowerCase()); });
   }
   if (aime.length === 0) { ajoute('apprendre'); ajoute('vous depasser'); }
-  return aime.map(function (a) { return '&#10004; ' + a; }).join(' &middot; ');
+  return { texte: aime.map(function (a) { return '&#10004; ' + a; }).join(' &middot; '), nombre: aime.length };
 }
 
 // Message competences detectees en cours de parcours (toutes, en gras)
+// TACHE (retour utilisateur) : passe en accordeon (replie par defaut,
+// reutilise blocAccordeon()/wireAccordeon() deja existants, meme principe
+// que messageVAE()) -- icone commune aux 4 pages concernees (Experience/
+// Ce que vous faisiez/Environnement/Attentes), differente de celle de la
+// page Potentiel (voir pageRevelation()), + compteur visible sans avoir a
+// deplier.
 function afficherCompetencesDetectees(etape) {
   var comps = deduireCompetences();
-  if (comps.length === 0) return '';
+  if (comps.length === 0) { return ''; }
   var liste = '<strong>' + comps.map(function (c) { return '&#10004; ' + c; }).join(' &middot; ') + '</strong>';
   var intro;
-  if (etape === 'activites') { intro = '&#129504; L\'assistant commence a mieux vous connaitre. Competences deja identifiees :'; }
-  else if (etape === 'actions') { intro = '&#129504; Grace a vos reponses, votre profil s\'enrichit :'; }
-  else { intro = '&#129504; Votre profil se precise :'; }
-  return '<div class="message-competences">' + intro + '<br>' + liste + '</div>';
+  if (etape === 'activites') { intro = 'L\'assistant commence à mieux vous connaître.'; }
+  else if (etape === 'actions') { intro = 'Grâce à vos réponses, votre profil s\'enrichit.'; }
+  else { intro = 'Votre profil se précise.'; }
+  return blocAccordeon('competences-detectees-' + etape,
+    '&#129513; Compétences déjà identifiées <span class="badge bg-primary ms-1">' + comps.length + '</span>',
+    intro, liste);
 }
 
 /* ------------------------------------------------------------
@@ -1249,7 +1502,7 @@ function barreNavigation(precedent, suivant, labelSuivant, options) {
     : '<span></span>';
   html += '<button class="btn btn-light btn-accueil border" onclick="naviguerVers(\'cv\')">&#127968; Accueil</button>';
   if (options.recommencer) {
-    html += '<button class="btn btn-danger btn-lg" onclick="recommencer()">&#128260; Recommencer</button>';
+    html += '<button class="btn btn-danger btn-lg" onclick="confirmerRecommencer()">&#128260; Recommencer</button>';
   } else if (suivant) {
     // TACHE 43bis : bouton "suivant" desactivable (ex. selection minimale requise),
     // sans impact sur les appelants qui ne passent pas cette option.
@@ -1284,46 +1537,6 @@ function fermerModaleConfidentialite() {
   overlay.classList.remove('visible');
   setTimeout(function () { if (overlay.parentNode) { overlay.remove(); } }, 200);
 }
-
-// TACHE (refonte Mon projet, bloc 1) : petite fenetre d'explication sur
-// l'usage des informations d'identite (double role : anonymisation fiable +
-// personnalisation facultative), reutilise le meme habillage visuel que la
-// modale de confidentialite de l'accueil.
-function fermerModaleInfoIdentite() {
-  var overlay = document.getElementById('modaleInfoIdentite');
-  if (!overlay) { return; }
-  overlay.classList.remove('visible');
-  setTimeout(function () { if (overlay.parentNode) { overlay.remove(); } }, 200);
-}
-
-function ouvrirModaleInfoIdentite() {
-  if (document.getElementById('modaleInfoIdentite')) { return; }
-  var overlay = document.createElement('div');
-  overlay.id = 'modaleInfoIdentite';
-  overlay.className = 'confid-overlay';
-  overlay.innerHTML =
-    '<div class="confid-carte">' +
-      '<div class="d-flex justify-content-between align-items-center mb-2">' +
-        '<h5 class="mb-0">&#8505;&#65039; A quoi servent ces informations ?</h5>' +
-        '<button type="button" id="fermerInfoIdentiteBtn1" class="btn btn-sm btn-outline-secondary" ' +
-          'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-      '</div>' +
-      '<p>Ces informations ont deux usages, et vous restez maitre de chacun d\'eux.</p>' +
-      '<p><strong>D\'abord</strong>, elles permettent a ERIP de savoir avec certitude ce qu\'il faut retirer de vos ' +
-      'documents : rien de ce que vous saisissez ici n\'est transmis a un assistant IA sans votre accord explicite.</p>' +
-      '<p><strong>Ensuite</strong>, si vous le souhaitez, elles servent a personnaliser automatiquement votre CV et ' +
-      'votre lettre de motivation, pour faciliter leur mise en forme dans un gabarit Canva ou Word.</p>' +
-      '<p>Ce site est un outil statique, herberge sur GitHub : il ne collecte, ne stocke ni ne conserve aucune de vos ' +
-      'donnees. Elles restent uniquement dans votre navigateur, le temps de votre session.</p>' +
-      '<div class="text-end"><button type="button" class="btn btn-primary btn-sm" id="fermerInfoIdentiteBtn2">Entendu</button></div>' +
-    '</div>';
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermerModaleInfoIdentite(); } });
-  document.getElementById('fermerInfoIdentiteBtn1').addEventListener('click', fermerModaleInfoIdentite);
-  document.getElementById('fermerInfoIdentiteBtn2').addEventListener('click', fermerModaleInfoIdentite);
-  requestAnimationFrame(function () { overlay.classList.add('visible'); });
-}
-
 
 function ouvrirModaleConfidentialite() {
   if (document.getElementById('modaleConfidentialite')) { return; }
@@ -1377,9 +1590,9 @@ function pageChoixCV() {
         '<p>Decouvrez gratuitement les ateliers thematiques et les visites d\'entreprise proposes par l\'ERIP du Bergeracois.</p>' +
         '<p class="carte-erip-action">&#128073; Voir les prochaines dates &#8599;</p>' +
       '</a>' +
-      '<div class="carte carte-entretien-direct" id="carteEntretienDirect"><i class="bi bi-mic"></i>' +
-        '<h3>Préparer un entretien</h3>' +
-        '<p>Vous avez déjà un CV ? Lancez directement votre préparation, sans passer par tout le parcours.</p>' +
+      '<div class="carte carte-entretien-direct" id="btnPreparationAccueil"><i>&#128188;</i>' +
+        '<h3>Boîte à outils</h3>' +
+        '<p>Préparez un entretien ou co-construisez votre lettre de motivation avec l\'assistant IA.</p>' +
       '</div>' +
     '</div>' +
     // TACHE 33A : Explorateur de la Base de connaissances ERIP — grand rectangle
@@ -1404,10 +1617,16 @@ function pageChoixCV() {
   });
   document.getElementById('btnConfidentialite').addEventListener('click', ouvrirModaleConfidentialite);
 
-  // TACHE 36 : parcours autonome "Preparer un entretien"
-  var carteEntretienDirect = document.getElementById('carteEntretienDirect');
-  if (carteEntretienDirect) {
-    carteEntretienDirect.addEventListener('click', ouvrirFenetreEntretienDirect);
+  // TACHE (retour utilisateur : icone mallette unique) : remplace l'ancienne
+  // carte "Preparer un entretien" ET le bouton crayon separe -- un seul clic
+  // ouvre desormais un choix entre les deux parcours (ouvrirChoixPreparationAccueil,
+  // metiers.js), qui appelle lui-meme ouvrirParcoursEntretien() ou
+  // ouvrirDepotLettreV1() selon le choix de la personne.
+  var btnPreparationAccueil = document.getElementById('btnPreparationAccueil');
+  if (btnPreparationAccueil) {
+    btnPreparationAccueil.addEventListener('click', function () {
+      if (typeof ouvrirChoixPreparationAccueil === 'function') { ouvrirChoixPreparationAccueil(); }
+    });
   }
 
   // TACHE 33A : Explorateur de la Base de connaissances ERIP
@@ -1686,6 +1905,8 @@ function pageSelectionCatalogue(config) {
     });
   app.innerHTML = html;
 
+  wireAccordeon(function () { pageSelectionCatalogue(config); });
+
   var inputRecherche = document.getElementById('rechercheCatalogueInput');
   inputRecherche.addEventListener('input', function () {
     etat.recherche = this.value;
@@ -1960,13 +2181,13 @@ function contenuCandidature() {
     var boutonImportCand = autresSectionsG(GROUPE_CANDIDATURE, o)
       ? '<div class="text-end mb-2"><button class="btn btn-sm btn-outline-primary" id="importDetails">&#128229; Importer des informations</button></div>'
       : '';
-    return boutonImportCand +
+    return '<div id="zoneCandidatureChamps">' + boutonImportCand +
       '<p class="mb-2">' + intro + '</p>' +
       champLien +
       '<div class="row g-2">' +
       '<div class="col-md-6"><input type="text" class="form-control form-control-sm" id="offreStructure" placeholder="' + labelStructure + '" value="' + (of.structure || '') + '"></div>' +
       '<div class="col-md-6"><input type="text" class="form-control form-control-sm" id="offrePoste" placeholder="' + labelPoste + '" value="' + (of.poste || '') + '"></div>' +
-      '</div>';
+      '</div></div>';
   }
   if (o === 'stage' || o === 'alternance' || o === 'pmsmp') {
     var im = dossier[CLE_DETAILS[o]];
@@ -1974,7 +2195,7 @@ function contenuCandidature() {
     var boutonImport = autresSectionsRenseignees(o)
       ? '<div class="text-end mb-2"><button class="btn btn-sm btn-outline-primary" id="importDetails">&#128229; Importer des informations</button></div>'
       : '';
-    return boutonImport +
+    return '<div id="zoneCandidatureChamps">' + boutonImport +
       '<p class="mb-2">Si vous connaissez déjà ces informations, renseignez-les : elles seront transmises à l\'IA.</p>' +
       '<div class="mb-3"><label class="form-label small">Adresse internet (facultatif)</label>' +
       '<input type="url" class="form-control form-control-sm" id="immLien" placeholder="https://..." value="' + (im.lien || '') + '"></div>' +
@@ -1986,7 +2207,7 @@ function contenuCandidature() {
       '<div class="col-md-4"><input type="text" class="form-control form-control-sm" id="immDuree" placeholder="Durée" value="' + (im.duree || '') + '"></div>' +
       '<div class="col-md-4"><input type="text" class="form-control form-control-sm" id="immDates" placeholder="Dates" value="' + (im.dates || '') + '"></div>' +
       '<div class="col-md-4"><input type="text" class="form-control form-control-sm" id="immHeures" placeholder="Heures / semaine" value="' + (im.heures || '') + '"></div>' +
-      '</div>';
+      '</div></div>';
   }
   return '<p class="text-muted small">Aucun parcours de candidature sélectionné.</p>';
 }
@@ -2032,16 +2253,22 @@ function cvDisponible() {
 
 function informationsCandidatureSuffisantes() {
   var o = dossier.objectif;
+  // TACHE (retour utilisateur : bouton Valider desactive sans info) : le
+  // lien seul est deja presente comme une alternative valable ("Deux
+  // possibilites : collez le lien de l'offre, ou bien indiquez l'entreprise
+  // et le poste") -- la verification doit refleter cette meme regle
+  // partout, pas seulement dans le texte d'introduction.
   if (o === 'offre' || o === 'spontanee') {
     var c = dossier[o];
-    return !!(c && c.structure && c.poste);
+    return !!(c && (c.lien || (c.structure && c.poste)));
   }
   if (o === 'reconversion') {
-    return !!(dossier.reconversion && dossier.reconversion.poste);
+    var r = dossier.reconversion;
+    return !!(r && (r.lien || r.poste));
   }
   if (o === 'stage' || o === 'alternance' || o === 'pmsmp') {
     var im = dossier[CLE_DETAILS[o]];
-    return !!(im && im.structure);
+    return !!(im && (im.lien || im.structure));
   }
   return true;   // aucun objectif de candidature en cours : rien a signaler
 }
@@ -2108,6 +2335,12 @@ function supprimerSectionDetails(o) { supprimerSectionG(GROUPE_IMMERSION, o); }
 function ouvrirImportDetails(o) { ouvrirImportG(GROUPE_IMMERSION, o); }
 
 function wireObjectifDetails() {
+  // TACHE (retour utilisateur : bandeau Candidature) : cablee AVANT la
+  // synchronisation vers dossier ci-dessous (meme raison que pour
+  // l'identite : la majuscule doit etre appliquee avant la lecture de la
+  // valeur). L'adresse internet (type="url") n'est jamais mise en majuscule.
+  var zoneCandidature = document.getElementById('zoneCandidatureChamps');
+  if (zoneCandidature) { activerChampsStandardises(zoneCandidature); }
   function lier(id, obj, cle) {
     var el = document.getElementById(id);
     if (el) { el.addEventListener('input', function () { obj[cle] = this.value; }); }
@@ -2171,7 +2404,7 @@ function wireDisponibilite(rerender) {
 // provoquent pas de rerender (pour ne pas perdre le focus a chaque frappe) ;
 // civilite et anonymiser/personnaliser (pastilles) redessinent la page.
 function wireIdentite(rerender) {
-  dossier.identite = dossier.identite || { civilite: null, nom: '', prenom: '', adresse: '', telephone: '', email: '', ville: '', age: '' };
+  dossier.identite = dossier.identite || { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' };
   // TACHE (refonte Mon projet, bloc 1) : civilite en pastilles cliquables
   // (remplace les anciens boutons radio), meme principe que .permis-cat.
   document.querySelectorAll('[data-civilite]').forEach(function (el) {
@@ -2188,18 +2421,81 @@ function wireIdentite(rerender) {
       rerender();
     });
   });
-  var champs = { identiteNom: 'nom', identitePrenom: 'prenom', identiteAdresse: 'adresse', identiteTelephone: 'telephone', identiteEmail: 'email', identiteVille: 'ville', identiteAge: 'age' };
+  // TACHE (retour utilisateur : generalisation "champs standardises") :
+  // reutilise activerChampsStandardises(), deja construite pour la page
+  // Action -- majuscule automatique + Entree = champ suivant. Scope a
+  // #zoneIdentiteChamps (pas tout le document) pour ne pas interferer avec
+  // d'autres champs ouverts simultanement ailleurs sur "Mon Projet". Cablee
+  // AVANT la synchronisation vers dossier.identite juste en dessous, pour
+  // que cette derniere lise bien la valeur deja mise en majuscule.
+  var zoneIdentite = document.getElementById('zoneIdentiteChamps');
+  if (zoneIdentite) { activerChampsStandardises(zoneIdentite); }
+  var champs = { identiteNom: 'nom', identitePrenom: 'prenom', identiteAdresse: 'adresse', identiteCodePostal: 'codePostal', identiteTelephone: 'telephone', identiteEmail: 'email', identiteVille: 'ville' };
   Object.keys(champs).forEach(function (idChamp) {
     var el = document.getElementById(idChamp);
     if (el) { el.addEventListener('input', function () { dossier.identite[champs[idChamp]] = this.value; }); }
   });
-  // TACHE (refonte Mon projet, bloc 1) : Anonymiser/Personnaliser en pastilles
-  // cliquables (fusion de l'ancienne rubrique "Confidentialite" separee).
-  document.querySelectorAll('[data-anon]').forEach(function (el) {
-    el.addEventListener('click', function () { dossier.anonymiser = (this.dataset.anon === 'oui'); rerender(); });
-  });
-  var btnInfo = document.getElementById('btnInfoConfidentialite');
-  if (btnInfo) { btnInfo.addEventListener('click', ouvrirModaleInfoIdentite); }
+
+  // TACHE (photo optionnelle) : upload -> redimensionnement cote client
+  // (evite un base64 demesure, ralentirait l'app et alourdirait le .docx
+  // pour rien -- une photo de CV n'a jamais besoin d'etre en haute
+  // definition) -> stockage dans dossier.photo.url. Case "inclure" separee
+  // du simple fait d'avoir televerse une photo (jamais d'inclusion
+  // automatique, voir contenuIdentite()).
+  var inputPhoto = document.getElementById('inputPhotoIdentite');
+  if (inputPhoto) {
+    inputPhoto.addEventListener('change', function () {
+      var fichier = this.files && this.files[0];
+      if (!fichier) { return; }
+      if (!fichier.type || fichier.type.indexOf('image/') !== 0) { alert('Merci de choisir un fichier image (JPG, PNG...).'); return; }
+      var lecteur = new FileReader();
+      lecteur.onload = function (evenement) {
+        var img = new Image();
+        img.onload = function () {
+          // Redimensionne au carre (400x400 max), recadre au centre --
+          // suffisant pour un CV, garde un fichier leger.
+          var taille = 400;
+          var canvas = document.createElement('canvas');
+          canvas.width = taille; canvas.height = taille;
+          var ctx = canvas.getContext('2d');
+          var cote = Math.min(img.width, img.height);
+          var sx = (img.width - cote) / 2, sy = (img.height - cote) / 2;
+          ctx.drawImage(img, sx, sy, cote, cote, 0, 0, taille, taille);
+          dossier.photo = { url: canvas.toDataURL('image/jpeg', 0.85), inclure: true };
+          rerender();
+        };
+        img.onerror = function () { alert('Impossible de lire cette image, essayez-en une autre.'); };
+        img.src = evenement.target.result;
+      };
+      lecteur.readAsDataURL(fichier);
+    });
+  }
+  var checkInclurePhoto = document.getElementById('checkInclurePhoto');
+  if (checkInclurePhoto) {
+    checkInclurePhoto.addEventListener('change', function () {
+      dossier.photo = dossier.photo || { url: null, inclure: false };
+      dossier.photo.inclure = this.checked;
+    });
+  }
+  var btnSupprimerPhoto = document.getElementById('btnSupprimerPhoto');
+  if (btnSupprimerPhoto) {
+    btnSupprimerPhoto.addEventListener('click', function () {
+      dossier.photo = { url: null, inclure: false };
+      rerender();
+    });
+  }
+  var btnValiderPhotoRetourApercu = document.getElementById('btnValiderPhotoRetourApercu');
+  if (btnValiderPhotoRetourApercu) {
+    btnValiderPhotoRetourApercu.addEventListener('click', function () {
+      // TACHE (retour utilisateur : bouton Valider) : ouvre directement
+      // l'etape CV + l'accordeon "Apercu et finalisation" (memes cles
+      // qu'utilisees partout ailleurs pour ce document -- voir
+      // avancerEtape()/etapeAtteinte()).
+      dossier.dernierDocumentPrepare = 'cv';
+      etatAccordeon['apercu-document'] = true;
+      naviguerVers('resultats');
+    });
+  }
 }
 
 function wireMobilite(rerender) {
@@ -2366,8 +2662,13 @@ function pageProjet() {
     '<div class="text-center"><h1>&#128203; Mon projet</h1>' +
     '<p class="sousTitre">Les informations qui personnaliseront votre candidature.</p></div>' +
     '<div class="grille-mon-projet">' +
-    '<div class="rangee-mon-projet">' + blocERIP(CONFIG_BLOC_VOUS) + blocERIP(CONFIG_BLOC_CANDIDATURE) + '</div>' +
-    '<div class="rangee-mon-projet">' + blocERIP(CONFIG_BLOC_PROJET) + blocERIP(CONFIG_BLOC_PARCOURS) + blocERIP(CONFIG_BLOC_COMPLEMENTS) + '</div>' +
+    // TACHE (retour utilisateur : reorganisation Mon Projet, 3+3) : gauche
+    // (Vous / Experiences et savoir-faire personnels / Complements) et
+    // droite (Parcours / Projet professionnel / Candidature), alignes ligne
+    // par ligne.
+    '<div class="rangee-mon-projet">' + blocERIP(CONFIG_BLOC_VOUS) + blocERIP(CONFIG_BLOC_PARCOURS) + '</div>' +
+    '<div class="rangee-mon-projet">' + blocERIP(CONFIG_BLOC_EXPERIENCES_PERSO) + blocERIP(CONFIG_BLOC_PROJET) + '</div>' +
+    '<div class="rangee-mon-projet">' + blocERIP(CONFIG_BLOC_COMPLEMENTS) + blocERIP(CONFIG_BLOC_CANDIDATURE) + '</div>' +
     '</div>' +
     // TACHE (complement) : barre de navigation fixee en bas de l'ecran,
     // toujours visible sans avoir a defiler, quel que soit le nombre de
@@ -2378,6 +2679,7 @@ function pageProjet() {
 
   wireBlocERIP(CONFIG_BLOC_VOUS, pageProjet);
   wireBlocERIP(CONFIG_BLOC_PARCOURS, pageProjet);
+  wireBlocERIP(CONFIG_BLOC_EXPERIENCES_PERSO, pageProjet);
   wireBlocERIP(CONFIG_BLOC_PROJET, pageProjet);
   wireBlocERIP(CONFIG_BLOC_CANDIDATURE, pageProjet);
   wireBlocERIP(CONFIG_BLOC_COMPLEMENTS, pageProjet);
@@ -2455,6 +2757,9 @@ function metierEstHorsRepertoire(nom) {
 function ajouterMetierHorsRepertoire(nom) {
   nom = (nom || '').trim();
   if (!nom) { return false; }
+  // TACHE (retour utilisateur : barre de recherche unique) : premiere
+  // lettre en majuscule, coherent avec les intitules du repertoire.
+  nom = nom.charAt(0).toUpperCase() + nom.slice(1);
   if (dossier.metiersHorsRepertoire.length >= LIMITE_METIERS_HORS_REPERTOIRE) { return false; }
   if (dossier.metiersHorsRepertoire.indexOf(nom) !== -1) { return false; }
   dossier.metiersHorsRepertoire.push(nom);
@@ -2493,15 +2798,25 @@ function ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender) {
       ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender);
     });
   });
+  // TACHE (retour utilisateur, comportement confirme) : cas "candidature
+  // deja remplie" -- pastilles au lieu de radios (voir blocTypeCV()).
+  panneau.querySelectorAll('[data-typecv-candidature-remplie]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      if (this.dataset.typecvCandidatureRemplie === 'general') {
+        dossier.typeCV = 'general';
+        revelerSpecifiqueCandidatureRemplie = true;
+        rerender();
+        ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender);
+      } else {
+        dossier.typeCV = 'specifique';
+        ouvrirFenetreCandidatureRapide(rerender, function () { ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender); });
+      }
+    });
+  });
   var btnPersonnaliser = panneau.querySelector('#btnPersonnaliserCandidature');
   if (btnPersonnaliser) {
     btnPersonnaliser.addEventListener('click', function () {
-      blocsAMettreEnEvidence.candidature = !informationsCandidatureSuffisantes();
-      blocsAMettreEnEvidence.mobilite = (dossier.permis.possede === null);
-      blocsAMettreEnEvidence.formation = dossier.formations.length === 0;
-      blocsAMettreEnEvidence.metier = !dossier.metierCible;
-      fermerPanneauGuide();
-      naviguerVers('projet');
+      ouvrirFenetreCandidatureRapide(rerender, function () { ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender); });
     });
   }
 }
@@ -2512,8 +2827,22 @@ function ouvrirPanneauChoixMetierHorsRepertoire(nom, rerender) {
 // produit deja des labels flex/wrap gr\u00e2ce a .type-cv-choix) -- meme fonction
 // qu'auparavant (dossier.typeCV), juste cablee ici plutot que sur la page Action.
 function ouvrirPanneauChoixMetierParmiCandidats(rerender) {
-  var lignes = dossier.metiersCandidats.map(function (nom) {
-    return '<div class="ligne-metier-associe" data-metier-nom-cible="' + echapperAttribut(nom) + '"><span>' + nom + '</span></div>';
+  // TACHE (uniformisation, quelle que soit l origine du metier) : combine
+  // catalogue ET saisie libre dans la MEME liste -- un seul et meme
+  // parcours de finalisation, peu importe la source.
+  var tousLesMetiers = dossier.metiersCandidats.concat(dossier.metiersHorsRepertoire);
+  var lignes = tousLesMetiers.map(function (nom) {
+    // TACHE (retour utilisateur : le metier choisi doit rester visible) :
+    // avant, rien ne comparait "nom" a dossier.metierCible -- le
+    // surlignage se perdait a chaque reouverture du panneau (notamment au
+    // changement general/specifique, qui reconstruit ce panneau). Style en
+    // inline (pas d'acces au vrai css/style.css dans ce projet, deja
+    // signale) pour garantir un retour visuel fiable quelle que soit la
+    // classe CSS externe.
+    var estActif = dossier.metierCible === nom;
+    return '<div class="ligne-metier-associe' + (estActif ? ' ligne-metier-associe-active' : '') + '" data-metier-nom-cible="' + echapperAttribut(nom) + '"' +
+      (estActif ? ' style="background:#0d6efd;color:#FFFFFF;border-color:#0d6efd;"' : '') +
+      '><span>' + nom + '</span></div>';
   }).join('');
   var panneau = ouvrirPanneauGuide('&#127919; Choisissez le metier',
     '<p class="text-muted small">Choisissez le metier pour lequel personnaliser votre CV, votre lettre de motivation et votre preparation a l\'entretien :</p>' + lignes +
@@ -2534,15 +2863,25 @@ function ouvrirPanneauChoixMetierParmiCandidats(rerender) {
       ouvrirPanneauChoixMetierParmiCandidats(rerender);
     });
   });
+  // TACHE (retour utilisateur, comportement confirme) : cas "candidature
+  // deja remplie" -- pastilles au lieu de radios (voir blocTypeCV()).
+  panneau.querySelectorAll('[data-typecv-candidature-remplie]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      if (this.dataset.typecvCandidatureRemplie === 'general') {
+        dossier.typeCV = 'general';
+        revelerSpecifiqueCandidatureRemplie = true;
+        rerender();
+        ouvrirPanneauChoixMetierParmiCandidats(rerender);
+      } else {
+        dossier.typeCV = 'specifique';
+        ouvrirFenetreCandidatureRapide(rerender, function () { ouvrirPanneauChoixMetierParmiCandidats(rerender); });
+      }
+    });
+  });
   var btnPersonnaliser = panneau.querySelector('#btnPersonnaliserCandidature');
   if (btnPersonnaliser) {
     btnPersonnaliser.addEventListener('click', function () {
-      blocsAMettreEnEvidence.candidature = !informationsCandidatureSuffisantes();
-      blocsAMettreEnEvidence.mobilite = (dossier.permis.possede === null);
-      blocsAMettreEnEvidence.formation = dossier.formations.length === 0;
-      blocsAMettreEnEvidence.metier = !dossier.metierCible;
-      fermerPanneauGuide();
-      naviguerVers('projet');
+      ouvrirFenetreCandidatureRapide(rerender, function () { ouvrirPanneauChoixMetierParmiCandidats(rerender); });
     });
   }
 }
@@ -2595,29 +2934,6 @@ function ouvrirPanneauChoixSecteur(rerender) {
 // TACHE (complement demande) : detail au clic sur le nom d'un candidat --
 // savoir-etre/savoir-faire/savoirs + fiche ROME, integre au flux (pas une
 // fenetre positionnee pixel par pixel), un seul ouvert a la fois.
-// TACHE (demande : bloc "Vous" + Je valide sur la page Action) : etat
-// transitoire (pas dans "dossier", ca n'a pas de sens de le sauvegarder) --
-// quelle carte (cv/lettre/entretien) attend que l'identite soit completee,
-// et si le bloc "Vous" doit etre mis en evidence (rouge) apres un clic sur
-// une carte alors que l'identite n'est pas complete.
-var demandeOutilEnAttente = null;
-var identiteActionEnEvidence = false;
-// TACHE (demande) : "toutes les zones de texte" = nom/prenom/telephone/
-// e-mail/adresse/ville/age. La civilite a toujours une valeur par defaut
-// ("Ne pas preciser"), donc pas comptee comme un champ "a completer".
-// TACHE (correction bug : collision de nom) : renommee -- une fonction
-// "identiteEstComplete" existait DEJA (utilisee par Mon Projet pour son
-// propre indicateur ✅, criteres differents : sans ville/age, avec civilite
-// obligatoire). Les deux fonctions portant le meme nom, la seconde
-// (existante, plus bas dans le fichier) ecrasait silencieusement la
-// mienne : le bouton "Je valide" n'appliquait donc PAS le bon critere.
-function identiteActionEstComplete() {
-  var id = dossier.identite || {};
-  return !!(String(id.nom || '').trim() && String(id.prenom || '').trim() &&
-    String(id.telephone || '').trim() && String(id.email || '').trim() &&
-    String(id.adresse || '').trim() && String(id.ville || '').trim() &&
-    String(id.age || '').trim());
-}
 // TACHE (demande : synchronisation identite <-> "Votre identite") : garde
 // une reference vers la derniere fenetre IA ouverte (Creer CV/Lettre/
 // Entretien), pour pouvoir y repercuter en direct un changement fait dans
@@ -2769,35 +3085,36 @@ function banniereMetierCible() {
   // d'ajout "hors repertoire" (pas les metiers deja choisis, voir plus bas)
   // disparaissent pour alleger le bloc. Reapparaissent immediatement si
   // "Tout effacer" est utilise (actif redevient faux).
+  // TACHE (retour utilisateur : barre de recherche unique) : fusion de la
+  // recherche dans le repertoire et de l'ajout "hors repertoire" -- une
+  // seule zone de saisie desormais. Si des suggestions correspondent,
+  // Entree ne fait rien (il faut cliquer une suggestion, comme avant) ;
+  // seulement si AUCUNE suggestion ne correspond, Entree ajoute le texte
+  // tape tel quel comme metier hors repertoire (voir wireRechercheMetierCible).
   var zoneRecherche = actif ? '' : '<div class="banniere-metier-cible-recherche">' +
-    '<p class="mb-1 small fw-semibold">&#128269; Recherchez et cliquez sur un métier pour l\'ajouter comme candidat :</p>' +
+    '<p class="mb-1 small fw-semibold">&#128269; Recherchez un métier : s\'il est dans notre répertoire, cliquez ' +
+    'dessus pour l\'ajouter. Sinon, appuyez sur Entrée pour l\'ajouter tel quel :</p>' +
     '<input type="text" class="form-control" id="rechercheMetierCibleInput" ' +
     'placeholder="Un métier, une compétence, une valeur...">' +
     '<div id="resultatsMetierCible"></div>' +
     '</div>';
 
-  // TACHE (demande : metiers hors repertoire) : bouton discret sous la zone
-  // de recherche, puis une saisie libre (max 3, hors de la limite de 5).
+  // TACHE (demande : metiers hors repertoire) : la saisie libre se fait
+  // desormais directement dans la barre de recherche ci-dessus (voir
+  // wireRechercheMetierCible) -- seuls les metiers hors repertoire DEJA
+  // ajoutes restent affiches ici (chips), plus de bouton/champ separes.
   var horsRepertoire = dossier.metiersHorsRepertoire;
   var horsRepertoireComplet = horsRepertoire.length >= LIMITE_METIERS_HORS_REPERTOIRE;
-  // TACHE (hierarchie visuelle) : le bouton "Votre metier n'est pas dans
-  // notre repertoire ?" (ajout) est masque en mode compact -- mais les
-  // metiers hors repertoire DEJA selectionnes restent toujours visibles
-  // (ce sont des "metiers selectionnes", a conserver dans tous les cas).
-  var zoneAjoutHorsRepertoire = actif ? '' : '<button type="button" class="btn-hors-repertoire" id="btnToggleHorsRepertoire" type="button">' +
-    '&#128161; Votre métier n\'est pas dans notre répertoire ?</button>' +
-    '<div class="hors-repertoire-saisie" id="zoneSaisieHorsRepertoire" hidden>' +
-    (horsRepertoireComplet
-      ? '<p class="small text-muted mb-0 mt-2">Vous avez atteint le maximum de 3 métiers saisis librement.</p>'
-      : '<input type="text" class="form-control form-control-sm mt-2" id="inputHorsRepertoire" ' +
-        'placeholder="Tapez l\'intitulé du métier puis appuyez sur Entrée...">') +
-    '</div>';
-  var zoneHorsRepertoire = '<div class="banniere-metier-cible-hors-repertoire">' +
-    zoneAjoutHorsRepertoire +
-    (horsRepertoire.length
-      ? '<div class="metiers-chips mt-2">' + horsRepertoire.map(pastilleMetierHorsRepertoireHTML).join('') + '</div>'
-      : '') +
-    '</div>';
+  var zoneHorsRepertoire = (horsRepertoire.length || (horsRepertoireComplet && !actif))
+    ? '<div class="banniere-metier-cible-hors-repertoire">' +
+      (horsRepertoire.length
+        ? '<div class="metiers-chips mt-2">' + horsRepertoire.map(pastilleMetierHorsRepertoireHTML).join('') + '</div>'
+        : '') +
+      (horsRepertoireComplet && !actif
+        ? '<p class="small text-muted mb-0 mt-2">Vous avez atteint le maximum de 3 métiers saisis librement.</p>'
+        : '') +
+      '</div>'
+    : '';
 
   var candidats = dossier.metiersCandidats;
   var htmlPastillesCandidats = candidats.length
@@ -2811,7 +3128,9 @@ function banniereMetierCible() {
   // y a plusieurs metiers a regrouper). Un texte invite desormais a cliquer
   // pour finaliser le choix.
   var htmlChoixMode = '';
-  if (candidats.length >= 1) {
+  // TACHE (uniformisation) : la section de finalisation s affiche des qu au
+  // moins un metier existe, peu importe sa source (catalogue ou saisie libre).
+  if (candidats.length + horsRepertoire.length >= 1) {
     var estMetier = dossier.modeMetierCible === 'metier';
     var estSecteur = dossier.modeMetierCible === 'secteur';
     var choixDejaFait = !!(dossier.metierCible || dossier.secteurCible);
@@ -2970,26 +3289,6 @@ function wireBanniereMetierCible(rerender) {
     });
   }
 
-  // TACHE (demande : metiers hors repertoire) : afficher/masquer la saisie
-  // (pas besoin de re-rendu complet pour ca), validation par la touche
-  // Entree, selection directe et retrait d'un metier hors repertoire.
-  var btnToggleHR = document.getElementById('btnToggleHorsRepertoire');
-  var zoneSaisieHR = document.getElementById('zoneSaisieHorsRepertoire');
-  if (btnToggleHR && zoneSaisieHR) {
-    btnToggleHR.addEventListener('click', function () {
-      zoneSaisieHR.hidden = !zoneSaisieHR.hidden;
-      var champ = document.getElementById('inputHorsRepertoire');
-      if (!zoneSaisieHR.hidden && champ) { champ.focus(); }
-    });
-  }
-  var inputHR = document.getElementById('inputHorsRepertoire');
-  if (inputHR) {
-    inputHR.addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter') { return; }
-      e.preventDefault();
-      if (ajouterMetierHorsRepertoire(this.value)) { rerender(); }
-    });
-  }
   document.querySelectorAll('[data-metier-hr-cible]').forEach(function (el) {
     el.addEventListener('click', function () {
       ouvrirPanneauChoixMetierHorsRepertoire(this.dataset.metierHrCible, rerender);
@@ -3003,13 +3302,37 @@ function wireBanniereMetierCible(rerender) {
     });
   });
 }
+// TACHE (autocompletion, mise en evidence) : affichage uniquement -- entoure
+// la portion du nom qui correspond au texte tape d'un <mark>. Insensible aux
+// accents/majuscules (comme la recherche elle-meme), jamais utilisee pour
+// filtrer ou trier : rechercherMetiersPourAjout() reste seule responsable de ca.
+function surlignerCorrespondance(nom, texteRecherche) {
+  var texte = (texteRecherche || '').trim();
+  if (!texte) { return echapperAttribut(nom); }
+  var nomNormalise = normaliserTexte(nom);
+  var texteNormalise = normaliserTexte(texte);
+  var index = nomNormalise.indexOf(texteNormalise);
+  if (index === -1) { return echapperAttribut(nom); }
+  var avant = nom.slice(0, index);
+  var correspondance = nom.slice(index, index + texte.length);
+  var apres = nom.slice(index + texte.length);
+  return echapperAttribut(avant) + '<mark>' + echapperAttribut(correspondance) + '</mark>' + echapperAttribut(apres);
+}
 function wireRechercheMetierCible(rerender) {
   var input = document.getElementById('rechercheMetierCibleInput');
   var zoneResultats = document.getElementById('resultatsMetierCible');
   if (!input || !zoneResultats) { return; }
+  // TACHE (retour utilisateur : barre de recherche unique) : suit le
+  // nombre de suggestions actuellement affichees -- Entree n'ajoute le
+  // texte tape comme metier hors repertoire QUE si AUCUNE suggestion ne
+  // correspond (evite qu'une faute de frappe proche d'un metier existant
+  // devienne une fiche a part, alors que le vrai metier est juste en dessous).
+  var dernierNombreResultats = 0;
   function rafraichirResultats() {
     var texte = input.value;
     var resultats = rechercherMetiersPourAjout(texte);
+    dernierNombreResultats = resultats.length;
+    var texteAssezLong = normaliserTexte(texte).trim().length >= 2;
     zoneResultats.innerHTML = resultats.length
       ? resultats.map(function (m) {
           var bloque = metierEstBloque(m.nom);
@@ -3019,9 +3342,12 @@ function wireRechercheMetierCible(rerender) {
           return '<div class="option-metier-ajout' + (bloque ? ' option-metier-ajout-bloque' : '') + '" ' +
             (bloque ? '' : 'data-metier-cible-direct="' + echapperAttribut(m.nom) + '" ') +
             (bloque ? 'title="Retirez d\'abord un métier cible pour en ajouter un autre"' : '') + '>' +
-            '<span class="option-metier-ajout-nom">&#128204; ' + m.nom + lienRome + '</span></div>';
+            '<span class="option-metier-ajout-nom">&#128204; ' + surlignerCorrespondance(m.nom, texte) + lienRome + '</span></div>';
         }).join('')
-      : (normaliserTexte(texte).trim().length >= 2 ? '<p class="text-muted small">Aucun metier trouve.</p>' : '');
+      : (texteAssezLong
+          ? '<p class="text-muted small">Aucun métier trouvé dans notre répertoire — appuyez sur <strong>Entrée</strong> ' +
+            'pour l\'ajouter tel quel.</p>'
+          : '');
     zoneResultats.querySelectorAll('[data-metier-cible-direct]').forEach(function (el) {
       el.addEventListener('click', function (e) {
         if (e.target.closest('a')) { return; }
@@ -3031,6 +3357,15 @@ function wireRechercheMetierCible(rerender) {
     });
   }
   input.addEventListener('input', rafraichirResultats);
+  input.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') { return; }
+    e.preventDefault();
+    // TACHE : rien a faire si des suggestions du repertoire correspondent
+    // (il faut cliquer dessus) ou si le texte est trop court/vide.
+    if (dernierNombreResultats > 0) { return; }
+    if (normaliserTexte(this.value).trim().length < 2) { return; }
+    if (ajouterMetierHorsRepertoire(this.value)) { rerender(); }
+  });
 }
 // TACHE (refonte Potentiel, Etape B — correction) : "Pourquoi ces metiers ?"
 // doit toujours porter sur EXACTEMENT les memes metiers que le resume/
@@ -3098,7 +3433,7 @@ function contenuPourquoiMetiers() {
 function contenuTousMetiers() {
   var liste = metiersRecommandes();
   if (!liste.length) { return '<p class="text-muted small">Aucun metier recommande pour le moment.</p>'; }
-  return '<p class="mb-2">Cliquez sur un metier pour le definir comme metier cible (CV, lettre, entretien).</p>' +
+  return '<p class="mb-2">' + animationCliquezIci() + ' Cliquez sur un metier pour le definir comme metier cible (CV, lettre, entretien).</p>' +
     '<div class="metiers-chips">' + liste.map(function (nom, i) { return carteMetierResumeHTML(nom, 'metiers', i); }).join('') + '</div>';
 }
 // Sous-section 3 : "Ajouter un metier" -- moteur de recherche intelligent
@@ -3212,11 +3547,26 @@ var CONFIG_BLOC_METIERS = {
 // derive automatiquement (deduireCompetences/obtenirSavoirs, deja existantes) :
 // pas de croix de reinitialisation (rien a "effacer" ici), pastilles de
 // resume informatives (pas de suppression individuelle possible).
+// TACHE (retour utilisateur : compétences invisibles après import) :
+// categorieCompetence est une table FIGEE (~50 libelles internes du
+// referentiel de l'app) -- une competence extraite par l'IA depuis un vrai
+// CV ("Pilotage operationnel du projet", "Recueil et analyse des besoins
+// de formation"...) n'y figure presque jamais mot pour mot, et etait donc
+// silencieusement ecartee du comptage/affichage (categorieReelleCompetence(c)
+// === undefined, ni "Savoir-etre" ni "Savoir-faire"). Corrige : toute
+// competence NON reconnue dans la table (donc typiquement une competence
+// importee) est desormais rattachee par defaut au bucket "Savoir-faire" --
+// choix pragmatique assumee (la plupart des competences professionnelles
+// extraites d'un CV reel sont des savoir-faire), pas une categorisation
+// fiable a 100%. A ajuster si besoin d'une repartition plus precise.
 function savoirEtreActuels() {
-  return deduireCompetences().filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; });
+  return deduireCompetences().filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; });
 }
 function savoirFaireActuels() {
-  return deduireCompetences().filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; });
+  return deduireCompetences().filter(function (c) {
+    var cat = categorieReelleCompetence(c);
+    return cat === 'Savoir-faire' || cat === undefined;
+  });
 }
 // TACHE (correction, fonction retrouvee) : clic sur une competence (Analyse
 // de votre profil) -> metiers associes (trouverMetiersAssocies, deja
@@ -3463,7 +3813,7 @@ function pistesSupplementaires() {
 function contenuAutresPistes() {
   var noms = pistesSupplementaires();
   if (!noms.length) { return '<p class="text-muted small">Aucun autre metier disponible avec ces criteres pour le moment.</p>'; }
-  return '<p class="mb-2">Cliquez sur un metier pour le definir comme metier cible (CV, lettre, entretien).</p>' +
+  return '<p class="mb-2">' + animationCliquezIci() + ' Cliquez sur un metier pour le definir comme metier cible (CV, lettre, entretien).</p>' +
     '<div class="metiers-chips">' + noms.map(function (nom) {
       var fiche = metierParNom(nom);
       var estCible = dossier.metierCible === nom;
@@ -3606,8 +3956,12 @@ function metiersPourSynthese() {
 }
 function contenuPointsForts() {
   var metiersTop = metiersPourSynthese();
-  if (!metiersTop.length) { return '<p class="text-muted small">Rien renseigne pour le moment.</p>'; }
-  return '<p class="mb-2 fw-semibold small">Les métiers qui correspondent le mieux à l\'ensemble de vos critères :</p>' +
+  var messageOrigine = (pointsFortsSynthese().length === 0 && ((dossier.competencesCV || []).length > 0 || (dossier.savoirsCV || []).length > 0))
+    ? '<p class="text-muted small mb-2">Ce résumé s\'appuie surtout sur les réponses du questionnaire "Mon Projet" -- ' +
+      'les compétences de votre CV importé sont déjà prises en compte ci-dessous et dans "Métiers recommandés".</p>'
+    : '';
+  if (!metiersTop.length) { return messageOrigine + '<p class="text-muted small">Rien renseigne pour le moment.</p>'; }
+  return messageOrigine + '<p class="mb-2 fw-semibold small">Les métiers qui correspondent le mieux à l\'ensemble de vos critères :</p>' +
     '<div class="metiers-chips">' + metiersTop.map(function (m) {
       var bloque = metierEstBloque(m.nom);
       var lienRome = m.rome
@@ -3633,7 +3987,22 @@ var CONFIG_BLOC_CORRESPONDANCE = {
   id: 'correspondance', icone: '&#128161;', titre: 'Ce qui vous correspond',
   masquerReset: true, // synthese derivee automatiquement, rien a "effacer" ici
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
-  compteurTexte: function () { return pointsFortsSynthese().length + ' points forts'; },
+  // TACHE (retour utilisateur : "0 points forts" pour un profil importe) :
+  // pointsFortsSynthese() ne repose QUE sur le questionnaire guide
+  // (activites/actions/environnement/valeurs) -- vide pour une personne
+  // passee par l'import de CV, sans lien possible avec le texte libre du
+  // CV (aucune fonction de rapprochement CV importe <-> ces catalogues
+  // n'existe aujourd'hui, contrairement a ce qu'un commentaire plus bas
+  // laissait supposer). Plutot que de forcer de faux "points forts" non
+  // cliquables utilement (aucun metier associe trouvable pour du texte
+  // libre), le compteur reste honnete dans ce cas precis.
+  compteurTexte: function () {
+    var n = pointsFortsSynthese().length;
+    if (n === 0 && ((dossier.competencesCV || []).length > 0 || (dossier.savoirsCV || []).length > 0)) {
+      return 'basé sur le questionnaire';
+    }
+    return n + ' points forts';
+  },
   resumeHTML: resumePointsFortsHTML,
   sousSections: [
     {
@@ -3647,24 +4016,41 @@ var CONFIG_BLOC_CORRESPONDANCE = {
 function pageRevelation(conserverTirage) {
   if (!conserverTirage) { invaliderCacheMetiersRecommandes(); invaliderCachePistes(); invaliderCachePistesSuppl(); }
 
+  var messageAime = construireMessageAime();
+  // TACHE (retour utilisateur : blocs bases sur le questionnaire, sans
+  // interet pour un CV importe) : "Ce qui fait votre valeur" et "Ce qui
+  // vous correspond" derivent entierement des reponses au questionnaire
+  // guide (activites/actions/environnement/valeurs) -- vides ou quasi
+  // vides pour "j'ai un cv"/"mettre a jour mon cv". Plutot que d'afficher
+  // un message de repli ("base sur le questionnaire"), ces deux blocs sont
+  // desormais entierement masques hors parcours "creer un cv" (nouveau).
+  var afficherBlocsQuestionnaire = (dossier.modeCreation === 'nouveau');
   var html = afficherProgression('revelation') +
     '<div class="text-center"><h1>&#128302; Revelons votre potentiel</h1>' +
     '<p class="sousTitre">Au-dela de votre experience, voici ce qui fait votre valeur.</p></div>' +
-    '<div class="message-competences"><strong>Nous avons identifie chez vous :</strong><br>' +
-    'Vous aimez : <strong>' + construireMessageAime() + '</strong></div>' +
+    // TACHE (retour utilisateur) : accordeon (reutilise blocAccordeon(),
+    // meme principe que afficherCompetencesDetectees()/messageVAE()) --
+    // icone DIFFERENTE de celle des 4 pages precedentes (voir
+    // afficherCompetencesDetectees()), + compteur visible sans deplier.
+    (afficherBlocsQuestionnaire
+      ? blocAccordeon('potentiel-identifie',
+          '&#128142; Ce qui fait votre valeur <span class="badge bg-primary ms-1">' + messageAime.nombre + '</span>',
+          'Au-delà de votre expérience, l\'assistant a identifié ceci chez vous.',
+          'Vous aimez : <strong>' + messageAime.texte + '</strong>')
+      : '') +
     banniereMetierCible() +
     banniereJePostule() +
     messageVAE() +
     blocERIP(CONFIG_BLOC_METIERS) +
     blocERIP(CONFIG_BLOC_PROFIL) +
-    blocERIP(CONFIG_BLOC_CORRESPONDANCE) +
+    (afficherBlocsQuestionnaire ? blocERIP(CONFIG_BLOC_CORRESPONDANCE) : '') +
     blocERIP(CONFIG_BLOC_PISTES) +
     barreNavigation('projet', 'resultats', '&#128640; Passer a l\'action', { onclickSuivant: 'verifierAvantPasserAction()' });
   app.innerHTML = html;
 
   wireBlocERIP(CONFIG_BLOC_PISTES, function () { pageRevelation(true); });
 
-  wireBlocERIP(CONFIG_BLOC_CORRESPONDANCE, function () { pageRevelation(true); });
+  if (afficherBlocsQuestionnaire) { wireBlocERIP(CONFIG_BLOC_CORRESPONDANCE, function () { pageRevelation(true); }); }
 
   wireBlocERIP(CONFIG_BLOC_PROFIL, function () { pageRevelation(true); });
 
@@ -3729,7 +4115,36 @@ function blocLangues() {
 function contenuIdentite() {
   var id = dossier.identite || {};
   var civiliteVal = id.civilite || '';
-  return '<div class="d-flex flex-wrap gap-2 mb-2">' +
+  var photo = dossier.photo || { url: null, inclure: false };
+  // TACHE (photo optionnelle, retour utilisateur : "les personnes que
+  // j'accompagne et les CIP ne sont pas forcement favorables aux photos") :
+  // upload facultatif + case a cocher separee ("inclure sur le CV"),
+  // decochee par defaut MEME si une photo est deja telechargee -- jamais
+  // d'inclusion automatique. Stockee en base64 (dossier.photo.url), pas
+  // de televersement serveur (l'app n'en a pas).
+  var apercuPhoto = photo.url
+    ? '<img src="' + photo.url + '" alt="Aperçu" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;">'
+    : '<div style="width:64px;height:64px;border-radius:8px;border:1px dashed #D1D5DB;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:0.7rem;text-align:center;">Aucune<br>photo</div>';
+  var blocPhoto =
+    '<div class="d-flex align-items-center gap-3 mt-3 p-2" style="background:#F9FAFB;border-radius:8px;">' +
+    apercuPhoto +
+    '<div class="flex-grow-1">' +
+    '<label class="btn btn-sm btn-outline-secondary mb-1" for="inputPhotoIdentite">' + (photo.url ? 'Changer la photo' : 'Ajouter une photo (facultatif)') + '</label>' +
+    '<input type="file" accept="image/*" id="inputPhotoIdentite" class="visually-hidden">' +
+    (photo.url ? ' <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" id="btnSupprimerPhoto">Retirer</button>' : '') +
+    '<div class="form-check mt-1">' +
+    '<input class="form-check-input" type="checkbox" id="checkInclurePhoto"' + (photo.inclure ? ' checked' : '') + (photo.url ? '' : ' disabled') + '>' +
+    '<label class="form-check-label small" for="checkInclurePhoto">Inclure ma photo sur les modèles de CV qui le permettent</label>' +
+    '</div>' +
+    // TACHE (retour utilisateur : "je veux un bouton valider et revenir a
+    // Apercu et finalisation") : raccourci direct vers l'etape CV de la
+    // page Action, accordeon "Apercu et finalisation" deja ouvert -- pas
+    // besoin de retrouver son chemin manuellement.
+    '<button type="button" class="btn btn-primary btn-sm mt-2" id="btnValiderPhotoRetourApercu">&#10003; Valider et revenir à l\'aperçu du CV</button>' +
+    '</div>' +
+    '</div>';
+  return '<div id="zoneIdentiteChamps">' +
+    '<div class="d-flex flex-wrap gap-2 mb-2">' +
     '<span class="pastille' + (civiliteVal === 'Madame' ? ' actif' : '') + '" data-civilite="Madame">Madame</span>' +
     '<span class="pastille' + (civiliteVal === 'Monsieur' ? ' actif' : '') + '" data-civilite="Monsieur">Monsieur</span>' +
     '<span class="pastille' + (!civiliteVal ? ' actif' : '') + '" data-civilite="">Ne pas preciser</span>' +
@@ -3741,34 +4156,12 @@ function contenuIdentite() {
     '<div class="col-6 col-md-3"><input type="email" class="form-control form-control-sm" id="identiteEmail" placeholder="E-mail" value="' + echapperAttribut(id.email) + '"></div>' +
     '</div>' +
     '<div class="row g-2 mt-1">' +
-    '<div class="col-8"><input type="text" class="form-control form-control-sm" id="identiteAdresse" placeholder="Adresse postale" value="' + echapperAttribut(id.adresse) + '"></div>' +
-    '<div class="col-4"><input type="text" class="form-control form-control-sm" id="identiteVille" placeholder="Ville" value="' + echapperAttribut(id.ville) + '"></div>' +
+    '<div class="col-6"><input type="text" class="form-control form-control-sm" id="identiteAdresse" placeholder="Adresse postale" value="' + echapperAttribut(id.adresse) + '"></div>' +
+    '<div class="col-3"><input type="text" class="form-control form-control-sm" id="identiteCodePostal" placeholder="Code postal" value="' + echapperAttribut(id.codePostal) + '"></div>' +
+    '<div class="col-3"><input type="text" class="form-control form-control-sm" id="identiteVille" placeholder="Ville" value="' + echapperAttribut(id.ville) + '"></div>' +
     '</div>' +
-    '<div class="row g-2 mt-1">' +
-    '<div class="col-4"><input type="number" min="0" max="120" class="form-control form-control-sm" id="identiteAge" placeholder="Age" value="' + echapperAttribut(id.age) + '"></div>' +
+    blocPhoto +
     '</div>';
-}
-
-// TACHE (refonte Mon projet, Etape B) : boutons Anonymiser/Personnaliser/info,
-// devenus les "boutons speciaux" toujours visibles du bloc "Vous" (plus a
-// l'interieur de l'accordeon Identite).
-function boutonsSpeciauxVous() {
-  var anon = dossier.anonymiser !== false;
-  return '<div class="d-flex align-items-center flex-wrap gap-2 mb-2">' +
-    '<div class="d-flex flex-wrap gap-2">' +
-    '<span class="pastille' + (anon ? ' actif' : '') + '" data-anon="oui">&#128274; Anonymiser</span>' +
-    '<span class="pastille' + (!anon ? ' actif' : '') + '" data-anon="non">&#10024; Personnaliser</span>' +
-    '</div>' +
-    '<button type="button" id="btnInfoConfidentialite" class="btn-info-confidentialite">&#8505;&#65039; A quoi servent ces informations ?</button>' +
-    '</div>';
-}
-
-// Conservee pour compatibilite (plus appelee par pageProjet depuis l'Etape B,
-// le bloc "Vous" appelle desormais directement contenuIdentite() +
-// boutonsSpeciauxVous()).
-function blocIdentite() {
-  return '<div class="cv-section mt-4 bloc-identite-compact bloc-large"><h5>&#128100; Mon identite</h5>' +
-    contenuIdentite() + '<hr class="my-2">' + boutonsSpeciauxVous() + '</div>';
 }
 
 // TACHE (refonte Mon projet, Etape B) : contenu pur (sans enveloppe carte/
@@ -3913,19 +4306,20 @@ function blocMetiersRecommandes() {
 
 // Complement tache 8 : bouton assistant de personnalisation du CV specifique.
 // Affiche des que le mode CV specifique est actif (jamais en mode CV general),
-// que le metier soit deja choisi ou non : il aide a completer toutes les
-// informations utiles au CV, a la lettre de motivation et a l'entretien.
-// Etape 9 : verification automatique de 4 informations. Le bouton n'apparait
-// que si le mode CV specifique est actif ET qu'au moins une info manque.
-function informationsSuffisantesPourCVSpecifique() {
-  return informationsCandidatureSuffisantes() &&
-    dossier.permis.possede !== null &&
-    dossier.formations.length > 0 &&
-    !!dossier.metierCible;
-}
-
+// que le metier soit deja choisi ou non : il aide a completer les
+// informations de candidature utiles au CV, a la lettre et a l'entretien.
+// TACHE (retour utilisateur) : ne verifie plus que la candidature (voir
+// blocPersonnaliserCandidature() ci-dessous) -- l'ancienne verification a 4
+// criteres (informationsSuffisantesPourCVSpecifique) est retiree, devenue
+// inutilisee suite a ce changement.
 function blocPersonnaliserCandidature() {
-  if (dossier.typeCV !== 'specifique' || informationsSuffisantesPourCVSpecifique()) { return ''; }
+  // TACHE (retour utilisateur : candidature deja suffisante = specifique
+  // automatique) : ce bouton ("Completer mon dossier") ne concerne plus que
+  // la candidature (structure/poste/site) -- verifie desormais avec
+  // informationsCandidatureSuffisantes() (candidature seule), pas le
+  // controle plus large a 4 criteres (permis/formations/metier inclus), qui
+  // n'a plus de rapport avec ce que ce bouton ouvre desormais.
+  if (dossier.typeCV !== 'specifique' || informationsCandidatureSuffisantes()) { return ''; }
   return '<div class="mt-3 mb-2">' +
     '<button class="btn btn-outline-primary btn-lg" id="btnPersonnaliserCandidature">&#10024; Compléter mon dossier</button>' +
     '<p class="text-muted small mt-2">Complétez quelques informations pour obtenir des documents plus personnalisés.</p>' +
@@ -3934,7 +4328,28 @@ function blocPersonnaliserCandidature() {
 
 // Complement tache 8 : choix exclusif CV general / CV specifique, affiche au-dessus
 // des cartes "Creer votre CV / Lettre de motivation / Preparer un entretien".
+// TACHE (retour utilisateur, comportement confirme) : si les informations de
+// candidature (page Potentiel) sont deja suffisantes, "CV specifique" n'est
+// plus impose automatiquement -- une seule pastille "CV general" est
+// affichee au depart. Cliquer dessus revele "CV specifique" a cote (les 2
+// options deviennent visibles). Cliquer sur "CV specifique" (ici ou dans le
+// cas normal ci-dessous) ouvre systematiquement la fenetre "Votre
+// candidature", deja pre-remplie si les informations existent deja.
+var revelerSpecifiqueCandidatureRemplie = false;
 function blocTypeCV() {
+  if (informationsCandidatureSuffisantes()) {
+    var revele = revelerSpecifiqueCandidatureRemplie || dossier.typeCV === 'specifique';
+    var estGeneralActif = dossier.typeCV !== 'specifique';
+    var html = '<div class="type-cv-choix">' +
+      '<button type="button" class="pastille-selection" data-typecv-candidature-remplie="general" style="' +
+      stylePastilleInline(estGeneralActif) + '">CV général</button>';
+    if (revele) {
+      html += '<button type="button" class="pastille-selection" data-typecv-candidature-remplie="specifique" style="' +
+        stylePastilleInline(!estGeneralActif) + '">CV spécifique</button>';
+    }
+    html += '</div>';
+    return html;
+  }
   var estGeneral = dossier.typeCV !== 'specifique';
   return '<div class="type-cv-choix">' +
     '<label class="type-cv-option"><input type="radio" name="typeCV" value="general"' + (estGeneral ? ' checked' : '') + '> CV général</label>' +
@@ -3947,6 +4362,111 @@ function blocTypeCV() {
 // etre reutilise par d'autres blocs de l'application. Etat en memoire
 // uniquement (pas de sauvegarde persistante, redevient replie au rechargement).
 var etatAccordeon = {};
+
+// TACHE (page Action, navigation guidee) : helper generique -- ferme une
+// etape et ouvre la suivante, reutilise par tous les parcours en accordeons
+// (pas seulement la page Action). Ne supprime rien : l'etape fermee reste
+// visible et rouvrable (etatAccordeon ne fait que basculer un booleen).
+function avancerEtape(idActuel, idSuivant) {
+  etatAccordeon[idActuel] = false;
+  etatAccordeon[idSuivant] = true;
+}
+
+// TACHE (page Action, "pastille generique") : composant unique reutilisable
+// pour toute selection a choix unique (remplace les radios HTML natifs).
+// Scope actuel : page Action uniquement (valide ainsi), generalisable
+// ensuite sans modification -- stylePastilleInline()/pastillesSelection()
+// ne dependent d'aucun contexte specifique a "Adaptation au metier".
+function stylePastilleInline(actif) {
+  return 'display:inline-block;padding:0.45rem 1rem;margin:0.25rem 0.4rem 0.25rem 0;border-radius:999px;' +
+    'font-size:0.9rem;cursor:pointer;transition:background .15s,border-color .15s,color .15s;' +
+    (actif
+      ? 'background:#0d6efd;color:#FFFFFF;border:2px solid #0d6efd;'
+      : 'background:#F3F4F6;color:#374151;border:2px solid #E5E7EB;');
+}
+function pastillesSelection(champ, options, valeurActuelle) {
+  return options.map(function (opt) {
+    var actif = (opt.valeur === valeurActuelle);
+    return '<button type="button" class="pastille-selection" data-pastille-champ="' + champ + '" ' +
+      'data-pastille-valeur="' + opt.valeur + '" aria-pressed="' + actif + '" style="' + stylePastilleInline(actif) + '">' +
+      opt.label + '</button>';
+  }).join('');
+}
+
+// TACHE (page Action, "champs standardises") : uniformise les champs texte
+// de la page (hauteur/police), majuscule automatique en premiere position,
+// et Entree -> passe au champ suivant (uniquement pour les <input>, jamais
+// pour les <textarea> ou Entree doit rester un retour a la ligne normal).
+// Scope actuel : page Action uniquement (comme convenu), appelable ailleurs
+// tel quel plus tard sans modification.
+// TACHE (page Action, "selecteur de dates") : remplace le calendrier HTML
+// natif (input type="month", peu adapte -- mois et annee geres par le meme
+// widget navigateur, lent a utiliser pour des periodes anciennes) par deux
+// listes deroulantes independantes (mois francais en toutes lettres, annee
+// en chiffres). Le mois ne genera jamais le choix de l'annee et vice-versa
+// puisque ce sont deux controles distincts. Format de stockage INCHANGE
+// ("AAAA-MM", identique a l'ancien input month) pour ne rien casser des
+// usages existants de dossier.experiences[].dateDebut/dateFin ailleurs
+// dans l'appli (rendu CV, etc.).
+var MOIS_FRANCAIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+function selectMoisAnnee(idBase, valeurActuelle, optionnelEnCours) {
+  var moisVal = '', anneeVal = '';
+  if (valeurActuelle) {
+    var p = valeurActuelle.split('-');
+    anneeVal = p[0];
+    moisVal = p[1];
+  }
+  var optionsMois = (optionnelEnCours ? '<option value="">En cours</option>' : '<option value="">Mois</option>') +
+    MOIS_FRANCAIS.map(function (nom, i) {
+      var v = (i + 1 < 10 ? '0' : '') + (i + 1);
+      return '<option value="' + v + '"' + (v === moisVal ? ' selected' : '') + '>' + nom + '</option>';
+    }).join('');
+  var anneeCourante = new Date().getFullYear();
+  var optionsAnnee = '<option value="">Année</option>';
+  for (var a = anneeCourante + 1; a >= anneeCourante - 60; a--) {
+    optionsAnnee += '<option value="' + a + '"' + (String(a) === anneeVal ? ' selected' : '') + '>' + a + '</option>';
+  }
+  return '<div class="d-flex gap-2">' +
+    '<select class="form-select form-select-sm" id="' + idBase + 'Mois" style="height:2.75rem;flex:1;">' + optionsMois + '</select>' +
+    '<select class="form-select form-select-sm" id="' + idBase + 'Annee" style="height:2.75rem;flex:1;">' + optionsAnnee + '</select>' +
+    '</div>';
+}
+function lireValeurMoisAnnee(idBase) {
+  var mois = document.getElementById(idBase + 'Mois');
+  var annee = document.getElementById(idBase + 'Annee');
+  if (!mois || !annee || !mois.value || !annee.value) { return ''; }
+  return annee.value + '-' + mois.value;
+}
+
+function activerChampsStandardises(racine) {
+  racine = racine || document;
+  // TACHE (retour utilisateur : bandeau Candidature) : la navigation par
+  // Entree couvre desormais aussi url/tel/email (ex. le lien d'offre), mais
+  // la majuscule automatique reste reservee au texte libre (type="text") --
+  // une adresse internet ne doit jamais etre mise en majuscule.
+  var champsNavigables = Array.prototype.slice.call(racine.querySelectorAll('input[type="text"], input[type="url"], input[type="tel"], input[type="email"]'));
+  champsNavigables.forEach(function (champ, index) {
+    champ.style.cssText += 'height:2.75rem;font-size:1rem;padding:0.5rem 0.75rem;';
+    if (champ.type === 'text') {
+      champ.addEventListener('input', function () {
+        if (this.value.length > 0 && this.value.charAt(0) !== this.value.charAt(0).toUpperCase()) {
+          var position = this.selectionStart;
+          this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);
+          this.setSelectionRange(position, position);
+        }
+      });
+    }
+    champ.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') { return; }
+      e.preventDefault();
+      var suivant = champsNavigables[index + 1];
+      if (suivant) { suivant.focus(); } else { champ.blur(); }
+    });
+  });
+  Array.prototype.slice.call(racine.querySelectorAll('textarea')).forEach(function (zone) {
+    zone.style.cssText += 'font-size:1rem;padding:0.5rem 0.75rem;';
+  });
+}
 
 // id : identifiant unique du bloc ; titre : affiche en gras, toujours visible ;
 // texteIntro : court texte d'invitation, toujours visible sous le titre ;
@@ -4087,14 +4607,14 @@ function blocERIP(config) {
     return '<div class="cv-section bloc-erip bloc-erip-ferme' + (config.classe ? ' ' + config.classe : '') + '" id="blocERIP-' + config.id + '">' +
       '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
       (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
-      '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
+      '<h5 style="font-size:1.2rem;">' + config.icone + ' ' + config.titre + '</h5>' +
       '<span class="bloc-erip-compteur">' + texteCompteur + '</span>' +
       indicateurComplet +
       '<span class="bloc-erip-fleche">&#9660;</span>' +
       '</div>' +
-      // TACHE (complement) : les boutons speciaux (Anonymiser/Personnaliser/info,
-      // uniquement sur "Vous") restent visibles meme replie, pour pouvoir
-      // changer d'avis a tout moment sans avoir a ouvrir le bloc.
+      // TACHE (complement) : les boutons speciaux d'un bloc (facultatif,
+      // via config.boutonsSpeciaux) restent visibles meme replie, pour
+      // pouvoir changer d'avis a tout moment sans avoir a ouvrir le bloc.
       (config.boutonsSpeciaux ? config.boutonsSpeciaux() : '') +
       // TACHE (complement, allegement visuel page Potentiel) : certains blocs
       // (Metiers recommandes, Analyse de votre profil, Ce qui vous correspond,
@@ -4140,7 +4660,7 @@ function blocERIP(config) {
   return '<div class="cv-section bloc-erip' + (config.classe ? ' ' + config.classe : '') + '" id="blocERIP-' + config.id + '">' +
     '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
     (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
-    '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
+    '<h5 style="font-size:1.2rem;">' + config.icone + ' ' + config.titre + '</h5>' +
     '<span class="bloc-erip-compteur">' + texteCompteur + '</span>' +
     indicateurComplet +
     '<span class="bloc-erip-fleche">&#9650;</span>' +
@@ -4222,8 +4742,9 @@ function wireBlocERIP(config, rerender) {
   sousSectionsResolues.forEach(function (s) {
     if (s.clefEvidence) { wireEvidence(s.clefEvidence, 'accordeonERIP-' + config.id + '-' + s.id); }
   });
-  // Cablage des boutons speciaux (uniquement le bloc "Vous" en a) : Anonymiser/
-  // Personnaliser/info, toujours presents, meme quand aucun accordeon n'est ouvert.
+  // Cablage des boutons speciaux d'un bloc (facultatif, via
+  // config.wireBoutonsSpeciaux), toujours presents, meme quand aucun
+  // accordeon n'est ouvert.
   if (config.wireBoutonsSpeciaux) { config.wireBoutonsSpeciaux(rerender); }
 }
 
@@ -4240,10 +4761,9 @@ function resumeVous() {
   // le detail complet apparait au survol (infobulle), sans besoin d'une
   // icone ✅ distincte -- la presence meme de ce chip suffit a signaler
   // que quelque chose est renseigne.
-  var champsRenseignes = [id.civilite, id.prenom, id.nom, id.adresse, id.telephone, id.email, id.ville, id.age].filter(Boolean);
+  var champsRenseignes = [id.civilite, id.prenom, id.nom, id.adresse, id.telephone, id.email, id.ville].filter(Boolean);
   if (champsRenseignes.length) {
     var tooltip = [id.civilite, id.prenom, id.nom].filter(Boolean).join(' ') +
-      (id.age ? ', ' + id.age + ' ans' : '') +
       (id.adresse ? ' — ' + id.adresse : '') +
       (id.ville ? ' (' + id.ville + ')' : '') +
       (id.telephone ? ' — ' + id.telephone : '') +
@@ -4264,7 +4784,7 @@ function resumeOnSuppressionVous(idx) {
   if (!item) { return; }
   if (item.source === 'coordonnees') {
     dossier.identite.nom = ''; dossier.identite.prenom = ''; dossier.identite.adresse = '';
-    dossier.identite.telephone = ''; dossier.identite.email = ''; dossier.identite.ville = ''; dossier.identite.age = '';
+    dossier.identite.telephone = ''; dossier.identite.email = ''; dossier.identite.ville = '';
   }
   else if (item.source === 'permis') { dossier.permis.possede = null; dossier.permis.categories = []; dossier.permis.vehicule = null; }
   else if (item.source === 'langue') { dossier.langues.splice(item.index, 1); }
@@ -4286,18 +4806,14 @@ function infoBulleMobilite() {
 }
 var CONFIG_BLOC_VOUS = {
   id: 'vous', icone: '&#128100;', titre: 'Vous', classe: 'bloc-large',
-  boutonsSpeciaux: boutonsSpeciauxVous,
-  wireBoutonsSpeciaux: function (rerender) {
-    document.querySelectorAll('[data-anon]').forEach(function (el) {
-      el.addEventListener('click', function () { dossier.anonymiser = (this.dataset.anon === 'oui'); rerender(); });
-    });
-    var btnInfo = document.getElementById('btnInfoConfidentialite');
-    if (btnInfo) { btnInfo.addEventListener('click', ouvrirModaleInfoIdentite); }
-  },
+  // TACHE (retour utilisateur : retrait Anonymiser, nettoyage final) :
+  // boutons Anonymiser/Personnaliser/"A quoi servent ces informations ?"
+  // retires (boutonsSpeciauxVous(), ouvrirModaleInfoIdentite() et
+  // blocIdentite() supprimees, plus aucun appelant nulle part).
   resume: resumeVous,
   resumeOnSuppression: resumeOnSuppressionVous,
   onResetTout: function () {
-    dossier.identite = { civilite: null, nom: '', prenom: '', adresse: '', telephone: '', email: '', ville: '', age: '' };
+    dossier.identite = { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' };
     dossier.permis = { possede: null, categories: [], vehicule: null };
     dossier.langues = [];
   },
@@ -4326,36 +4842,20 @@ var CONFIG_BLOC_VOUS = {
     }
   ]
 };
-// TACHE (demande) : variante du bloc "Vous" pour la page Action -- memes
-// champs/fonctions que Mon projet (Identite, Mobilite, Anonymiser/
-// Personnaliser, info), SAUF la sous-section "Langues", jugee pas
-// necessaire ici. Reutilise tout le reste de CONFIG_BLOC_VOUS a l'identique
-// (memes fonctions), juste avec une sous-section en moins.
-var CONFIG_BLOC_VOUS_ACTION = {
-  id: 'vous', icone: CONFIG_BLOC_VOUS.icone, titre: CONFIG_BLOC_VOUS.titre, classe: CONFIG_BLOC_VOUS.classe,
-  boutonsSpeciaux: CONFIG_BLOC_VOUS.boutonsSpeciaux,
-  wireBoutonsSpeciaux: CONFIG_BLOC_VOUS.wireBoutonsSpeciaux,
-  resume: CONFIG_BLOC_VOUS.resume,
-  resumeOnSuppression: CONFIG_BLOC_VOUS.resumeOnSuppression,
-  onResetTout: CONFIG_BLOC_VOUS.onResetTout,
-  sousSections: CONFIG_BLOC_VOUS.sousSections.filter(function (s) { return s.id !== 'langues'; })
-};
-
 // TACHE (refonte Mon projet, Etape C) : configuration reelle du bloc
 // "Parcours" (Formations, Certifications, Expériences et savoir-faire
 // personnels). Meme logique de resume unifie + suppression ciblee que le
 // bloc "Vous".
 function resumeParcours() {
   var items = [];
-  // TACHE (Tache 1 : formations en tableau) : meme motif que certifications/
-  // experiencesPerso juste en dessous -- une entree par element du tableau,
-  // avec son index pour permettre la suppression ciblee.
+  // TACHE (Tache 1 : formations en tableau) : meme motif que certifications
+  // juste en dessous -- une entree par element du tableau, avec son index
+  // pour permettre la suppression ciblee.
   (dossier.formations || []).forEach(function (f, i) {
     var label = f.niveau + (f.intitule ? ' — ' + f.intitule : '') + (f.annee ? ' (' + f.annee + ')' : '');
     items.push({ label: label, source: 'formation', index: i });
   });
   (dossier.certifications || []).forEach(function (c, i) { items.push({ label: c, source: 'certification', index: i }); });
-  (dossier.experiencesPerso || []).forEach(function (e, i) { items.push({ label: e.intitule, source: 'experiencePerso', index: i }); });
   return items;
 }
 function resumeOnSuppressionParcours(idx) {
@@ -4363,7 +4863,19 @@ function resumeOnSuppressionParcours(idx) {
   if (!item) { return; }
   if (item.source === 'formation') { dossier.formations.splice(item.index, 1); }
   else if (item.source === 'certification') { dossier.certifications.splice(item.index, 1); }
-  else if (item.source === 'experiencePerso') { dossier.experiencesPerso.splice(item.index, 1); }
+}
+// TACHE (retour utilisateur : bloc "Experiences et savoir-faire personnels"
+// autonome) : extrait de Parcours, meme donnees (dossier.experiencesPerso),
+// aucune logique dupliquee -- juste sorti de son bloc d'origine.
+function resumeExperiencesPerso() {
+  return (dossier.experiencesPerso || []).map(function (e, i) {
+    return { label: e.intitule, source: 'experiencePerso', index: i };
+  });
+}
+function resumeOnSuppressionExperiencesPerso(idx) {
+  var item = resumeExperiencesPerso()[idx];
+  if (!item) { return; }
+  if (item.source === 'experiencePerso') { dossier.experiencesPerso.splice(item.index, 1); }
 }
 var CONFIG_BLOC_PARCOURS = {
   id: 'parcours', icone: '&#127891;', titre: 'Parcours',
@@ -4372,10 +4884,8 @@ var CONFIG_BLOC_PARCOURS = {
   onResetTout: function () {
     dossier.formations = [];
     dossier.certifications = [];
-    dossier.experiencesPerso = [];
     dossier.catalogueActif = dossier.catalogueActif || {};
     delete dossier.catalogueActif.certifications;
-    delete dossier.catalogueActif.experiencesPerso;
   },
   sousSections: function () {
     var sections = [];
@@ -4400,13 +4910,30 @@ var CONFIG_BLOC_PARCOURS = {
       contenuHTML: function () { return contenuCatalogueOuiNon(CONFIG_CERTIFICATIONS); },
       wire: function (rerender) { wireCatalogueOuiNon(CONFIG_CERTIFICATIONS, rerender); }
     });
-    sections.push({
+    return sections;
+  }
+};
+
+// TACHE (retour utilisateur : bloc autonome) : "Experiences et savoir-faire
+// personnels", auparavant une sous-section de Parcours -- meme contenu
+// (CONFIG_EXPERIENCES_PERSO, contenuCatalogueOuiNon, wireCatalogueOuiNon),
+// juste sorti dans son propre bloc du tableau de bord.
+var CONFIG_BLOC_EXPERIENCES_PERSO = {
+  id: 'experiences-perso', icone: '&#127775;', titre: 'Expériences et savoir-faire personnels',
+  resume: resumeExperiencesPerso,
+  resumeOnSuppression: resumeOnSuppressionExperiencesPerso,
+  onResetTout: function () {
+    dossier.experiencesPerso = [];
+    dossier.catalogueActif = dossier.catalogueActif || {};
+    delete dossier.catalogueActif.experiencesPerso;
+  },
+  sousSections: function () {
+    return [{
       id: 'experiencesPerso', titre: 'Expériences et savoir-faire personnels',
       complet: function () { return !!dossier.catalogueActif && dossier.catalogueActif.experiencesPerso !== undefined; },
       contenuHTML: function () { return contenuCatalogueOuiNon(CONFIG_EXPERIENCES_PERSO); },
       wire: function (rerender) { wireCatalogueOuiNon(CONFIG_EXPERIENCES_PERSO, rerender); }
-    });
-    return sections;
+    }];
   }
 };
 
@@ -4586,192 +5113,607 @@ var CONFIG_BLOC_COMPLEMENTS = {
   ]
 };
 
+// TACHE (refonte page Action, tache 1 : architecture generale) : la page
+// Action devient un flux integre en une seule page, pilote par un
+// selecteur de document (CV / Lettre / Entretien) et organise en
+// accordeons. Cette tache pose UNIQUEMENT le squelette + le cablage de
+// dossier.preferencesIA ; aucun traitement IA, aucun import, aucun apercu
+// editable (taches dediees ulterieures -- voir accordeons "squelette"
+// ci-dessous, clairement signales comme temporaires).
 function pageResultats() {
-  var competences = deduireCompetences();
-  var savoirEtre = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; });
-  var savoirFaire = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; });
-  var savoirs = obtenirSavoirs();
-  var metiers = suggererMetiers();
+  var carteChoisie = !!dossier.dernierDocumentPrepare;
+  // TACHE (retour utilisateur : "Sélectionné" affiché sur une carte
+  // verrouillée) : le repli par defaut pointait toujours vers 'cv', meme
+  // quand cette carte est verrouillee (mode "pret") -- une carte pouvait
+  // alors etre a la fois grisee ET marquee "Selectionne", deux etats
+  // normalement incompatibles. Repli intelligent : pointe vers la premiere
+  // carte reellement disponible.
+  var docActif = dossier.dernierDocumentPrepare || (dossier.modeCreation === 'pret' ? 'lettre' : 'cv');
 
   var expHtml = dossier.experiences.map(function (e, i) { return '<div class="cv-item"><div><strong>' + e.poste + '</strong> &ndash; ' + e.entreprise + ' (' + e.lieu + ')<br><small>' + e.dateDebut + ' &rarr; ' + (e.dateFin || 'En cours') + '</small>' + (e.missions ? '<br><small class="text-muted">' + e.missions + '</small>' : '') + '</div><span class="remove-item" data-index="' + i + '" data-type="exp">&#10005;</span></div>'; }).join('');
 
   var cvComplet = (dossier.modeCreation !== 'pret');
-  var sectionsCV = '';
+  // TACHE (migration "Mon CV") : ce formulaire d'ajout rapide d'experience
+  // reste l'unique endroit de l'application qui alimente dossier.experiences
+  // (verifie avant migration) -- il ne disparait pas, il rejoint simplement
+  // l'accordeon "Informations transmises a l'IA" qu'il alimente directement.
+  var sectionExperiences = '';
   if (cvComplet) {
-    sectionsCV =
-      '<div class="mt-3"><h5>Experience professionnelle</h5>' + (expHtml || '<p class="text-muted">Aucune experience.</p>') +
-      '<div class="row g-2 mt-2"><div class="col-md-3"><input type="text" class="form-control form-control-sm" id="expPoste" placeholder="Poste"></div>' +
-      '<div class="col-md-3"><input type="text" class="form-control form-control-sm" id="expEntreprise" placeholder="Entreprise / proche"></div>' +
-      '<div class="col-md-2"><input type="text" class="form-control form-control-sm" id="expLieu" placeholder="Lieu"></div>' +
-      '<div class="col-md-2"><input type="month" class="form-control form-control-sm" id="expDateDebut"></div>' +
-      '<div class="col-md-2"><input type="month" class="form-control form-control-sm" id="expDateFin"></div></div>' +
+    sectionExperiences =
+      '<div class="mt-3"><h5>Expérience professionnelle</h5>' + (expHtml || '<p class="text-muted">Aucune expérience.</p>') +
+      '<div class="row g-2 mt-2"><div class="col-md-4"><input type="text" class="form-control form-control-sm" id="expPoste" placeholder="Poste"></div>' +
+      '<div class="col-md-4"><input type="text" class="form-control form-control-sm" id="expEntreprise" placeholder="Entreprise / proche"></div>' +
+      '<div class="col-md-4"><input type="text" class="form-control form-control-sm" id="expLieu" placeholder="Lieu"></div></div>' +
+      '<div class="row g-2 mt-1">' +
+      '<div class="col-md-6"><label class="small text-muted mb-1">Date de début</label>' + selectMoisAnnee('expDateDebut', '', false) + '</div>' +
+      '<div class="col-md-6"><label class="small text-muted mb-1">Date de fin</label>' + selectMoisAnnee('expDateFin', '', true) + '</div>' +
+      '</div>' +
       '<div class="row g-2 mt-1"><div class="col-12">' +
       '<textarea class="form-control form-control-sm" id="expMissions" rows="2" placeholder="Missions / taches principales (optionnel)"></textarea>' +
       '</div></div>' +
-      '<button class="btn btn-primary btn-sm mt-2" id="ajouterExpBtn">+ Ajouter</button></div><hr>';
+      '<button class="btn btn-primary btn-sm mt-2" id="ajouterExpBtn">+ Ajouter</button></div>';
   }
 
-  // TACHE (bandeau contextuel Impression) : un seul bandeau visible a la
-  // fois, selon la derniere carte utilisee (dossier.dernierDocumentPrepare,
-  // mis a jour au clic sur "Creer votre CV"/"Lettre de motivation" -- voir
-  // plus bas dans cette fonction). Tant qu'aucun document n'a ete
-  // commence, aucun des deux bandeaux ne s'affiche.
-  var accordeonImpressionCV = (dossier.dernierDocumentPrepare === 'cv')
-    ? blocAccordeon('export-canva', '&#128424; Imprimer mon CV', '',
-        '<p class="mb-3">Prévisualisez votre CV avant de l\'imprimer. Choisissez parmi plusieurs modèles de ' +
-        'présentation, puis imprimez-le ou enregistrez-le au format PDF directement depuis la fenêtre d\'aperçu. ' +
-        'Les fonctions d\'export complémentaires (dont Canva) restent disponibles dans la fenêtre ' +
-        '&laquo;&nbsp;Créer votre CV&nbsp;&raquo;, section &laquo;&nbsp;Exporter&nbsp;&raquo;.</p>' +
-        '<button type="button" class="btn-copy" id="btnApercuCVAction">&#128269; Aperçu du CV</button>')
-    : '';
-  var accordeonImpressionLettre = (dossier.dernierDocumentPrepare === 'lettre')
-    ? blocAccordeon('impression-lettre', '&#128424; Imprimer ma lettre de motivation', '',
-        '<p class="mb-3">Prévisualisez votre lettre de motivation avant de l\'imprimer. Le texte est directement ' +
-        'modifiable dans la fenêtre d\'aperçu, puis vous pouvez l\'imprimer ou l\'enregistrer au format PDF.</p>' +
-        '<button type="button" class="btn-copy" id="btnApercuLettreAction">&#128269; Aperçu de ma lettre</button>')
-    : '';
+  // Selecteur de document : pilote l'ensemble de la page (accordeon
+  // "Informations transmises a l'IA" adapte son apercu au document actif).
+  // TACHE (page Action, "cartes agrandies") : styles en inline -- je n'ai
+  // pas acces au vrai css/style.css de l'appli dans ce projet (deja signale
+  // en tache 1), donc j'evite de toucher aux classes partagees existantes
+  // (.outil-item/.outils-grid, toujours utilisees telles quelles par le
+  // bloc "Ressources" plus bas) pour ne rien casser ailleurs.
+  // TACHE (retour utilisateur) : titres d'etapes plus grands/engageants --
+  // public avec peu d'autonomie informatique. Wrapper local uniquement
+  // (n'affecte pas blocAccordeon(), toujours utilisee telle quelle ailleurs
+  // dans l'appli, ex. Mon Projet).
+  function titreEtape(html) {
+    return '<span style="font-size:1.25rem;">' + html + '</span>';
+  }
 
+  // TACHE (retour utilisateur) : mini-animation CSS (pas de minuteur JS,
+  // juste un keyframe qui boucle) pour rendre plus concrets les etapes
+  // "Choisissez votre IA" et "Importer les informations IA" -- public avec
+  // peu d'autonomie informatique, qui a besoin de VOIR ce qui va se passer.
+  var styleMiniAnimation = '<style>@keyframes pulseEtapeIA{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(13,110,253,.35);}' +
+    '50%{transform:scale(1.12);box-shadow:0 0 0 7px rgba(13,110,253,0);}}' +
+    '.mini-anim-etape{width:2.5rem;height:2.5rem;border-radius:50%;background:#0d6efd;color:#fff;' +
+    'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;' +
+    'animation:pulseEtapeIA 2.2s ease-in-out infinite;margin:0 auto;}</style>';
+  function miniAnimationEtapes(etapes) {
+    return '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:0.4rem;margin:0.5rem 0 1rem;">' +
+      etapes.map(function (texte, i) {
+        var bloc = '<div style="text-align:center;width:110px;">' +
+          '<div class="mini-anim-etape" style="animation-delay:' + (i * 0.5) + 's;">' + (i + 1) + '</div>' +
+          '<div class="small text-muted mt-1">' + texte + '</div></div>';
+        return bloc + (i < etapes.length - 1 ? '<div style="font-size:1.4rem;color:#9CA3AF;padding-top:0.4rem;">&#8594;</div>' : '');
+      }).join('') + '</div>';
+  }
+
+  function carteDocument(id, icone, label, actif, desactive, messageVerrou) {
+    var style = 'display:block;flex:1 1 220px;text-align:center;padding:1.5rem 1rem;' +
+      'font-size:1.2rem;font-weight:600;border-radius:12px;' +
+      'transition:background .15s,border-color .15s,color .15s;' +
+      // TACHE (retour utilisateur : cartes verrouillees toujours trop
+      // discretes) : contraste renforce (texte plus fonce, fond legerement
+      // plus marque) + !important -- au cas ou une regle CSS externe
+      // (.outil-desactive dans style.css, non fourni dans cette tache)
+      // ecraserait le style en ligne malgre sa specificite normalement
+      // superieure. Signe "interdit" (cursor:not-allowed) et bulle de
+      // message au survol deja en place, inchanges.
+      // TACHE (retour utilisateur : ni signe interdit ni message au survol) :
+      // hypothese forte -- .outil-desactive dans style.css (non fourni)
+      // definit probablement pointer-events:none (habituel pour un style
+      // "desactive"), ce qui bloque TOUT le survol CSS, y compris la bulle
+      // de message (.carte-verrou-tooltip:hover::after) et meme le
+      // changement de curseur -- le navigateur n'a plus rien a detecter.
+      // Force sa reactivation ici : le clic reste bloque cote JavaScript
+      // (gestionnaire de clic, inchange), seul le survol est restaure.
+      (desactive ? 'cursor:not-allowed !important;background:#EEF0F3 !important;color:#4B5563 !important;border:2px solid #D1D5DB !important;opacity:1 !important;pointer-events:auto !important;'
+        : actif ? 'cursor:pointer;background:#0d6efd;color:#FFFFFF;border:2px solid #0d6efd;'
+          : 'cursor:pointer;background:#F3F4F6;color:#374151;border:2px solid #E5E7EB;');
+    return '<div class="outil-item outil-ia outil-ia-grand' + (desactive ? ' outil-desactive carte-verrou-tooltip' : '') + '" data-outil="' + id + '"' +
+      ' style="' + style + '"' +
+      (desactive ? ' title="' + (messageVerrou || 'Cette option n\'est pas encore disponible.') +
+        '" data-tooltip="' + echapperAttribut(messageVerrou || 'Cette option n\'est pas encore disponible.') + '"' : '') +
+      // TACHE (retour utilisateur : "Sélectionné" sur une carte verrouillée) :
+      // garde-fou explicite ici, en plus de la correction du defaut de
+      // docActif -- une carte desactivee ne doit JAMAIS afficher ce badge,
+      // quelle que soit la valeur de "actif" recue.
+      '>' + icone + ' ' + label + ((actif && !desactive) ? ' <span class="badge bg-light text-primary ms-1">Sélectionné</span>' : '') + '</div>';
+  }
+  // TACHE (retour utilisateur : message plus visible qu'un simple title) :
+  // vraie bulle CSS (delai/discretion du title natif souvent manques),
+  // affichee au survol d'une carte verrouillee, en plus du curseur
+  // "interdit" deja pose ci-dessus (cursor:not-allowed).
+  var styleTooltipVerrou = '<style>.carte-verrou-tooltip{position:relative;}' +
+    '.carte-verrou-tooltip::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 10px);left:50%;' +
+    'transform:translateX(-50%);background:#1F2937;color:#FFFFFF;padding:0.5rem 0.75rem;border-radius:6px;' +
+    'font-size:0.8rem;font-weight:400;white-space:normal;width:220px;line-height:1.3;opacity:0;visibility:hidden;' +
+    'pointer-events:none;transition:opacity .15s;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.25);}' +
+    '.carte-verrou-tooltip:hover::after{opacity:1;visibility:visible;}</style>';
+  // TACHE (page Action, verrouillage progressif des cartes) : regles selon
+  // le parcours choisi (dossier.modeCreation) -- voir plan valide avec
+  // Denis. "pret" (deja un CV) : la carte CV elle-meme est inutile, jamais
+  // proposee ; Lettre disponible d'emblee. "nouveau"/"maj" : Lettre attend
+  // que le CV soit reellement termine (Exporter atteint). Entretien attend
+  // toujours que la Lettre soit terminee, quel que soit le parcours.
+  var modePret = (dossier.modeCreation === 'pret');
+  var desactiveCV = modePret;
+  var desactiveLettre = !modePret && !dossier.cvTermine;
+  var desactiveEntretien = !dossier.lettreTerminee;
+  // TACHE (retour utilisateur : messages plus subtils/elegants) : formule
+  // courte, orientee sur ce qu'il reste a faire, sans exposer de detail
+  // technique (nom d'etape interne, etc.).
+  var selecteurDocument = styleTooltipVerrou + '<div class="cv-section text-center"><h4>Choisissez votre action</h4>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:0.75rem;max-width:900px;margin:0 auto;">' +
+    carteDocument('cv', '&#128196;', 'Créer un CV', docActif === 'cv', desactiveCV,
+      'Vous avez indiqué posséder déjà un CV : cette étape ne vous concerne pas.') +
+    carteDocument('lettre', '&#9993;', 'Lettre de motivation', docActif === 'lettre', desactiveLettre,
+      'Complétez d\'abord votre CV pour débloquer la lettre de motivation.') +
+    carteDocument('entretien', '&#127908;', 'Préparer un entretien', docActif === 'entretien', desactiveEntretien,
+      'Complétez d\'abord votre lettre de motivation pour débloquer la préparation d\'entretien.') +
+    '</div></div>';
+
+  // Accordeon "Informations transmises a l'IA" : reutilise texteProfil(),
+  // deja existante, pour un apercu EXACT (aucune duplication de logique).
+  var accordeonInfosIA = blocAccordeon('infos-ia', titreEtape('&#128203; Informations transmises à l\'IA'),
+    'Ces informations sont extraites automatiquement de votre dossier et seront transmises à l\'assistant IA.',
+    '<p class="mb-1"><strong>Civilité :</strong> ' + (dossier.identite.civilite || 'Non précisée') + '</p>' +
+    '<p class="mb-1"><strong>Mode CV :</strong> ' + (dossier.typeCV === 'specifique' ? 'Spécifique au métier visé' : 'Général') + '</p>' +
+    '<p class="mb-1"><strong>Objectif :</strong> ' + (dossier.objectif || 'Non défini') + '</p>' +
+    '<p class="mb-3"><strong>Métier / secteur visé :</strong> ' + (dossier.metierCible || dossier.secteurCible || 'Non défini') + '</p>' +
+    '<div class="text-center my-3"><button type="button" class="btn btn-outline-primary" id="btnVerifierInfosIA">' +
+    '&#128269; Vérifier les informations</button></div>' +
+    sectionExperiences +
+    '<p class="small text-muted mt-3 mb-1">Aperçu exact du texte transmis à l\'IA :</p>' +
+    '<pre style="white-space:pre-wrap;background:#f8f9fa;padding:0.75rem;border-radius:6px;font-size:0.82rem;max-height:220px;overflow:auto;">' +
+    echapperAttribut(texteProfilEffectif(docActif)) + '</pre>' +
+    '<button type="button" class="btn btn-primary mt-2" id="btnContinuerInfosIA">Continuer &#8594;</button>');
+
+  // Accordeon "Adaptation au metier" : seule logique fonctionnelle demandee
+  // pour cette tache -- ecrit directement dans dossier.preferencesIA,
+  // reutilise par tous les futurs modules (CV, lettre, entretien...).
+  function groupePreference(champ, titre, options) {
+    var valeurActuelle = dossier.preferencesIA[champ];
+    return '<p class="question mb-1"><strong>' + titre + '</strong></p><div class="mb-3">' +
+      pastillesSelection(champ, options, valeurActuelle) + '</div>';
+  }
+  var accordeonAdaptation = blocAccordeon('adaptation-metier', titreEtape('&#127891; Adaptation au métier'),
+    'Ces préférences ne sont jamais affichées dans vos documents : elles orientent uniquement les réponses de ' +
+    'l\'assistant IA. Elles sont conservées et réutilisées automatiquement pour le CV, la lettre et l\'entretien.',
+    groupePreference('niveauPoste', 'Niveau du poste recherché', [
+      { valeur: 'employe', label: 'Employé / Opérateur' },
+      { valeur: 'ouvrier_qualifie', label: 'Ouvrier qualifié' },
+      { valeur: 'technicien', label: 'Technicien' },
+      { valeur: 'agent_maitrise', label: 'Agent de maîtrise' },
+      { valeur: 'cadre', label: 'Cadre' },
+      { valeur: 'direction', label: 'Direction / Encadrement' }
+    ]) +
+    groupePreference('niveauLangage', 'Niveau de langage souhaité', [
+      { valeur: 'naturel', label: 'Naturel' },
+      { valeur: 'professionnel', label: 'Professionnel' },
+      { valeur: 'tres_professionnel', label: 'Très professionnel' }
+    ]) +
+    groupePreference('adaptationMetier', 'Adaptation au vocabulaire du métier', [
+      { valeur: 'standard', label: 'Standard — document généraliste' },
+      { valeur: 'adaptee', label: 'Adaptée — vocabulaire du métier recherché (recommandé)' },
+      { valeur: 'specialisee', label: 'Spécialisée — expressions propres au secteur' }
+    ]) +
+    groupePreference('ton', 'Ton de la candidature', [
+      { valeur: 'dynamique', label: 'Dynamique' },
+      { valeur: 'equilibre', label: 'Équilibré' },
+      { valeur: 'institutionnel', label: 'Institutionnel' }
+    ]) +
+    groupePreference('longueur', 'Longueur souhaitée', [
+      { valeur: 'synthetique', label: 'Très synthétique' },
+      { valeur: 'equilibree', label: 'Équilibrée' },
+      { valeur: 'detaillee', label: 'Détaillée' }
+    ]) +
+    '<button type="button" class="btn btn-primary" id="btnContinuerAdaptation">Continuer &#8594;</button>');
+
+  // TACHE (page Action, tache 2) : reutilise ASSISTANTS_IA + ouvrirFenetreAssistantIA(),
+  // deja prets pour cet usage (voir leurs commentaires). Aucune logique dupliquee.
+  var accordeonChoixIA = blocAccordeon('choix-ia', titreEtape('&#129302; Choisissez votre assistant IA'),
+    'Cliquez sur un assistant ci-dessous. L\'application prépare et copie tout pour vous, puis ouvre l\'assistant : vous n\'avez rien à taper.',
+    styleMiniAnimation +
+    miniAnimationEtapes(['Vous cliquez sur un assistant', 'Tout est copié pour vous', 'Il s\'ouvre automatiquement', 'Vous revenez ici après']) +
+    '<div class="ia-grid text-center">' + ASSISTANTS_IA.map(function (a) {
+      return '<button type="button" class="pastille-selection" data-assistant="' + a.id + '" style="' +
+        stylePastilleInline(false) + 'font-size:1.15rem;padding:0.75rem 1.5rem;font-weight:600;">' + a.nom + '</button>';
+    }).join('') + '</div>');
+  // TACHE (page Action, tache 3) : reutilise integralement analyserReponseIACV/
+  // Lettre/Entretien + genererResumeImportCV/genererResumeGeneriqueImportIA
+  // (deja existantes, memes fonctions que celles utilisees par l'ancienne
+  // popup) -- aucune logique de parsing dupliquee, juste le meme appel,
+  // sans passer par window.opener puisque tout vit desormais sur cette page.
+  var libellesImportIA = { cv: 'le CV', lettre: 'la lettre', entretien: 'la préparation' };
+  var accordeonImportIA = blocAccordeon('import-ia', titreEtape('&#128229; Importer les informations IA'), '',
+    styleMiniAnimation +
+    miniAnimationEtapes(['Dans l\'assistant, copiez toute sa réponse', 'Collez-la (ou cliquez le bouton)', 'Cliquez sur Importer', 'C\'est ajouté automatiquement']) +
+    // TACHE (retour utilisateur : coller en un clic, generalise) :
+    // reutilise le composant partage (voir activerCollageInstantane/
+    // htmlCollageInstantane plus haut dans ce fichier).
+    htmlCollageInstantane('ActionIA',
+      '<button type="button" class="pastille-selection" id="btnImporterReponseIA" style="' +
+      stylePastilleInline(true) + 'font-size:1.1rem;padding:0.7rem 1.75rem;font-weight:600;margin-top:0.5rem;">&#128229; Importer dans ' +
+      libellesImportIA[docActif] + '</button> ' +
+      '<button type="button" id="btnEffacerRecollerActionIA" class="btn btn-outline-secondary mt-2">Effacer et recoller</button>') +
+    '<div id="messageImportIA" class="mt-2 small" style="min-height:1.2em;"></div>');
+  // TACHE (page Action, tache "navigation guidee") : "Exporter" redevient un
+  // accordeon separe (derniere etape du parcours), sur demande explicite --
+  // annule la fusion faite en tache 4. Meme contenu, meme cablage, juste
+  // deplace.
+  var formatsParTypeExport = {
+    // TACHE (simplification : DOCX seul + apercu integre) : PDF (pdfmake)
+    // et Personnaliser (GrapesJS) retires de cette liste -- geles sur
+    // decision explicite, faute de compatibilite fiable avec le reste du
+    // systeme. Le DOCX natif reste la SEULE source de verite : "Aperçu"
+    // affiche desormais le vrai fichier .docx (voir apercuDocxIntegre.js),
+    // et "Texte à copier" (ex-Canva CSV, qui necessitait un abonnement
+    // payant) donne le meme contenu en texte brut pour toute personne qui
+    // prefererait mettre en forme elle-meme dans un autre outil.
+    // TACHE (retour utilisateur : doublon) : "Copier le texte" retire --
+    // faisait doublon avec "Texte a copier" (memes donnees, juste
+    // telechargement vs presse-papiers). genererCSVCanva() reste disponible
+    // (non appelee) si un compte Canva payant devient pertinent un jour.
+    // TACHE (retour utilisateur : "Autre" regroupe JSON+CSV, CV uniquement) :
+    // JSON et CSV (Canva) n'ont d'utilite que pour le CV -- aucun interet
+    // pour la lettre/l'entretien (pas de gabarit Canva pour ces types, pas
+    // de reimport JSON prevu). "Autre" ouvre un petit sous-menu au clic.
+    // TACHE (retour utilisateur : retrait Envoyer par mail) : fonctionnalite
+    // retiree (jamais fiable confirmee en conditions reelles) -- "Autre"
+    // redevient CV uniquement, plus rien a y loger pour lettre/entretien.
+    cv: [{ id: 'apercu', label: 'Aperçu' }, { id: 'docx', label: 'Télécharger le Word' }, { id: 'texte-blocs', label: 'Texte à copier' }, { id: 'autre', label: 'Autre' }],
+    // TACHE (traitement DOCX natif etendu a la lettre et l'entretien) :
+    // meme simplification que le CV -- Aperçu (panneau integre, vrai
+    // rendu .docx) + Telecharger le Word + Texte a copier.
+    lettre: [{ id: 'apercu', label: 'Aperçu' }, { id: 'docx', label: 'Télécharger le Word' }, { id: 'texte-blocs', label: 'Texte à copier' }],
+    entretien: [{ id: 'apercu', label: 'Aperçu' }, { id: 'docx', label: 'Télécharger le Word' }, { id: 'texte-blocs', label: 'Texte à copier' }]
+  };
+  var listeFormatsExport = (formatsParTypeExport[docActif] || []).map(function (f) {
+    return '<button type="button" class="pastille-selection" data-format-export="' + f.id + '" style="' + stylePastilleInline(false) + '">' + f.label + '</button>';
+  }).join('');
+  // TACHE (retour utilisateur : navigation croisee, deplacee dans Exporter) :
+  // suggere le document suivant -- ne reinitialise rien (etatAccordeon
+  // reste partage), mais ouvre directement l'etape "Choisissez votre IA"
+  // du document suivant (pas seulement le selecteur), pour eviter de
+  // repartir de zero dans son parcours.
+  var suggestionSuivante = '';
+  if (docActif === 'cv') {
+    suggestionSuivante = '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 border rounded p-3 mt-3" style="background:#F8FAFC;">' +
+      '<p class="small mb-0 me-2">Avec ces informations, on peut aussi rédiger votre lettre de motivation.</p>' +
+      '<button type="button" id="btnSuggererLettre" class="btn btn-outline-primary text-nowrap">&#9993; Lettre de motivation</button>' +
+      '</div>';
+  } else if (docActif === 'lettre') {
+    suggestionSuivante = '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 border rounded p-3 mt-3" style="background:#F8FAFC;">' +
+      '<p class="small mb-0 me-2">On peut préparer ensemble l\'entretien d\'embauche, à partir de cette lettre et du CV créé précédemment.</p>' +
+      '<button type="button" id="btnSuggererEntretien" class="btn btn-outline-primary text-nowrap">&#127908; Préparation à l\'entretien</button>' +
+      '</div>';
+  }
+  var accordeonExporter = blocAccordeon('exporter-document', titreEtape('&#128228; Exporter'), '',
+    (listeFormatsExport || '<span class="text-muted small">Aucun format disponible pour le moment.</span>') +
+    // TACHE (retour utilisateur : "Autre" regroupe JSON+CSV, CV uniquement) :
+    // sous-menu masque par defaut, revele au clic sur "Autre".
+    // TACHE (retour utilisateur : retrait Envoyer par mail) : fonctionnalite
+    // retiree completement (jamais fiable confirmee en conditions reelles) --
+    // "Autre" redevient CV uniquement, JSON + CSV seulement.
+    (docActif === 'cv'
+      ? '<div id="zoneAutreExport" style="display:none !important;" class="d-flex flex-wrap gap-2 mt-2">' +
+        '<button type="button" class="pastille-selection" data-format-export="json" style="' + stylePastilleInline(false) + '">JSON</button>' +
+        '<button type="button" class="pastille-selection" data-format-export="csv-canva" style="' + stylePastilleInline(false) + '">CSV (Canva)</button>' +
+        '</div>'
+      : '') +
+    // TACHE (retour utilisateur : rappel de sauvegarde) : apparait a chaque
+    // telechargement du Word (voir le gestionnaire "docx" plus bas).
+    '<p id="messageTelechargerWord" class="small mt-2 mb-0" style="display:none;color:#B45309;"></p>' +
+    suggestionSuivante);
+
+  var accordeonApercuDoc = blocAccordeon('apercu-document', titreEtape('&#128065; Aperçu et finalisation'),
+    'Choisissez un modèle. Une fois sélectionné, choisissez sa couleur. Le mini aperçu est mis à jour automatiquement.',
+    (function () {
+      // TACHE (refonte "Aperçu et finalisation", cahier des charges dedie) :
+      // deux colonnes cote a cote (modeles+couleurs a gauche, apercu a
+      // droite) au lieu du bandeau horizontal precedent. Miniatures
+      // STRICTEMENT inchangees (genererCartesSelecteurModeles/
+      // genererMiniatureSVG non touchees, meme largeur 64px qu'avant) --
+      // seule la disposition du conteneur passe d'un defilement horizontal
+      // a fleches a une grille de 4 par ligne (voir construireCarrouselModeles()).
+      var idSuffixe = docActif === 'lettre' ? 'Lettre' : docActif === 'entretien' ? 'Entretien' : 'CV';
+      var libelleModeles = docActif === 'lettre' ? 'Modèles de lettre' : docActif === 'entretien' ? 'Modèles de fiche' : 'Modèles de CV';
+
+      var styleGrilleModeles = '<style>' +
+        '#grilleModeles' + idSuffixe + ', #grilleModelesA5' + idSuffixe + '{display:grid;grid-template-columns:repeat(4,64px);gap:0.75rem;justify-content:start;}' +
+        '#grilleModeles' + idSuffixe + ' .carte-modele-cv, #grilleModelesA5' + idSuffixe + ' .carte-modele-cv{cursor:pointer;border:2px solid #E5E7EB;' +
+        'border-radius:6px;padding:0.25rem;text-align:center;background:#FFFFFF;}' +
+        '#grilleModeles' + idSuffixe + ' .carte-modele-cv:hover, #grilleModelesA5' + idSuffixe + ' .carte-modele-cv:hover{border-color:#93C5FD;}' +
+        '#grilleModeles' + idSuffixe + ' .carte-modele-cv-active, #grilleModelesA5' + idSuffixe + ' .carte-modele-cv-active{border-color:#2563EB;border-width:3px;background:#EFF6FF;}' +
+        '#grilleModeles' + idSuffixe + ' .carte-modele-cv-miniature svg, #grilleModelesA5' + idSuffixe + ' .carte-modele-cv-miniature svg{width:100%;height:auto;display:block;border-radius:3px;}' +
+        '#grilleModeles' + idSuffixe + ' .carte-modele-cv-nom, #grilleModelesA5' + idSuffixe + ' .carte-modele-cv-nom{font-size:0.6rem;margin-top:0.2rem;color:#1F2937;white-space:nowrap;' +
+        'overflow:hidden;text-overflow:ellipsis;}' +
+        // TACHE (palette de couleurs) : pastilles rondes, compactes, meme
+        // esprit que celles du panneau plein ecran (apercuDocxIntegre.js).
+        '.pastille-couleur-cv{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid #FFFFFF;' +
+        'box-shadow:0 0 0 1px #D1D5DB;padding:0;}' +
+        '.pastille-couleur-cv-active{box-shadow:0 0 0 2px #111827;}' +
+        // TACHE (retour utilisateur : "Nuances rapides", 10 nuances) :
+        // pastilles plus petites que le rond principal, meme esprit visuel.
+        '.pastille-nuance-cv{width:18px;height:18px;border-radius:50%;cursor:pointer;border:1px solid #FFFFFF;' +
+        'box-shadow:0 0 0 1px #D1D5DB;padding:0;}' +
+        '.pastille-nuance-cv-active{box-shadow:0 0 0 2px #111827;}' +
+        '</style>';
+
+      var estFormatMini = docActif === 'cv' && etatApercuInline.cv.formatPage === 'A5';
+      var colonneGauche =
+        '<div style="flex:1 1 340px;min-width:300px;">' +
+        (estFormatMini
+          ? '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; Modèles Mini CV (A5)</h3>' +
+            '<div id="grilleModelesA5' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
+            '<div id="grilleModeles' + idSuffixe + '" style="display:none;"></div>'
+          : '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; ' + libelleModeles + '</h3>' +
+            '<div id="grilleModeles' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
+            '<div id="grilleModelesA5' + idSuffixe + '" style="display:none;"></div>') +
+        // TACHE (spec : "uniquement lorsqu'un modèle est sélectionné") :
+        // masque par defaut (display:none), affiche par construirePaletteCouleurs()
+        // uniquement quand le modele actif supporte la couleur.
+        '<div id="paletteCouleurs' + idSuffixe + '" style="display:none;margin-top:1.1rem;padding-top:0.9rem;border-top:1px solid #E5E7EB;">' +
+        '<h4 style="font-size:0.85rem;font-weight:700;margin-bottom:0.5rem;">&#127912; Couleurs disponibles</h4>' +
+        '<div id="pastillesCouleurs' + idSuffixe + '" style="display:flex;gap:0.5rem;flex-wrap:wrap;"></div>' +
+        '</div>' +
+        // TACHE (format A5) : CV uniquement (lettre/entretien n'ont pas de
+        // contenu recadre defini pour ce format). Toujours visible (pas de
+        // condition sur la selection d'un modele, contrairement a la
+        // palette de couleurs) -- le format concerne le document entier,
+        // pas un modele en particulier.
+        // TACHE (couleurs + formats pour la lettre et l'entretien) :
+        // desormais disponible pour les 3 types -- toujours visible (pas de
+        // condition sur la selection d'un modele, contrairement a la
+        // palette de couleurs) : le format concerne le document entier,
+        // pas un modele en particulier.
+        (function () {
+          var LIBELLES_MINI = { cv: 'Mini CV (A5)', lettre: 'Mini lettre (A5)', entretien: 'Fiche compacte (A5)' };
+          var LIBELLES_EXPLICATION = {
+            cv: 'A4 Essentiel : contenu allégé sur une page A4 normale. Mini CV (A5) : vraie demi-page, rubriques essentielles uniquement. Dans les deux cas, la sélection se fait automatiquement selon le métier visé.',
+            lettre: "A4 Essentiel : texte raccourci sur une page A4 normale. Mini lettre (A5) : vraie demi-page, texte très condensé.",
+            entretien: 'A4 Essentiel : listes limitées à 4 éléments sur une page A4 normale. Fiche compacte (A5) : vraie demi-page, 2 éléments par liste.'
+          };
+          return '<div style="margin-top:1.1rem;padding-top:0.9rem;border-top:1px solid #E5E7EB;">' +
+            '<h4 style="font-size:0.85rem;font-weight:700;margin-bottom:0.5rem;">&#128209; Format</h4>' +
+            '<div id="boutonsFormatPage' + idSuffixe + '" style="display:flex;gap:0.5rem;flex-wrap:wrap;">' +
+            '<button type="button" class="bouton-format-page-accordeon' + ((etatApercuInline[docActif].formatPage || 'A4') === 'A4' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A4">A4 Détaillé</button>' +
+            '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A4-essentiel' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A4-essentiel">A4 Essentiel</button>' +
+            '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A5' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A5">' + LIBELLES_MINI[docActif] + '</button>' +
+            '</div>' +
+            '<p class="small text-muted mt-2 mb-0">' + LIBELLES_EXPLICATION[docActif] + '</p>' +
+            // TACHE (retour utilisateur : "je veux gerer la photo ici, sans
+            // repasser par Mon Projet") : bloc complet -- si une photo
+            // existe deja (dossier.photo.url), case a cocher "inclure" +
+            // bouton "Retirer" directement ici ; sinon, simple lien vers
+            // Mon Projet pour en ajouter une (l'upload lui-meme reste dans
+            // Identite, c'est la SEULE action qui necessite d'y aller).
+            (docActif === 'cv'
+              ? '<div class="small mt-2 mb-0" style="background:#F0F9FF;border-radius:6px;padding:0.5rem 0.75rem;">' +
+                '&#128247; Certains modèles (Chic, Mini CV) peuvent afficher une photo. ' +
+                (dossier.photo && dossier.photo.url
+                  ? '<div class="form-check d-inline-block mt-1">' +
+                    '<input class="form-check-input" type="checkbox" id="checkInclurePhotoApercu"' + (dossier.photo.inclure ? ' checked' : '') + '>' +
+                    '<label class="form-check-label" for="checkInclurePhotoApercu">Inclure ma photo</label>' +
+                    '</div>' +
+                    ' · <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-danger" id="btnRetirerPhotoApercu">Retirer la photo</button>' +
+                    ' · <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnAllerPhotoIdentite">Changer la photo</button>'
+                  : '<button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnAllerPhotoIdentite">Ajouter ma photo</button>') +
+                '</div>'
+              : '') +
+            '</div>';
+        })() +
+        '</div>';
+
+      var styleBoutonsFormatPage = '<style>' +
+        '.bouton-format-page-accordeon{border:1px solid #E5E7EB;background:#FFFFFF;border-radius:999px;padding:0.3rem 0.9rem;font-size:0.82rem;cursor:pointer;}' +
+        '.bouton-format-page-accordeon-active{background:#111827;color:#FFFFFF;border-color:#111827;}' +
+        '</style>';
+
+      // TACHE (spec : mini apercu = element principal du panneau de droite,
+      // occupe pratiquement toute la hauteur disponible) : 70vh au lieu des
+      // 320px precedents (delibrement petits a l'origine). "Ouvrir le grand
+      // apercu" directement en dessous, plus separe visuellement.
+      var colonneDroite =
+        '<div style="flex:1 1 320px;min-width:280px;display:flex;flex-direction:column;">' +
+        '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">Aperçu</h3>' +
+        '<div id="messageApercuInline' + idSuffixe + '" class="small text-muted mb-2"></div>' +
+        '<div id="zoneApercuInline' + idSuffixe + '" style="width:100%;height:70vh;min-height:420px;overflow:auto;' +
+        'border:1px solid #E5E7EB;border-radius:8px;background:#F3F4F6;padding:1rem;display:flex;justify-content:center;"></div>' +
+        '<button type="button" id="btnOuvrirGrandApercu" style="font-size:1.05rem;font-weight:700;padding:0.7rem 1.6rem;' +
+        'background:#0d6efd;color:#FFFFFF;border:none;border-radius:999px;box-shadow:0 4px 14px rgba(13,110,253,.4);' +
+        'white-space:nowrap;align-self:center;margin-top:1rem;">&#128065;&#65039; Ouvrir le grand aperçu</button>' +
+        '</div>';
+
+      return styleGrilleModeles + styleBoutonsFormatPage +
+        '<div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap;">' +
+        colonneGauche + colonneDroite +
+        '</div>' +
+        '<p class="small text-muted mt-3 mb-2">&#128196; Ceci est le rendu exact du fichier Word qui sera téléchargé — ' +
+        'vous pourrez le modifier librement, avec toutes les options de mise en forme de Word, une fois ouvert.</p>' +
+        '<button type="button" class="btn btn-primary mt-3" id="btnContinuerApercu">Continuer &#8594;</button>';
+    })());
+
+  // TACHE (retour utilisateur : bandeaux hors parcours) : retires -- prevus
+  // depuis le debut comme temporaires ("a garder tel quel jusqu'a ce que
+  // l'accordeon Exporter soit operationnel, puis a retirer"). L'etape
+  // "Exporter" du parcours (PDF/DOCX/JSON/Copier) fait desormais exactement
+  // la meme chose, a l'interieur de la pyramide -- plus de doublon en
+  // dehors du parcours.
+
+  // TACHE (migration "Ressources et liens utiles") : simple deplacement en
+  // bas de page, aucun changement fonctionnel.
+  var accordeonRessources = blocAccordeon('ressources', titreEtape('&#128218; Ressources et liens utiles'),
+    'Vous souhaitez poursuivre votre réflexion ou découvrir d\'autres possibilités ? Cliquez ici pour accéder aux ressources complémentaires proposées.',
+    '<div class="outils-grid">' +
+    '<div class="outil-item" data-outil="pmsmp"><i class="bi bi-search"></i> &#128269; Trouver une immersion (PMSMP)</div>' +
+    '<div class="outil-item" data-outil="formation"><i class="bi bi-mortarboard"></i> &#127891; Trouver une formation</div>' +
+    '<div class="outil-item" data-outil="explorer"><i class="bi bi-compass"></i> &#129517; Explorer d\'autres métiers</div>' +
+    '</div>');
+
+  // TACHE (retour utilisateur) : une etape n'apparait qu'une fois atteinte
+  // (etatAccordeon[id] a ete defini au moins une fois par avancerEtape() ou
+  // par le premier choix de carte) -- pas seulement repliee, litteralement
+  // absente tant qu'on n'y est pas arrive. Une fois tout le parcours fait,
+  // toutes restent visibles (repliables/rouvrables librement).
+  function etapeAtteinte(id) { return etatAccordeon[id] !== undefined; }
   var html = afficherProgression('resultats') +
-    '<div class="text-center"><h1>&#128640; Passons a l\'action</h1><p class="sousTitre">Vous avez les cles. Completez votre profil puis choisissez votre etape.</p></div>' +
-    '<div class="cv-section"><h4>&#128196; Mon CV</h4>' +
-    sectionsCV + '</div>' +
-    '<div class="row mt-4"><div class="col-md-6">' +
-    blocAccordeon('profil', '&#128203; Votre profil', '',
-      '<div><h5>Savoir-etre</h5>' + (savoirEtre.length ? savoirEtre.map(function (c) { return '<span class="badge bg-success badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>' +
-      '<div><h5>Savoir-faire</h5>' + (savoirFaire.length ? savoirFaire.map(function (c) { return '<span class="badge bg-primary badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>' +
-      '<div><h5>Savoirs</h5>' + (savoirs.length ? savoirs.map(function (c) { return '<span class="badge bg-info badge-cliquable m-1" data-competence-nom="' + echapperAttribut(c) + '">' + c + '</span>'; }).join('') : 'Aucun') + '</div>') +
-    accordeonImpressionCV + accordeonImpressionLettre +
+    // TACHE (retour utilisateur : sous-titre pas pertinent hors "creer un cv") :
+    // "Choisissez votre document, personnalisez-le..." suppose un parcours
+    // de creation depuis zero -- ne correspond pas a ce que vit une
+    // personne en "mettre a jour"/"j'ai un cv" (elle a deja son document).
+    '<div class="text-center"><h1>&#128640; Passons a l\'action</h1>' +
+    (dossier.modeCreation === 'nouveau' ? '<p class="sousTitre">Choisissez votre document, personnalisez-le, puis laissez l\'assistant IA vous accompagner.</p>' : '') +
     '</div>' +
-    '<div class="col-md-6">' +
-    // TACHE (correction : fonctions manquantes) : reutilise desormais le
-    // VRAI bloc "Vous" complet (blocERIP(CONFIG_BLOC_VOUS), identique a Mon
-    // projet -- Identite + Mobilite + Langues + Anonymiser/Personnaliser +
-    // "A quoi servent ces informations ?"), plutot qu'une version simplifiee
-    // qui ne reprenait que l'identite. Le bouton "Je valide", lui, reste
-    // propre a CETTE page (pas ajoute a CONFIG_BLOC_VOUS, donc absent de
-    // Mon projet), desactive (style outil-desactive) tant que tous les
-    // champs texte ne sont pas remplis.
-    '<div id="blocIdentiteAction"' + (identiteActionEnEvidence ? ' class="a-completer"' : '') + '>' +
-    blocERIP(CONFIG_BLOC_VOUS_ACTION) +
-    '<div class="cv-section text-center mt-2 mb-3">' +
-    '<button type="button" class="btn-copy' + (identiteActionEstComplete() ? '' : ' outil-desactive') + '" id="btnValiderIdentiteAction" ' +
-    (identiteActionEstComplete() ? '' : 'title="Completez toutes les informations ci-dessus pour continuer."') + '>' +
-    '&#9989; Je valide</button>' +
-    (identiteActionEstComplete() ? '' : '<p class="small text-muted mt-1 mb-0">Merci de completer toutes les informations ci-dessus (Identite : nom, prenom, telephone, e-mail, adresse, ville, age).</p>') +
-    '</div></div>' +
-    '<p class="small text-muted mb-1">Avec l\'assistant IA</p><div class="outils-grid">' +
-    '<div class="outil-item outil-ia outil-ia-grand' + (cvDisponible() ? '' : ' outil-desactive') + '" data-outil="cv"' +
-      (cvDisponible() ? '' : ' title="Deposez ou creez d\'abord votre CV pour activer cette option."') +
-      '><i class="bi bi-file-earmark-text"></i> &#128196; Créer votre CV</div>' +
-    '<div class="outil-item outil-ia outil-ia-grand" data-outil="lettre"><i class="bi bi-envelope"></i> &#9993; Lettre de motivation</div>' +
-    '<div class="outil-item outil-ia outil-ia-grand" data-outil="entretien"><i class="bi bi-chat-dots"></i> &#127908; Préparer un entretien</div>' +
-    '</div>' +
-    blocAccordeon('ressources', '&#128218; Ressources et liens utiles',
-      'Vous souhaitez poursuivre votre réflexion ou découvrir d\'autres possibilités ? Cliquez ici pour accéder aux ressources complémentaires proposées.',
-      '<div class="outils-grid">' +
-      '<div class="outil-item" data-outil="pmsmp"><i class="bi bi-search"></i> &#128269; Trouver une immersion (PMSMP)</div>' +
-      '<div class="outil-item" data-outil="formation"><i class="bi bi-mortarboard"></i> &#127891; Trouver une formation</div>' +
-      '<div class="outil-item" data-outil="explorer"><i class="bi bi-compass"></i> &#129517; Explorer d\'autres métiers</div>' +
-      '</div>') +
-    '</div></div></div>' +
+    selecteurDocument +
+    (carteChoisie
+      ? (etapeAtteinte('adaptation-metier') ? accordeonAdaptation : '') +
+        (etapeAtteinte('infos-ia') ? accordeonInfosIA : '') +
+        (etapeAtteinte('choix-ia') ? accordeonChoixIA : '') +
+        (etapeAtteinte('import-ia') ? accordeonImportIA : '') +
+        (etapeAtteinte('apercu-document') ? accordeonApercuDoc : '') +
+        (etapeAtteinte('exporter-document') ? accordeonExporter : '')
+      : '') +
+    accordeonRessources +
     barreNavigation('revelation', null, null, { recommencer: true });
   app.innerHTML = html;
 
   brancherEvenementsResultats();
 }
 
+// TACHE (retour utilisateur : Envoyer par mail) : logique de generation du
+// document extraite de l'ancien gestionnaire "Telecharger le Word" (memes
+// generateurs natifs, memes reglages etat.modele/couleur/formatPage),
+// desormais partagee -- Telecharger le Word ET Envoyer par mail l'utilisent
+// toutes deux, aucune duplication.
+function genererBlobDocumentActif(type) {
+  var etat = etatApercuInline[type] || {};
+  // TACHE (retour utilisateur : bouton "Envoyer par mail" ne fait rien) :
+  // etat.modele vaut null tant que l'accordeon "Apercu et finalisation"
+  // n'a jamais ete ouvert (voir etatApercuInline, valeurs initiales) -- si
+  // "Exporter"/"Envoyer par mail" est utilise AVANT d'avoir visite cet
+  // accordeon, aucun modele n'est defini et la generation echouait
+  // silencieusement (rejetee car absent de la liste des modeles natifs).
+  // Meme repli que ouvrirApercuDocxIntegre() ailleurs dans ce fichier.
+  var modeleParDefautParType = { cv: 'aquarelle', lettre: 'sobre', entretien: 'clair' };
+  // TACHE (retour utilisateur : sélecteur de modèles A5, comme pour A4) :
+  // en format A5, le modele choisi vit dans etat.modeleA5 (champ distinct,
+  // jamais etat.modele -- qui reste reserve au choix A4).
+  var modeleActif = (type === 'cv' && etat.formatPage === 'A5')
+    ? (etat.modeleA5 || 'portrait')
+    : (etat.modele || modeleParDefautParType[type]);
+  var nomFichierDocx = type === 'lettre' ? 'lettre.docx' : type === 'entretien' ? 'preparation-entretien.docx' : 'cv.docx';
+  var GENERATEURS_NATIFS_PAR_TYPE = {
+    cv: {
+      generer: function (modele, donnees, couleur) {
+        if (typeof _dnConstruireDocumentAvecOptions === 'function') {
+          return chargerLibrairieDocxNatif().then(function (docx) {
+            var document = _dnConstruireDocumentAvecOptions(docx, donnees, modele, couleur, etat.formatPage);
+            if (!document) { throw new Error('Modele non couvert.'); }
+            return docx.Packer.toBlob(document);
+          });
+        }
+        return (typeof genererDocxNatifCVColore === 'function' ? genererDocxNatifCVColore : genererDocxNatifCV)(modele, donnees, couleur);
+      },
+      // TACHE (retour utilisateur : sélecteur A5) : liste de validation
+      // distincte en A5 (MODELES_AVEC_DOCX_NATIF_A5_CV, voir formatA5CV.js/
+      // miniCvA5.js) -- un id de modele A5 ('portrait') n'a aucune raison
+      // d'exister dans la liste des modeles A4.
+      liste: etat.formatPage === 'A5'
+        ? (typeof MODELES_AVEC_DOCX_NATIF_A5_CV !== 'undefined' ? MODELES_AVEC_DOCX_NATIF_A5_CV : ['portrait'])
+        : (typeof MODELES_AVEC_DOCX_NATIF_CV !== 'undefined' ? MODELES_AVEC_DOCX_NATIF_CV : []),
+      donnees: function () {
+        if (etat.formatPage === 'A5' && typeof construireObjetCVPourExportA5 === 'function') { return Promise.resolve(construireObjetCVPourExportA5(modeleActif)); }
+        return (typeof construireObjetCVPourExport === 'function') ? construireObjetCVPourExport(modeleActif) : Promise.resolve(normaliserDonneesCV(dossier));
+      }
+    },
+    // TACHE (couleurs + formats pour la lettre et l'entretien) :
+    // genererDocxNatifLettreFormat()/genererDocxNatifEntretienFormat()
+    // (formatsLettreEntretien.js) construisent DEJA les donnees recadrees
+    // en interne selon etat.formatPage -- donnees() devient un simple
+    // passe-plat, tout se joue dans generer().
+    lettre: {
+      generer: function (modele, donnees, couleur) {
+        if (typeof genererDocxNatifLettreFormat === 'function') { return genererDocxNatifLettreFormat(modele, couleur, etat.formatPage); }
+        return (typeof genererDocxNatifLettre !== 'undefined' ? genererDocxNatifLettre : null)(modele, donnees);
+      },
+      liste: typeof MODELES_AVEC_DOCX_NATIF_LETTRE !== 'undefined' ? MODELES_AVEC_DOCX_NATIF_LETTRE : [],
+      donnees: function () { return Promise.resolve(normaliserDonneesLettre(dossier)); }
+    },
+    entretien: {
+      generer: function (modele, donnees, couleur) {
+        if (typeof genererDocxNatifEntretienFormat === 'function') { return genererDocxNatifEntretienFormat(modele, couleur, etat.formatPage); }
+        return (typeof genererDocxNatifEntretien !== 'undefined' ? genererDocxNatifEntretien : null)(modele, donnees);
+      },
+      liste: typeof MODELES_AVEC_DOCX_NATIF_ENTRETIEN !== 'undefined' ? MODELES_AVEC_DOCX_NATIF_ENTRETIEN : [],
+      donnees: function () { return Promise.resolve(normaliserDonneesEntretien(dossier)); }
+    }
+  };
+  var configNatif = GENERATEURS_NATIFS_PAR_TYPE[type];
+  var estAvecGenerateurNatif = configNatif && configNatif.generer && configNatif.liste.indexOf(modeleActif) !== -1;
+  if (!estAvecGenerateurNatif) { return Promise.reject(new Error('Pas de generateur Word natif disponible pour ce modele.')); }
+  return configNatif.donnees().then(function (donnees) {
+    return configNatif.generer(modeleActif, donnees, etat.couleur);
+  }).then(function (blob) {
+    return { blob: blob, nomFichier: nomFichierDocx };
+  });
+}
+
 function brancherEvenementsResultats() {
-  // TACHE 47 : accordeon "Ressources et liens utiles" (replie par defaut)
+  // Accordeons (generique, fonctionne pour tous les data-accordeon de la page)
   wireAccordeon(pageResultats);
 
-  // TACHE (demande : meme systeme partout) : pastilles de competences
-  // "Votre profil" -> meme ecran de choix que sur la page Potentiel.
-  wireCompetencesCliquablesGlobal(pageResultats);
+  // TACHE (page Action, "pastille generique") : remplace le cablage des
+  // radios natifs -- meme ecriture dans dossier.preferencesIA, mais mise a
+  // jour visuelle LOCALE (pas de re-render complet, evite tout saut de
+  // defilement) + desactivation possible d'un second clic sur la pastille
+  // deja active (retour a "aucune preference").
+  document.querySelectorAll('[data-pastille-champ]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var champ = this.dataset.pastilleChamp;
+      var valeurClic = this.dataset.pastilleValeur;
+      var nouvelleValeur = (dossier.preferencesIA[champ] === valeurClic) ? null : valeurClic;
+      dossier.preferencesIA[champ] = nouvelleValeur;
+      document.querySelectorAll('[data-pastille-champ="' + champ + '"]').forEach(function (p) {
+        var actif = (p.dataset.pastilleValeur === nouvelleValeur);
+        p.setAttribute('aria-pressed', actif ? 'true' : 'false');
+        p.style.cssText = stylePastilleInline(actif);
+      });
+    });
+  });
 
-  // TACHE (renommage bandeau "Imprimer mon CV") : reutilise directement la
-  // fonction ouvrirApercuCV() existante, sans aucune modification -- seul
-  // l'emplacement du bouton declencheur change (fusionne ici, l'ancien
-  // bouton independant "Apercu du CV (Beta)" est retire pour eviter un
-  // doublon).
-  var btnApercuCVAction = document.getElementById('btnApercuCVAction');
-  if (btnApercuCVAction) {
-    btnApercuCVAction.addEventListener('click', function () { ouvrirApercuCV(); });
-  }
-
-  // TACHE (bandeau contextuel Impression, Lettre) : meme principe que le
-  // bouton CV ci-dessus -- reutilise directement ouvrirApercuLettre(), deja
-  // definie, aucune logique dupliquee.
-  var btnApercuLettreAction = document.getElementById('btnApercuLettreAction');
-  if (btnApercuLettreAction) {
-    btnApercuLettreAction.addEventListener('click', function () { ouvrirApercuLettre(); });
-  }
-
-  // Outils
+  // TACHE (page Action, tache 2) : les cartes deviennent UNIQUEMENT le
+  // selecteur de document actif -- plus aucune popup declenchee ici (toute
+  // la navigation passe desormais par les accordeons de cette page).
   document.querySelectorAll('.outil-item').forEach(function (el) {
     el.addEventListener('click', function () {
       var outil = this.dataset.outil;
-      // TACHE (demande : identite avant CV/lettre/entretien) : pour ces 3
-      // outils uniquement, verifie d'abord que "Vous" est complet. Si non,
-      // met le bloc en evidence, memorise la demande, et n'ouvre rien --
-      // "Je valide" (ci-dessous) reprendra cette demande une fois complete.
-      if ((outil === 'cv' || outil === 'lettre' || outil === 'entretien') && !identiteActionEstComplete()) {
-        demandeOutilEnAttente = outil;
-        identiteActionEnEvidence = true;
-        // TACHE (correction bug : bloc "Vous" pas forcement ouvert) :
-        // blocERIP() utilise 2 etats -- le bloc lui-meme (etatBlocERIPOuvert)
-        // et la sous-section deplie a l'interieur (etatAccordeonGroupe) --
-        // les deux doivent etre ouverts pour que les champs existent dans le
-        // DOM, sinon le defilement ci-dessous ne trouve rien.
-        etatBlocERIPOuvert = 'vous';
-        etatAccordeonGroupe.vous = 'identite';
-        pageResultats();
-        var blocVous = document.getElementById('blocIdentiteAction');
-        if (blocVous) { blocVous.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        return;
-      }
+      // TACHE (navigation guidee) : premiere selection de carte -> ouvre la
+      // premiere etape du parcours. Selection ulterieure (changement de
+      // document) : ne force pas la reouverture, l'utilisateur garde ses
+      // etapes deja ouvertes/fermees telles quelles.
+      var premiereSelection = !dossier.dernierDocumentPrepare;
+      // TACHE (page Action, verrouillage progressif des cartes) : memes
+      // regles que dans pageResultats() (desactiveCV/Lettre/Entretien),
+      // recalculees ici car cette fonction n'a pas acces aux variables
+      // locales de pageResultats() (portee separee).
+      var modePret = (dossier.modeCreation === 'pret');
       if (outil === 'cv') {
-        if (!cvDisponible()) { return; } // carte desactivee : aucun CV disponible
-        // TACHE (bandeau contextuel Impression) : memorise que le CV est
-        // desormais le document actif, et rafraichit immediatement la page
-        // Action pour que le bandeau "Imprimer mon CV" apparaisse sans
-        // attendre un retour manuel sur cet onglet.
+        if (modePret) { return; } // carte verrouillee : deja un CV (mode "pret")
         dossier.dernierDocumentPrepare = 'cv';
+        if (premiereSelection) { etatAccordeon['adaptation-metier'] = true; }
         pageResultats();
-        ouvrirAideIA('cv');
       } else if (outil === 'lettre') {
-        if (cvDisponible()) {
-          dossier.dernierDocumentPrepare = 'lettre';
-          pageResultats();
-          ouvrirAideIA('lettre');
-        } else {
-          // Complement tache 8 : reutilisation de la fenetre de depot du CV,
-          // avec des textes adaptes au contexte "lettre de motivation".
-          ouvrirFenetreCV(null, {
-            titre: '&#9993; Avant de créer votre lettre de motivation',
-            intro: 'Déposez votre CV pour que l\'assistant puisse rédiger une lettre de motivation cohérente ' +
-              'avec votre profil. Formats acceptés : PDF, Word (.docx) ou texte (.txt). Votre CV est lu ' +
-              'directement dans votre navigateur, il n\'est envoyé nulle part.',
-            onTerminer: function () {
-              dossier.dernierDocumentPrepare = 'lettre';
-              pageResultats();
-              ouvrirAideIA('lettre');
-            }
-          });
-        }
+        if (!modePret && !dossier.cvTermine) { return; } // carte verrouillee : CV pas encore termine
+        dossier.dernierDocumentPrepare = 'lettre';
+        if (premiereSelection) { etatAccordeon['adaptation-metier'] = true; }
+        pageResultats();
       } else if (outil === 'entretien') {
-        // TACHE (correction anonymisation) : la fenetre de confirmation
-        // d'identite a ete retiree (source de confusion : elle demandait
-        // Nom/Prenom/Adresse tout en promettant l'anonymisation). L'anonymisation
-        // fonctionne desormais sans jamais exiger ces informations au prealable.
-        var lancerEntretien = function () {
-          ouvrirAideIA('entretien');
-        };
-        if (cvDisponible()) {
-          lancerEntretien();
-        } else {
-          // Complement tache 8 : nouvelle fenetre CV (obligatoire) + lettre (facultative).
-          ouvrirFenetreEntretien(lancerEntretien);
-        }
+        if (!dossier.lettreTerminee) { return; } // carte verrouillee : lettre pas encore terminee
+        dossier.dernierDocumentPrepare = 'entretien';
+        if (premiereSelection) { etatAccordeon['adaptation-metier'] = true; }
+        pageResultats();
       }
       else if (outil === 'pmsmp') { window.open('https://immersion-facile.beta.gouv.fr/', '_blank'); }
       else if (outil === 'formation') { window.open('https://rafael.cap-metiers.pro/recherche/accueil', '_blank'); }
@@ -4779,40 +5721,321 @@ function brancherEvenementsResultats() {
     });
   });
 
-  // TACHE (correction : fonctions manquantes) : cablage du VRAI bloc "Vous"
-  // complet (meme mecanisme que Mon projet, gere Identite/Mobilite/Langues/
-  // Anonymiser-Personnaliser/info en interne) + du bouton "Je valide",
-  // propre a cette page.
-  wireBlocERIP(CONFIG_BLOC_VOUS_ACTION, pageResultats);
-  var btnValiderIdentite = document.getElementById('btnValiderIdentiteAction');
-  if (btnValiderIdentite) {
-    btnValiderIdentite.addEventListener('click', function () {
-      if (!identiteActionEstComplete()) { return; } // garde-fou : le bouton est desactive dans ce cas, mais par securite
-      identiteActionEnEvidence = false;
-      var outilEnAttente = demandeOutilEnAttente;
-      demandeOutilEnAttente = null;
+  // TACHE (navigation guidee) : boutons "Continuer ->" des etapes qui n'ont
+  // pas d'action naturelle de cloture (Adaptation, Informations, Apercu).
+  var btnContinuerAdaptation = document.getElementById('btnContinuerAdaptation');
+  if (btnContinuerAdaptation) {
+    btnContinuerAdaptation.addEventListener('click', function () {
+      avancerEtape('adaptation-metier', 'infos-ia');
       pageResultats();
-      if (outilEnAttente) {
-        // Reutilise directement le clic sur la carte correspondante,
-        // maintenant que l'identite est complete.
-        var carte = document.querySelector('.outil-item[data-outil="' + outilEnAttente + '"]');
-        if (carte) { carte.click(); }
-      }
     });
   }
+  var btnContinuerInfosIA = document.getElementById('btnContinuerInfosIA');
+  if (btnContinuerInfosIA) {
+    btnContinuerInfosIA.addEventListener('click', function () {
+      avancerEtape('infos-ia', 'choix-ia');
+      pageResultats();
+    });
+  }
+  var btnVerifierInfosIA = document.getElementById('btnVerifierInfosIA');
+  if (btnVerifierInfosIA) {
+    btnVerifierInfosIA.addEventListener('click', function () {
+      ouvrirVerificationInformations(dossier.dernierDocumentPrepare || 'cv');
+    });
+  }
+  var btnAllerPhotoIdentite = document.getElementById('btnAllerPhotoIdentite');
+  if (btnAllerPhotoIdentite) {
+    btnAllerPhotoIdentite.addEventListener('click', function () {
+      // TACHE (retour utilisateur : comprendre pourquoi on est envoye ici) :
+      // ouvre directement le bloc "Vous" et sa sous-section "Identite"
+      // (ou se trouve le champ photo) avant de naviguer -- coherent avec
+      // le bouton "Valider et revenir à l'aperçu du CV" qui s'y trouve.
+      etatBlocERIPOuvert = 'vous';
+      etatAccordeonGroupe.vous = 'identite';
+      naviguerVers('projet');
+    });
+  }
+  var checkInclurePhotoApercu = document.getElementById('checkInclurePhotoApercu');
+  if (checkInclurePhotoApercu) {
+    checkInclurePhotoApercu.addEventListener('change', function () {
+      dossier.photo.inclure = this.checked;
+      rechargerApercuInline('cv', etatApercuInline.cv.modele);
+    });
+  }
+  var btnRetirerPhotoApercu = document.getElementById('btnRetirerPhotoApercu');
+  if (btnRetirerPhotoApercu) {
+    btnRetirerPhotoApercu.addEventListener('click', function () {
+      dossier.photo = { url: null, inclure: false };
+      pageResultats();
+    });
+  }
+  var btnContinuerApercu = document.getElementById('btnContinuerApercu');
+  if (btnContinuerApercu) {
+    btnContinuerApercu.addEventListener('click', function () {
+      // TACHE (page Action, verrouillage progressif des cartes) : c'est ici
+      // -- et seulement ici -- que le document ACTUELLEMENT actif est
+      // considere reellement termine (il atteint sa propre etape Exporter),
+      // ce qui deverrouille la carte suivante. Ne concerne jamais l'autre
+      // document par effet de bord, contrairement a etatAccordeon (partage).
+      // NOTE : docActif n'existe pas dans cette fonction (portee separee de
+      // pageResultats()) -- meme reconstruction que partout ailleurs ici.
+      var typeApercuActif = dossier.dernierDocumentPrepare || 'cv';
+      if (typeApercuActif === 'cv') { dossier.cvTermine = true; }
+      else if (typeApercuActif === 'lettre') { dossier.lettreTerminee = true; }
+      avancerEtape('apercu-document', 'exporter-document');
+      pageResultats();
+    });
+  }
+  // TACHE (retour utilisateur : navigation croisee) : bascule le document
+  // actif ET ouvre directement "Choisissez votre assistant IA" du nouveau
+  // document -- les etapes precedentes restent marquees comme atteintes
+  // (etatAccordeon partage, jamais reinitialise), donc revisitables sans
+  // repartir de zero. dossier reste l'unique source de verite : aucune
+  // information "transferee", elle est deja partagee par construction.
+  var btnSuggererLettre = document.getElementById('btnSuggererLettre');
+  if (btnSuggererLettre) {
+    btnSuggererLettre.addEventListener('click', function () {
+      dossier.dernierDocumentPrepare = 'lettre';
+      etatAccordeon['adaptation-metier'] = etatAccordeon['adaptation-metier'] || false;
+      etatAccordeon['infos-ia'] = etatAccordeon['infos-ia'] || false;
+      etatAccordeon['choix-ia'] = true;
+      pageResultats();
+    });
+  }
+  var btnSuggererEntretien = document.getElementById('btnSuggererEntretien');
+  if (btnSuggererEntretien) {
+    btnSuggererEntretien.addEventListener('click', function () {
+      dossier.dernierDocumentPrepare = 'entretien';
+      etatAccordeon['adaptation-metier'] = etatAccordeon['adaptation-metier'] || false;
+      etatAccordeon['infos-ia'] = etatAccordeon['infos-ia'] || false;
+      etatAccordeon['choix-ia'] = true;
+      pageResultats();
+    });
+  }
+
+  // TACHE (page Action, tache 2) : accordeon "Choisissez votre assistant IA"
+  // -- reutilise ouvrirFenetreAssistantIA() (composant generique existant,
+  // deja utilise ailleurs pour le meme usage) et texteProfil()/promptCache()
+  // (deja utilisees par "Informations transmises a l'IA"). Aucune gestion
+  // de l'identite/mise en avant ici : migration prevue dans une tache
+  // dediee (limite connue).
+  document.querySelectorAll('[data-assistant]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var idAssistant = this.dataset.assistant;
+      var assistant = ASSISTANTS_IA.filter(function (a) { return a.id === idAssistant; })[0];
+      if (!assistant) { return; }
+      var type = dossier.dernierDocumentPrepare || 'cv';
+      ouvrirFenetreAssistantIA({
+        nomAssistant: assistant.nom,
+        urlAssistant: assistant.url,
+        construireTexteACopier: function () {
+          return promptCache(type, texteProfilEffectif(type));
+        },
+        onApresValidation: function () {
+          avancerEtape('choix-ia', 'import-ia');
+          pageResultats();
+        }
+      });
+    });
+  });
+
+  // TACHE (page Action, tache 3) : bouton "Importer" -- dispatch par type de
+  // document actif, meme logique que l'ancienne popup (analyserReponseIA*
+  // + genererResumeImportCV/genererResumeGeneriqueImportIA), sans window.opener.
+  var btnImporterReponseIA = document.getElementById('btnImporterReponseIA');
+  var messageImportIA = document.getElementById('messageImportIA');
+  if (btnImporterReponseIA) {
+    activerCollageInstantane({
+      idZoneAuto: 'zoneCollageAutoActionIA',
+      idZoneApercu: 'zoneApercuCollageActionIA',
+      idTextarea: 'texteCollageActionIA',
+      idBoutonColler: 'btnCollerAutoActionIA',
+      idBoutonCollerManuel: 'btnCollerManuelActionIA',
+      idBoutonEffacerRecoller: 'btnEffacerRecollerActionIA',
+      idBoutonImporter: 'btnImporterReponseIA',
+      onErreur: function (msg) { messageImportIA.style.color = '#b91c1c'; messageImportIA.textContent = '⚠️ ' + msg; },
+      onEffacer: function () { messageImportIA.textContent = ''; }
+    });
+    btnImporterReponseIA.addEventListener('click', function () {
+      var texte = document.getElementById('texteCollageActionIA').value;
+      var type = dossier.dernierDocumentPrepare || 'cv';
+      if (type === 'cv') {
+        var resultat = analyserReponseIACV(texte);
+        if (!resultat.succes) { messageImportIA.style.color = '#b91c1c'; messageImportIA.textContent = '⚠️ ' + resultat.erreur; return; }
+        if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+        if (!dossier.ia.cv) { dossier.ia.cv = creerDossierIAVide().cv; }
+        dossier.ia.cv.profil = resultat.valeurs.profil;
+        dossier.ia.cv.pointsForts = resultat.valeurs.pointsForts;
+        dossier.ia.cv.motsCles = resultat.valeurs.motsCles;
+        dossier.ia.cv.recommandations = resultat.valeurs.recommandations;
+        if (typeof rafraichirApercuCVSiOuvert === 'function') { rafraichirApercuCVSiOuvert(); }
+        messageImportIA.style.color = 'inherit';
+        messageImportIA.innerHTML = genererResumeImportCV(resultat.valeurs, dossier);
+      } else if (type === 'lettre') {
+        var resultatLettre = analyserReponseIALettre(texte);
+        if (!resultatLettre.succes) { messageImportIA.style.color = '#b91c1c'; messageImportIA.textContent = '⚠️ ' + resultatLettre.erreur; return; }
+        if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+        if (!dossier.ia.lettre) { dossier.ia.lettre = {}; }
+        dossier.ia.lettre.accroche = resultatLettre.valeurs.accroche;
+        dossier.ia.lettre.arguments = resultatLettre.valeurs.arguments;
+        dossier.ia.lettre.lettre = resultatLettre.valeurs.lettre;
+        messageImportIA.style.color = 'inherit';
+        messageImportIA.innerHTML = genererResumeGeneriqueImportIA(
+          { accroche: resultatLettre.valeurs.accroche, arguments: resultatLettre.valeurs.arguments, texteLettre: resultatLettre.valeurs.lettre.texte },
+          SPEC_AFFICHAGE_LETTRE
+        );
+      } else if (type === 'entretien') {
+        var resultatEntretien = analyserReponseIAEntretien(texte);
+        if (!resultatEntretien.succes) { messageImportIA.style.color = '#b91c1c'; messageImportIA.textContent = '⚠️ ' + resultatEntretien.erreur; return; }
+        if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+        if (!dossier.ia.entretien) { dossier.ia.entretien = {}; }
+        dossier.ia.entretien.presentation = resultatEntretien.valeurs.presentation;
+        dossier.ia.entretien.pointsAPreparer = resultatEntretien.valeurs.pointsAPreparer;
+        dossier.ia.entretien.questionsAnticipees = resultatEntretien.valeurs.questionsAnticipees;
+        dossier.ia.entretien.questionsDuCandidat = resultatEntretien.valeurs.questionsDuCandidat;
+        messageImportIA.style.color = 'inherit';
+        messageImportIA.innerHTML = genererResumeGeneriqueImportIA(resultatEntretien.valeurs, SPEC_AFFICHAGE_ENTRETIEN);
+      }
+      // TACHE (navigation guidee) : import reussi (les 3 branches ci-dessus
+      // "return" plus tot en cas d'echec) -> avance automatiquement.
+      avancerEtape('import-ia', 'apercu-document');
+      pageResultats();
+    });
+  }
+
+  // TACHE (retour utilisateur : cartes de modeles pour Lettre/Entretien) :
+  // le <select> n'existe plus pour aucun des 3 types (carrousel de
+  // vignettes partout desormais, cf. construireCarrouselModeles) -- son
+  // cablage est retire.
+  // TACHE (page Action, apercu inline reel) : "Ouvrir le grand aperçu"
+  // pointe desormais directement vers le panneau plein ecran reel
+  // (apercuDocxIntegre.js) -- l'ancien mecanisme de synchronisation par
+  // sondage (ouvrirGrandApercuEtSynchroniser/setInterval) n'a plus de
+  // raison d'etre : l'apercu inline affiche deja le vrai rendu, il n'y a
+  // plus de "petit apercu" desynchronise a rattraper.
+  var btnOuvrirGrandApercu = document.getElementById('btnOuvrirGrandApercu');
+  if (btnOuvrirGrandApercu) {
+    btnOuvrirGrandApercu.addEventListener('click', function () {
+      var type = dossier.dernierDocumentPrepare || 'cv';
+      var modele = (etatApercuInline[type] && etatApercuInline[type].modele) || 'moderne';
+      if (typeof ouvrirApercuDocxIntegre === 'function') { ouvrirApercuDocxIntegre(type, modele); }
+    });
+  }
+  document.querySelectorAll('[data-format-export]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var format = this.dataset.formatExport;
+      var type = dossier.dernierDocumentPrepare || 'cv';
+      // TACHE (retour utilisateur : retrait vieux systeme de popup) : le
+      // format "pdf" n'est declenche par aucun bouton (voir
+      // formatsParTypeExport plus haut) -- bloc mort retire, avec le
+      // systeme de popup dont il dependait (ouvrirApercuCV/ouvrirApercuLettre).
+      if (format === 'autre') {
+        // TACHE (correction bug : "Autre" ne faisait rien) : bascule via une
+        // classe CSS (plus robuste qu'une lecture de style inline, qui peut
+        // se desynchroniser silencieusement) -- voir aussi zoneAutreExport
+        // construite avec display:none par defaut, cette classe l'emporte
+        // toujours (meme niveau de specificite, appliquee en dernier).
+        var zoneAutre = document.getElementById('zoneAutreExport');
+        if (zoneAutre) {
+          var estMasquee = zoneAutre.style.display === 'none' || zoneAutre.style.display === '';
+          zoneAutre.style.setProperty('display', estMasquee ? 'block' : 'none', 'important');
+        }
+      } else if (format === 'json') {
+        var objet = normaliserDonneesCV(dossier);
+        telechargerFichierTexte('cv.json', JSON.stringify(objet, null, 2), 'application/json;charset=utf-8');
+      } else if (format === 'csv-canva') {
+        // TACHE (retour utilisateur : "Autre" regroupe JSON+CSV) : reutilise
+        // genererCSVCanva(), deja existante (servait auparavant a l'ancienne
+        // popup ouvrirAideIA()) -- identite complete incluse (plus
+        // d'anonymisation, cf. retrait de cette fonctionnalite).
+        if (typeof genererCSVCanva === 'function') {
+          telechargerFichierTexte('canva_cv.csv', '\uFEFF' + genererCSVCanva(true), 'text/csv;charset=utf-8;');
+        }
+      } else if (format === 'docx') {
+        var etat = etatApercuInline[type] || {};
+        var boutonDocx = this;
+        var texteOriginalDocx = boutonDocx.textContent;
+        boutonDocx.textContent = 'Génération…';
+        boutonDocx.disabled = true;
+        genererBlobDocumentActif(type).then(function (resultat) {
+          var urlBlob = URL.createObjectURL(resultat.blob);
+          var lien = document.createElement('a');
+          lien.href = urlBlob;
+          lien.download = resultat.nomFichier;
+          document.body.appendChild(lien);
+          lien.click();
+          lien.remove();
+          setTimeout(function () { URL.revokeObjectURL(urlBlob); }, 1000);
+          boutonDocx.textContent = texteOriginalDocx;
+          boutonDocx.disabled = false;
+          // TACHE (retour utilisateur : rappel de sauvegarde) : affiche a
+          // chaque telechargement -- ce site ne conserve rien (statique,
+          // aucune donnee stockee), le fichier telecharge est la SEULE
+          // copie du document tant qu'il n'est pas sauvegarde ailleurs.
+          var messageRappel = document.getElementById('messageTelechargerWord');
+          if (messageRappel) {
+            messageRappel.style.display = 'block';
+            messageRappel.innerHTML = '&#128190; Pensez à sauvegarder ce document : envoyez-le-vous par e-mail, ' +
+              'ou copiez-le sur une clé USB ou un espace personnel — ce site ne conserve aucune donnée, ce fichier ' +
+              'téléchargé est votre seule copie tant qu\'il n\'est pas enregistré ailleurs.';
+          }
+        }).catch(function () {
+          boutonDocx.textContent = texteOriginalDocx;
+          boutonDocx.disabled = false;
+          var nomFichierDocx = type === 'lettre' ? 'lettre.docx' : type === 'entretien' ? 'preparation-entretien.docx' : 'cv.docx';
+          exporterDocumentEnDocx(etat.html, etat.css, nomFichierDocx, boutonDocx);
+        });
+      } else if (format === 'apercu') {
+        // TACHE (simplification : DOCX seul + apercu integre, etendu a la
+        // lettre et l'entretien) : ouvre le panneau integre qui affiche
+        // le VRAI rendu .docx (voir apercuDocxIntegre.js), a la place de
+        // l'ancienne fenetre popup.
+        var modeleParDefautParType = { cv: 'aquarelle', lettre: 'sobre', entretien: 'clair' };
+        var modelePourApercu = (etatApercuInline[type] && etatApercuInline[type].modele) || modeleParDefautParType[type];
+        if (typeof ouvrirApercuDocxIntegre === 'function') {
+          ouvrirApercuDocxIntegre(type, modelePourApercu);
+        }
+      } else if (format === 'texte-blocs') {
+        // TACHE (simplification : filet de secours sans depenser d'argent,
+        // etendu a la lettre et l'entretien) : remplace l'ancien export
+        // CSV "Canva" (qui necessitait Canva Pro, payant) par un texte
+        // simple, pret a copier-coller. Memes donnees que le DOCX, aucune
+        // divergence possible.
+        if (type === 'cv' && typeof genererBlocsTexteCV === 'function') {
+          // TACHE (correction regression : moteur de decision IA) : meme
+          // logique que le Word (construireObjetCVPourExport), pour que le
+          // texte a copier reflete les memes recommandations IA -- pas une
+          // deuxieme version divergente du contenu.
+          var modelePourTexte = (etatApercuInline.cv && etatApercuInline.cv.modele) || 'moderne';
+          var promesseObjetTexte = (typeof construireObjetCVPourExport === 'function')
+            ? construireObjetCVPourExport(modelePourTexte)
+            : Promise.resolve(normaliserDonneesCV(dossier));
+          promesseObjetTexte.then(function (objetCV) {
+            telechargerFichierTexte('cv-texte.txt', genererBlocsTexteCV(objetCV), 'text/plain;charset=utf-8');
+          });
+        } else if (type === 'lettre' && typeof genererBlocsTexteLettre === 'function') {
+          telechargerFichierTexte('lettre-texte.txt', genererBlocsTexteLettre(normaliserDonneesLettre(dossier)), 'text/plain;charset=utf-8');
+        } else if (type === 'entretien' && typeof genererBlocsTexteEntretien === 'function') {
+          telechargerFichierTexte('entretien-texte.txt', genererBlocsTexteEntretien(normaliserDonneesEntretien(dossier)), 'text/plain;charset=utf-8');
+        }
+      }
+    });
+  });
+
+  initialiserApercuInlineSiOuvert();
 
   // Suppressions (experience, langue, experience perso)
   wireRemoveItems(pageResultats);
 
-  // Experience
+  // Experience (formulaire migre dans l'accordeon "Informations transmises a l'IA")
   var expBtn = document.getElementById('ajouterExpBtn');
   if (expBtn) {
     expBtn.addEventListener('click', function () {
       var poste = document.getElementById('expPoste').value.trim();
       var entreprise = document.getElementById('expEntreprise').value.trim();
       var lieu = document.getElementById('expLieu').value.trim();
-      var dateDebut = document.getElementById('expDateDebut').value;
-      var dateFin = document.getElementById('expDateFin').value;
+      var dateDebut = lireValeurMoisAnnee('expDateDebut');
+      var dateFin = lireValeurMoisAnnee('expDateFin');
       var missions = document.getElementById('expMissions').value.trim();
       if (poste && entreprise && lieu && dateDebut) {
         dossier.experiences.push({ poste: poste, entreprise: entreprise, lieu: lieu, dateDebut: dateDebut, dateFin: dateFin, missions: missions });
@@ -4823,32 +6046,30 @@ function brancherEvenementsResultats() {
 
   // Langues : cablage regroupe dans wireLangues (appelee depuis pageProjet)
 
+  // TACHE (page Action, "champs standardises") : uniformise tous les
+  // champs texte/textarea rendus sur cette page (hauteur/police, majuscule
+  // auto, Entree -> champ suivant pour les input simples).
+  activerChampsStandardises();
+
+  // TACHE (retour utilisateur) : majuscule automatique EGALEMENT pour
+  // "Missions / taches" -- cas particulier volontaire, contrairement aux
+  // autres textarea (reponse IA collee, notamment) qui ne doivent jamais
+  // etre alterees automatiquement.
+  var champMissions = document.getElementById('expMissions');
+  if (champMissions) {
+    champMissions.addEventListener('input', function () {
+      if (this.value.length > 0 && this.value.charAt(0) !== this.value.charAt(0).toUpperCase()) {
+        var position = this.selectionStart;
+        this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);
+        this.setSelectionRange(position, position);
+      }
+    });
+  }
 }
 
 /* ------------------------------------------------------------
    8. AIDE IA : profil visible + prompt CACHE, bouton Copier
    ------------------------------------------------------------ */
-// TACHE 43 : anonymisation automatique (preparation d'entretien uniquement).
-// Ne retire QUE des valeurs connues avec certitude : celles deja confirmees
-// dans dossier.identite (jamais devinees), plus e-mails/telephones/liens
-// detectes par un motif fiable (le meme que celui utilise pour l'extraction).
-function anonymiserTexte(texte) {
-  var t = String(texte || '');
-  if (!t) { return t; }
-  var id = dossier.identite || {};
-  [id.nom, id.prenom, id.adresse, id.telephone, id.email, id.ville, id.age].forEach(function (valeur) {
-    if (valeur && String(valeur).trim()) {
-      var echappe = String(valeur).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      t = t.replace(new RegExp(echappe, 'gi'), '[ANONYMISÉ]');
-    }
-  });
-  // Filets fiables complementaires (au cas ou une valeur n'aurait pas encore ete confirmee)
-  t = t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[ANONYMISÉ]');
-  t = t.replace(/(?:(?:\+33|0033)[\s.-]?[1-9]|0[1-9])(?:[\s.-]?\d{2}){4}/g, '[ANONYMISÉ]');
-  t = t.replace(/https?:\/\/\S+/gi, '[lien supprime]');
-  t = t.replace(/\bwww\.\S+/gi, '[lien supprime]');
-  return t;
-}
 
 // TACHE (standard IA, composant generique) : liste partagee des assistants
 // IA proposes dans l'application. Reprend exactement les 5 memes (memes
@@ -4877,12 +6098,8 @@ var ASSISTANTS_IA = [
 // - nomAssistant, urlAssistant : l'assistant deja choisi (par les cartes
 //   affichees AVANT l'ouverture de cette fenetre -- cette fenetre ne fait
 //   jamais choisir l'IA, uniquement confirmer et informer)
-// - construireTexteACopier(anonymiserActif) : fonction fournie par
-//   l'appelant, qui retourne le texte final a copier ; recoit l'etat de la
-//   bascule anonymisation au moment du clic
-// - afficherAnonymisation (optionnel, true par defaut) : certains contextes
-//   futurs (ex. entretien deja anonymise en amont) pourraient ne pas en
-//   avoir besoin
+// - construireTexteACopier() : fonction fournie par l'appelant, qui
+//   retourne le texte final a copier
 // - onApresValidation() (optionnel) : callback apres copie + ouverture
 // ============================================================
 function fermerFenetreAssistantIA() {
@@ -4890,10 +6107,28 @@ function fermerFenetreAssistantIA() {
   if (f) { f.remove(); }
 }
 
+// TACHE 3 (composant generique, etapes parametrables) : etapes du mode
+// "texte" (document deja lu, contenu textuel copie avec le prompt) --
+// c'etait jusqu'ici la SEULE sequence possible, en dur dans le composant.
+// Devient la valeur PAR DEFAUT de config.etapes, pour ne rien casser chez
+// les appelants existants (aucun ne precise etapes aujourd'hui). Le jeton
+// {ASSISTANT} est remplace par config.nomAssistant au moment de l'affichage.
+var ETAPES_ASSISTANT_IA_TEXTE = [
+  'Le texte nécessaire est <strong>automatiquement copié</strong> dans votre presse-papiers.',
+  'Une fois sur le site de {ASSISTANT}, cliquez simplement dans la zone de conversation.',
+  'Faites <strong>Ctrl + V</strong>, puis appuyez sur <strong>Entrée</strong>.',
+  'Une fois sa réponse affichée, cliquez sur le bouton "Copier" de {ASSISTANT}.',
+  'Revenez ensuite ici pour importer cette réponse.'
+];
+
 function ouvrirFenetreAssistantIA(config) {
   fermerFenetreAssistantIA();
-  var afficherAnon = config.afficherAnonymisation !== false;
-  var anonymiserActif = afficherAnon && (dossier.anonymiser !== false);
+  // TACHE (retour utilisateur : retrait Anonymiser) : le seul appelant de
+  // cette fonction (accordeon "Choisissez votre assistant IA") avait deja
+  // desactive l'anonymisation ici (afficherAnonymisation:false, tache
+  // precedente) -- ce mecanisme etait donc deja mort en pratique. Retire
+  // completement pour ne pas laisser une option jamais atteignable.
+  var etapes = config.etapes || ETAPES_ASSISTANT_IA_TEXTE;
 
   var fenetre = document.createElement('div');
   fenetre.id = 'fenetreAssistantIA';
@@ -4901,6 +6136,9 @@ function ouvrirFenetreAssistantIA(config) {
     'display:flex;align-items:center;justify-content:center;z-index:2200;padding:1rem;';
 
   function contenuHTML() {
+    var etapesHTML = etapes.map(function (etape) {
+      return '<li>' + etape.replace(/\{ASSISTANT\}/g, config.nomAssistant) + '</li>';
+    }).join('');
     return '<div style="background:white;border-radius:1.5rem;max-width:520px;width:100%;' +
       'max-height:85vh;overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
       '<div class="d-flex justify-content-between align-items-center mb-2">' +
@@ -4910,24 +6148,7 @@ function ouvrirFenetreAssistantIA(config) {
       '</div>' +
       '<p class="small">Vous allez être redirigé(e) vers le site externe de <strong>' + config.nomAssistant + '</strong>. ' +
       'Rien de compliqué : voici exactement ce qui va se passer.</p>' +
-      '<ol class="small ps-3 mb-3">' +
-      '<li>Le texte nécessaire est <strong>automatiquement copié</strong> dans votre presse-papiers.</li>' +
-      '<li>Une fois sur le site de ' + config.nomAssistant + ', cliquez simplement dans la zone de conversation.</li>' +
-      '<li>Faites <strong>Ctrl + V</strong>, puis appuyez sur <strong>Entrée</strong>.</li>' +
-      '<li>Une fois sa réponse affichée, cliquez sur le bouton "Copier" de ' + config.nomAssistant + '.</li>' +
-      '<li>Revenez ensuite ici pour importer cette réponse.</li>' +
-      '</ol>' +
-      (afficherAnon
-        ? '<div class="border rounded p-2 mb-2" style="background:#F0FDF4;">' +
-          '<p class="small mb-2">&#128274; Par défaut, vos données personnelles (nom, prénom, adresse, téléphone, ' +
-          'e-mail) sont automatiquement masquées avant l\'envoi vers cet assistant externe. Vous pouvez désactiver ' +
-          'cette protection si vous le souhaitez.</p>' +
-          '<button type="button" id="btnAnonAssistantIA" data-anon="' + (anonymiserActif ? '1' : '0') + '" ' +
-          'style="border:none;padding:0.4rem 1rem;border-radius:30px;font-weight:600;color:white;background:' +
-          (anonymiserActif ? '#dc3545' : '#198754') + ';">' +
-          (anonymiserActif ? '&#128274; Anonymiser (activé)' : '&#128275; Anonymiser (désactivé)') + '</button>' +
-          '</div>'
-        : '') +
+      '<ol class="small ps-3 mb-3">' + etapesHTML + '</ol>' +
       '<div class="d-flex justify-content-end mt-3">' +
       '<button type="button" id="validerAssistantIABtn" class="btn btn-primary">Je comprends, continuer</button>' +
       '</div></div>';
@@ -4935,21 +6156,10 @@ function ouvrirFenetreAssistantIA(config) {
 
   function cablerBoutons() {
     document.getElementById('fermerAssistantIABtn').addEventListener('click', fermerFenetreAssistantIA);
-    var btnAnon = document.getElementById('btnAnonAssistantIA');
-    if (btnAnon) {
-      btnAnon.addEventListener('click', function () {
-        anonymiserActif = !anonymiserActif;
-        fenetre.innerHTML = contenuHTML();
-        cablerBoutons();
-      });
-    }
     document.getElementById('validerAssistantIABtn').addEventListener('click', function () {
       // TACHE (standard IA) : seul et unique declencheur de toute la
       // sequence -- construction du texte, copie, ouverture de l'IA.
-      // Memorise aussi le choix d'anonymisation dans dossier.anonymiser,
-      // le meme reglage global deja utilise par ouvrirAideIA().
-      dossier.anonymiser = anonymiserActif;
-      var texteACopier = config.construireTexteACopier(anonymiserActif);
+      var texteACopier = config.construireTexteACopier();
       function ouvrirAssistant() {
         window.open(config.urlAssistant, '_blank');
         fermerFenetreAssistantIA();
@@ -4977,11 +6187,35 @@ function ouvrirFenetreAssistantIA(config) {
   cablerBoutons();
 }
 
+// TACHE (retour utilisateur : verification transmission IA) : memes
+// libelles que ceux affiches dans l'accordeon "Adaptation au metier"
+// (pageResultats), pour que le texte transmis a l'IA soit lisible et
+// coherent avec ce que la personne a choisi a l'ecran.
+var LABELS_PREFERENCES_IA = {
+  niveauPoste: {
+    employe: 'Employé / Opérateur', ouvrier_qualifie: 'Ouvrier qualifié', technicien: 'Technicien',
+    agent_maitrise: 'Agent de maîtrise', cadre: 'Cadre', direction: 'Direction / Encadrement'
+  },
+  niveauLangage: { naturel: 'Naturel', professionnel: 'Professionnel', tres_professionnel: 'Très professionnel' },
+  adaptationMetier: {
+    standard: 'Standard — document généraliste',
+    adaptee: 'Adaptée au vocabulaire du métier recherché',
+    specialisee: 'Spécialisée — expressions propres au secteur'
+  },
+  ton: { dynamique: 'Dynamique', equilibre: 'Équilibré', institutionnel: 'Institutionnel' },
+  longueur: { synthetique: 'Très synthétique', equilibree: 'Équilibrée', detaillee: 'Détaillée' }
+};
+
 function texteProfil(type) {
-  var metiers = suggererMetiers().join(', ');
   var competences = deduireCompetences();
-  var savoirEtre = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-etre'; }).join(', ');
-  var savoirFaire = competences.filter(function (c) { return categorieCompetence[c] === 'Savoir-faire'; }).join(', ');
+  var savoirEtre = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; }).join(', ');
+  // TACHE (retour utilisateur : compétences invisibles après import) : meme
+  // correction que savoirFaireActuels()/construireProfil() -- sans cela,
+  // les competences importees (non reconnues dans la table figee
+  // categorieCompetence) etaient aussi absentes du texte reellement envoye
+  // a l'IA pour generer le CV/la lettre/l'entretien, pas seulement de
+  // l'affichage Revelation. Plus impactant que prevu au depart.
+  var savoirFaire = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-faire' || categorieReelleCompetence(c) === undefined; }).join(', ');
   var savoirs = obtenirSavoirs().join(', ');
   var valeurs = dossier.valeurs.map(function (v) { var d = trouverItemParId(CATALOGUE_VALEURS_PROFESSIONNELLES, v); return d ? d.label : v; }).join(', ');
 
@@ -4996,8 +6230,21 @@ function texteProfil(type) {
   }
 
   var t = 'PROFIL DU CANDIDAT\n';
-  if (dossier.metierCible) { t += '- Metier vise (a cibler en priorite pour le CV) : ' + dossier.metierCible + '\n'; }
-  else if (dossier.secteurCible) { t += '- Secteur d\'activite vise (pas un metier precis, documents adaptes au secteur) : ' + dossier.secteurCible + '\n'; }
+  // TACHE (retour utilisateur : suggestions != metiers vises) : les metiers
+  // RECOMMANDES par le moteur (suggererMetiers()) ne sont plus transmis a
+  // l'IA -- ce sont des suggestions a explorer par la personne, pas des
+  // metiers vises. Seuls comptent desormais : le metier CIBLE (un seul,
+  // choix explicite) OU, en mode secteur, les metiers de la LISTE COURTE
+  // (dossier.metiersCandidats -- pastilles gardees volontairement par la
+  // personne, cf. "Voir tous les metiers"), jamais la liste de suggestions.
+  if (dossier.metierCible) {
+    t += '- Metier vise (a cibler en priorite pour le CV) : ' + dossier.metierCible + '\n';
+  } else if (dossier.secteurCible) {
+    t += '- Secteur d\'activite vise (pas un metier precis, documents adaptes au secteur) : ' + dossier.secteurCible + '\n';
+    if (dossier.metiersCandidats && dossier.metiersCandidats.length) {
+      t += '- Metiers cibles dans ce secteur : ' + dossier.metiersCandidats.join(', ') + '\n';
+    }
+  }
   // TACHE (correction, CV general/specifique sans effet) : le choix devient
   // desormais une instruction explicite dans le profil transmis a l'IA --
   // uniquement pour la generation du CV lui-meme (pas pour la lettre ou
@@ -5016,7 +6263,17 @@ function texteProfil(type) {
     }
   }
   t += '- Objectif : ' + (dossier.objectif || 'non defini') + '\n';
-  t += '- Metiers envisages : ' + (metiers || 'non renseigne') + '\n';
+  // TACHE (retour utilisateur : verification transmission IA) : dossier.
+  // preferencesIA etait ecrit par l'accordeon "Adaptation au metier" mais
+  // jamais lu ici -- ces reglages n'avaient donc aucun effet reel sur les
+  // reponses de l'IA. Corrige : transmis desormais, uniquement les champs
+  // effectivement choisis (aucune valeur imposee par defaut).
+  var prefs = dossier.preferencesIA || {};
+  if (prefs.niveauPoste) { t += '- Niveau du poste recherche : ' + (LABELS_PREFERENCES_IA.niveauPoste[prefs.niveauPoste] || prefs.niveauPoste) + '\n'; }
+  if (prefs.niveauLangage) { t += '- Niveau de langage souhaite : ' + (LABELS_PREFERENCES_IA.niveauLangage[prefs.niveauLangage] || prefs.niveauLangage) + '\n'; }
+  if (prefs.adaptationMetier) { t += '- Adaptation au vocabulaire du metier : ' + (LABELS_PREFERENCES_IA.adaptationMetier[prefs.adaptationMetier] || prefs.adaptationMetier) + '\n'; }
+  if (prefs.ton) { t += '- Ton de la candidature souhaite : ' + (LABELS_PREFERENCES_IA.ton[prefs.ton] || prefs.ton) + '\n'; }
+  if (prefs.longueur) { t += '- Longueur souhaitee : ' + (LABELS_PREFERENCES_IA.longueur[prefs.longueur] || prefs.longueur) + '\n'; }
   t += '- Savoir-etre : ' + (savoirEtre || 'non renseigne') + '\n';
   t += '- Savoir-faire : ' + (savoirFaire || 'non renseigne') + '\n';
   t += '- Savoirs : ' + (savoirs || 'non renseigne') + '\n';
@@ -5093,7 +6350,91 @@ function texteProfil(type) {
   if (dossier.certifications && dossier.certifications.length) {
     t += '- Certifications : ' + dossier.certifications.join(', ') + '\n';
   }
+  // TACHE (retour utilisateur : la strategie CV n'etait jamais transmise a
+  // la lettre/l'entretien) : lettre.md et entretien.md demandent tous deux
+  // de s'appuyer sur le travail deja realise pour le CV (pas seulement
+  // l'accroche/les mots-cles, mais aussi le detail des recommandations) --
+  // or cette donnee (dossier.ia.cv) n'etait jusqu'ici jamais incluse dans
+  // CE texte, celui reellement envoye a l'IA. La consigne du prompt
+  // n'avait donc aucun effet reel : l'information demandee n'atteignait
+  // jamais l'IA. Corrige ici, uniquement pour la lettre/l'entretien (pas
+  // pour le CV lui-meme, qui n'a pas a se referencer sa propre strategie
+  // avant meme qu'elle existe).
+  if (type !== 'cv') {
+    var iaCv = dossier.ia && dossier.ia.cv;
+    if (iaCv && (iaCv.profil || (iaCv.pointsForts && iaCv.pointsForts.length))) {
+      t += '\nSTRATEGIE DEJA DEFINIE POUR LE CV (a reutiliser et rester cohérent avec elle, jamais a refaire depuis zero) :\n';
+      if (iaCv.profil) { t += '- Accroche retenue pour le CV : ' + iaCv.profil + '\n'; }
+      if (iaCv.pointsForts && iaCv.pointsForts.length) { t += '- Points forts retenus : ' + iaCv.pointsForts.join(', ') + '\n'; }
+      if (iaCv.motsCles && iaCv.motsCles.length) { t += '- Mots-cles retenus : ' + iaCv.motsCles.join(', ') + '\n'; }
+      var reco = iaCv.recommandations || {};
+      if (reco.experiencesAMettreEnAvant && reco.experiencesAMettreEnAvant.length) {
+        t += '- Experiences mises en avant sur le CV, et pourquoi :\n' + reco.experiencesAMettreEnAvant.map(function (e) {
+          return '   . ' + e.poste + (e.entreprise ? ' (' + e.entreprise + ')' : '') + (e.justification ? ' -- ' + e.justification : '');
+        }).join('\n') + '\n';
+      }
+      if (reco.competencesAValoriser && reco.competencesAValoriser.length) {
+        t += '- Competences valorisees sur le CV, et pourquoi :\n' + reco.competencesAValoriser.map(function (c) {
+          return '   . ' + c.competence + (c.justification ? ' -- ' + c.justification : '');
+        }).join('\n') + '\n';
+      }
+      if (reco.rubriquesMasquables && reco.rubriquesMasquables.length) {
+        t += '- Rubriques jugees sans interet pour cette candidature sur le CV (a ne pas remettre en avant sans raison) :\n' + reco.rubriquesMasquables.map(function (r) {
+          return '   . ' + r.rubrique + (r.justification ? ' -- ' + r.justification : '');
+        }).join('\n') + '\n';
+      }
+    }
+  }
   return t;
+}
+
+// TACHE (retour utilisateur : "Verifier les informations") : la personne
+// peut desormais remplacer le texte AUTO-GENERE ci-dessus par sa propre
+// version, modifiee librement (zone de texte unique, validee). Quand un
+// texte manuel existe, il est utilise PARTOUT ou texteProfil() l'etait --
+// aussi bien pour l'apercu affiche que pour ce qui est reellement copie
+// vers l'assistant IA -- pour ne jamais montrer un aperçu different de ce
+// qui est envoye.
+function texteProfilEffectif(type) {
+  if (typeof dossier.profilTexteManuel === 'string' && dossier.profilTexteManuel.trim() !== '') {
+    return dossier.profilTexteManuel;
+  }
+  return texteProfil(type);
+}
+
+// TACHE (retour utilisateur : "Verifier les informations") : fenetre EN
+// PAGE (pas une popup navigateur), reutilise le meme principe de fermeture
+// que les autres fenetres deja construites sur ce modele (clic sur le fond
+// OU sur la croix) -- coherent avec ouvrirBulleAide()/ouvrirFenetreAssistantIA().
+function ouvrirVerificationInformations(type) {
+  var overlay = document.createElement('div');
+  overlay.id = 'fenetreVerificationInfos';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
+    'display:flex;align-items:center;justify-content:center;z-index:2200;padding:1rem;';
+  overlay.innerHTML =
+    '<div style="background:white;border-radius:1rem;max-width:700px;width:100%;max-height:90vh;' +
+    'overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
+    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+    '<h5 class="mb-0">Vérifier les informations</h5>' +
+    '<button type="button" id="btnFermerVerificationInfos" class="btn btn-sm btn-outline-secondary" ' +
+    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
+    '</div>' +
+    '<p class="small text-muted">Voici toutes les informations qui seront transmises à l\'assistant IA (les ' +
+    'instructions elles-mêmes ne sont pas affichées ici). Modifiez librement ce texte si besoin.</p>' +
+    '<textarea id="texteVerificationInfos" class="form-control" rows="16" ' +
+    'style="font-size:0.95rem;">' + echapperAttribut(texteProfilEffectif(type)) + '</textarea>' +
+    '<div class="d-flex justify-content-end mt-3">' +
+    '<button type="button" id="btnValiderVerificationInfos" class="btn btn-primary">Valider</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+  function fermer() { overlay.remove(); }
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermer(); } });
+  document.getElementById('btnFermerVerificationInfos').addEventListener('click', fermer);
+  document.getElementById('btnValiderVerificationInfos').addEventListener('click', function () {
+    dossier.profilTexteManuel = document.getElementById('texteVerificationInfos').value;
+    fermer();
+    pageResultats();
+  });
 }
 
 // Prompt specialise (CACHE a l'ecran). Copie en meme temps que le profil.
@@ -5124,15 +6465,25 @@ var FICHIERS_PROMPTS_EXTERNES = {
   cv: 'prompts/cv.md',
   lettre: 'prompts/lettre.md',
   entretien: 'prompts/entretien.md',
+  // TACHE (prompt allege, carte accueil) : fichier distinct de entretien.md
+  // -- manquait ici, ce qui faisait retomber silencieusement sur le texte
+  // de secours (promptParDefaut) meme quand le vrai fichier existait.
+  'entretien-accueil': 'prompts/entretien-accueil.md',
   // TACHE (V2 IA, etape 1) : prompt separe et dedie, pour ne prendre aucun
   // risque sur le prompt principal de redaction du CV (prompts/cv.md).
   accroche: 'prompts/accroche.md',
   // TACHE 5 (moteur d'import) : prompt d'extraction, distinct des 4
   // precedents -- ceux-la construisent une strategie, celui-ci ne fait que
   // lire un CV depose pour en extraire les faits (voir docs/ARCHITECTURE_MOTEUR_IMPORT.md).
-  'extraction-cv': 'prompts/extraction-cv.md'
+  'extraction-cv': 'prompts/extraction-cv.md',
+  // TACHE (retour utilisateur : "co-construire votre lettre de motivation",
+  // icone dediee sur l'accueil) : prompt V1, conversationnel, entierement
+  // autonome (il redemande lui-meme tout ce dont il a besoin, aucun profil
+  // a lui injecter contrairement aux autres) -- fichier distinct, jamais
+  // mele a prompts/lettre.md (le prompt V2 actuel).
+  'lettre-v1': 'prompts/lettre-v1.md'
 };
-var promptsExternesCharges = { cv: null, lettre: null, entretien: null, accroche: null, 'extraction-cv': null };
+var promptsExternesCharges = { cv: null, lettre: null, entretien: null, 'entretien-accueil': null, accroche: null, 'extraction-cv': null, 'lettre-v1': null };
 
 function chargerPromptsExternes() {
   if (typeof fetch !== 'function') { return; } // navigateur trop ancien : reste sur le texte par defaut
@@ -5156,6 +6507,15 @@ function chargerPromptsExternes() {
 // Textes par defaut (utilises tant que le fichier externe correspondant n'a
 // pas ete charge avec succes). Identiques aux 3 fichiers prompts/*.md.
 function promptParDefaut(type) {
+  if (type === 'lettre-v1') {
+    // TACHE (retour utilisateur : "co-construire votre lettre de
+    // motivation") : prompt V1 tres long (guide conversationnel complet) --
+    // contrairement aux autres prompts, pas raisonnable de le reproduire
+    // integralement ici comme texte de secours. Message clair invitant a
+    // reessayer plutot qu'un repli degrade et incomplet.
+    return 'Le prompt n\'a pas pu etre charge pour le moment. Verifiez votre connexion et reessayez, ou ' +
+      'signalez ce probleme si cela persiste.';
+  }
   if (type === 'extraction-cv') {
     // TACHE 5 (moteur d'import) : texte de secours aligne sur
     // prompts/extraction-cv.md (version validee) -- utilise uniquement si
@@ -5219,10 +6579,33 @@ function promptParDefaut(type) {
       'Demarre par la presentation de debut d\'entretien, puis prepare les questions anticipees avec une ' +
       'structure de reponse (situation, tache, action, resultat) et un retour bref, les zones de fragilite avec ' +
       'bienveillance, les questions que le candidat pourra poser au recruteur, et quelques conseils de ' +
-      'comportement si utile. N\'aborde jamais un handicap de ta propre initiative. Ne jamais inventer un fait. ' +
-      'Quand la preparation est terminee, termine ta derniere reponse IMPERATIVEMENT par un bloc de code JSON ' +
-      'strictement valide, exactement selon ce format : {"presentation": "...", "pointsAPreparer": ["...", "..."], ' +
-      '"questionsAnticipees": ["...", "..."], "questionsDuCandidat": ["...", "..."]}.';
+      'comportement si utile. Pour chaque question anticipee travaillee, distille 2 a 3 pistes courtes ' +
+      '(mots-cles/angle, jamais une phrase redigee) et, si utile, une amorce tres courte (5-6 mots maximum) -- ' +
+      'jamais une reponse toute redigee a apprendre par coeur. N\'aborde jamais un handicap de ta propre ' +
+      'initiative. Ne jamais inventer un fait. Quand la preparation est terminee, termine ta derniere reponse ' +
+      'IMPERATIVEMENT par un bloc de code JSON strictement valide, exactement selon ce format : ' +
+      '{"presentation": "...", "pointsAPreparer": ["...", "..."], "questionsAnticipees": [{"question": "...", ' +
+      '"pistes": ["...", "..."], "amorce": "..."}], "questionsDuCandidat": ["...", "..."]}.';
+  }
+  if (type === 'entretien-accueil') {
+    // TACHE (prompt allege, carte accueil) : texte de secours aligne sur
+    // prompts/entretien-accueil.md -- utilise uniquement si le fichier
+    // externe ne peut pas etre charge. Manquait jusqu'ici : sans ce bloc,
+    // le type retombait silencieusement sur le prompt CV (dernier "return"
+    // de cette fonction, aucune correspondance explicite ci-dessus).
+    return 'Tu es un conseiller en insertion professionnelle experimente, agissant comme coach de preparation a ' +
+      'l\'entretien d\'embauche. Contrairement a la version complete (par dialogue), cette version est plus ' +
+      'legere : produis l\'ensemble de la preparation directement dans ta toute premiere reponse, sans echange ' +
+      'prealable. Analyse silencieusement le fil conducteur de la candidature, les zones de fragilite et le ' +
+      'contexte deductibles du profil, sans redemander ce qui y figure deja. Produis directement : une ' +
+      'presentation de debut d\'entretien (une a deux minutes), des points a preparer, 4 a 6 questions ' +
+      'anticipees reellement probables pour ce profil (chacune avec 2 a 3 pistes courtes -- mots-cles/angle, ' +
+      'jamais une phrase redigee -- et si utile une amorce tres courte de 5-6 mots maximum, jamais une reponse ' +
+      'toute redigee), et quelques questions a poser au recruteur. N\'aborde jamais un handicap de ta propre ' +
+      'initiative. Ne jamais inventer un fait. Termine cette reponse (la premiere et unique) IMPERATIVEMENT par ' +
+      'un bloc de code JSON strictement valide, exactement selon ce format : {"presentation": "...", ' +
+      '"pointsAPreparer": ["...", "..."], "questionsAnticipees": [{"question": "...", "pistes": ["...", "..."], ' +
+      '"amorce": "..."}], "questionsDuCandidat": ["...", "..."]}.';
   }
   // TACHE (integration prompt CV V2) : texte de secours aligne sur
   // prompts/cv.md (version validee) -- utilise uniquement si le fichier
@@ -5375,6 +6758,42 @@ function extraireBlocJSONDepuisTexte(texteColle) {
     candidatsJSON.push(brut.slice(premiereAccolade, derniereAccolade + 1));
   }
 
+  // TACHE (retour utilisateur : "ne semble pas etre un JSON valide" alors
+  // que le texte colle en a visuellement toute l'apparence) : cause tres
+  // frequente -- l'interface de l'assistant IA (ou un correcteur du
+  // systeme d'exploitation au moment du copier-coller) remplace les
+  // guillemets droits par des guillemets typographiques ("courbes"), quasi
+  // indiscernables a l'oeil dans une zone de texte, mais qui font
+  // systematiquement echouer JSON.parse. Ajoute une 2e serie de tentatives
+  // avec ces caracteres normalises, sur les MEMES candidats deja
+  // construits ci-dessus (bloc code, texte complet).
+  function normaliserGuillemets(t) {
+    return t.replace(/[\u201C\u201D\u201F\u2033]/g, '"').replace(/[\u2018\u2019\u201B\u2032]/g, '\'');
+  }
+  // TACHE : les virgules superflues juste avant une accolade/crochet
+  // fermant(e) (ex. un dernier element de liste suivi d'une virgule) sont
+  // egalement une erreur frequente et facile a corriger sans risque.
+  function retirerVirgulesSuperflues(t) {
+    return t.replace(/,(\s*[}\]])/g, '$1');
+  }
+  // TACHE (retour utilisateur : "confiance": elevee au lieu de "elevee") :
+  // l'IA oublie parfois les guillemets autour d'une valeur texte (mot seul,
+  // sans espace ni caractere special) -- invalide en JSON (traite comme un
+  // identifiant inconnu), fait echouer le parsing de tout le texte meme si
+  // le reste est correct. Repare uniquement les mots seuls immediatement
+  // suivis d'une virgule ou d'une accolade/crochet fermant(e) -- jamais
+  // true/false/null, qui sont des valeurs JSON valides sans guillemets.
+  function reparerValeursTexteSansGuillemets(t) {
+    return t.replace(/:\s*([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9_-]*)(\s*[,}\]])/g, function (correspondance, mot, suite) {
+      if (mot === 'true' || mot === 'false' || mot === 'null') { return correspondance; }
+      return ': "' + mot + '"' + suite;
+    });
+  }
+  var candidatsSupplementaires = candidatsJSON.map(function (c) {
+    return reparerValeursTexteSansGuillemets(retirerVirgulesSuperflues(normaliserGuillemets(c)));
+  });
+  candidatsJSON = candidatsJSON.concat(candidatsSupplementaires);
+
   for (var i = 0; i < candidatsJSON.length; i++) {
     try {
       var tentative = JSON.parse(candidatsJSON[i]);
@@ -5396,6 +6815,27 @@ function normaliserListeTextesIA(v) {
   return v.filter(function (e) { return typeof e === 'string'; })
     .map(function (e) { return e.trim(); })
     .filter(function (e) { return e.length > 0; });
+}
+// TACHE (retour utilisateur : reponses courtes + conseils par question,
+// entretien) : une question anticipee n'est plus une simple chaine, mais
+// un petit objet {question, pistes, amorce} -- pistes (mots-cles/angle,
+// jamais une reponse redigee) et amorce (5-6 mots max, facultative).
+// Normalisation tolerante : un element mal forme (pas d'objet, pas de
+// "question" non vide) est ignore plutot que de faire echouer tout le
+// parsing -- meme principe que le reste de ce moteur.
+function normaliserQuestionAnticipeeIA(v) {
+  if (!v || typeof v !== 'object') { return null; }
+  var question = normaliserTexteIA(v.question);
+  if (!question) { return null; }
+  return {
+    question: question,
+    pistes: normaliserListeTextesIA(v.pistes),
+    amorce: normaliserTexteIA(v.amorce)
+  };
+}
+function normaliserListeQuestionsIA(v) {
+  if (!Array.isArray(v)) { return []; }
+  return v.map(normaliserQuestionAnticipeeIA).filter(function (q) { return q !== null; });
 }
 
 // TACHE (integration Entretien V2, generalisation) : petite fonction
@@ -5433,11 +6873,13 @@ function analyserReponseIA(texteColle, specification) {
   var resultat = {};
   var auMoinsUnChampRempli = false;
   specification.forEach(function (champ) {
-    var valeur = (champ.type === 'liste')
-      ? normaliserListeTextesIA(objet[champ.cle])
+    var valeur = (champ.type === 'liste') ? normaliserListeTextesIA(objet[champ.cle])
+      : (champ.type === 'liste-questions') ? normaliserListeQuestionsIA(objet[champ.cle])
       : normaliserTexteIA(objet[champ.cle]);
     resultat[champ.cle] = valeur;
-    if (champ.type === 'liste' ? valeur.length > 0 : !!valeur) { auMoinsUnChampRempli = true; }
+    if (champ.type === 'liste' || champ.type === 'liste-questions') {
+      if (valeur.length > 0) { auMoinsUnChampRempli = true; }
+    } else if (!!valeur) { auMoinsUnChampRempli = true; }
   });
 
   if (!auMoinsUnChampRempli) {
@@ -5454,7 +6896,7 @@ function analyserReponseIA(texteColle, specification) {
 var SPEC_CHAMPS_ENTRETIEN = [
   { cle: 'presentation', type: 'texte' },
   { cle: 'pointsAPreparer', type: 'liste' },
-  { cle: 'questionsAnticipees', type: 'liste' },
+  { cle: 'questionsAnticipees', type: 'liste-questions' },
   { cle: 'questionsDuCandidat', type: 'liste' }
 ];
 
@@ -6228,6 +7670,12 @@ function fusionnerDonnees(dossierCible, decisionsUtilisateur, specification) {
       // deduireCompetences() (deja lu ces deux champs).
       if (!Array.isArray(dossierCible.competencesCV)) { dossierCible.competencesCV = []; }
       if (!Array.isArray(dossierCible.savoirsCV)) { dossierCible.savoirsCV = []; }
+      // TACHE (retour utilisateur : aucun savoir-être identifié) : champ
+      // dedie, en plus de competencesCV (toujours alimente pour ne rien
+      // casser cote export) -- seul moyen de RETROUVER quels elements de
+      // competencesCV sont des savoir-etre une fois fusionnes, puisque
+      // competencesCV les reunit tous a plat avec les savoir-faire.
+      if (!Array.isArray(dossierCible.savoirEtreCV)) { dossierCible.savoirEtreCV = []; }
       var ajoutesCompetences = { savoirFaire: [], savoirEtre: [], savoirs: [] };
       ['savoirFaire', 'savoirEtre'].forEach(function (sousChamp) {
         var d = decision[sousChamp] || { elementsAAjouter: [] };
@@ -6235,6 +7683,7 @@ function fusionnerDonnees(dossierCible, decisionsUtilisateur, specification) {
           if (texte && !texteExisteDeja(dossierCible.competencesCV, texte)) {
             dossierCible.competencesCV.push(texte);
             ajoutesCompetences[sousChamp].push(texte);
+            if (sousChamp === 'savoirEtre') { dossierCible.savoirEtreCV.push(texte); }
           }
         });
       });
@@ -6491,30 +7940,109 @@ function decider(dossier, recommandationsParCategorie, capacites, specificationC
 //    elements au total).
 // ============================================================
 
-// Fusionne les 3 sous-listes de competences en une seule liste de textes
-// (pour reutiliser deciderListeTextes() telle quelle), en memorisant de
-// quelle sous-categorie chaque texte provient, puis re-scinde le resultat
-// une fois la decision appliquee.
-function appliquerDecisionCompetences(competencesObjetCV, recommandationsCompetences, capaciteCompetences) {
-  var sousCategorieParTexte = {};
-  var toutesCompetencesTexte = [];
-  ['savoirFaire', 'savoirEtre', 'savoirs'].forEach(function (sousCle) {
-    (competencesObjetCV[sousCle] || []).forEach(function (c) {
-      toutesCompetencesTexte.push(c);
-      var norm = normaliserPourComparaison(c);
-      if (!(norm in sousCategorieParTexte)) { sousCategorieParTexte[norm] = sousCle; }
+// TACHE (retour utilisateur : plafond de competences) : remplace
+// appliquerDecisionCompetences() (budget PARTAGE entre les 3 sous-listes,
+// et actif seulement si l'IA a donne des recommandations). Nouvelle regle
+// explicite : 5 maximum PAR categorie (savoirFaire/savoirEtre/savoirs),
+// TOUJOURS applique -- avec ou sans recommandation IA. Ordre de priorite :
+// 1) recommandations de l'IA (deja au fait du metier vise) ; 2) a defaut,
+// les competences presentes dans REFERENTIEL_METIERS_ERIP pour le metier
+// cible (deja existant, aucune donnee inventee) ; 3) le reste, dans l'ordre
+// du dossier. Les competences non retenues ne sont pas perdues : elles
+// restent dans dossier et continuent d'alimenter texteProfil() (donc l'IA
+// et la lettre de motivation), seule la rubrique "Competences" du CV rendu
+// est plafonnee.
+function classerCompetencesParPertinence(competencesObjetCV, recommandationsCompetences, metierCible, plafondParCategorie) {
+  var metierRef = (REFERENTIEL_METIERS_ERIP || []).filter(function (m) { return m.nom === metierCible; })[0] || null;
+
+  function ordonnerCategorie(sousCle) {
+    var elements = (competencesObjetCV[sousCle] || []).slice();
+    var dejaTraites = [];
+    var ordonnes = [];
+
+    (recommandationsCompetences || []).forEach(function (reco) {
+      var texteReco = normaliserPourComparaison(reco.texte);
+      if (!texteReco) { return; }
+      var trouve = elements.filter(function (e) {
+        return normaliserPourComparaison(e) === texteReco && dejaTraites.indexOf(normaliserPourComparaison(e)) === -1;
+      })[0];
+      if (trouve !== undefined) { ordonnes.push(trouve); dejaTraites.push(normaliserPourComparaison(trouve)); }
     });
+
+    if (metierRef && metierRef[sousCle]) {
+      var referentielNorm = metierRef[sousCle].map(normaliserPourComparaison);
+      elements.forEach(function (e) {
+        var norm = normaliserPourComparaison(e);
+        if (dejaTraites.indexOf(norm) === -1 && referentielNorm.indexOf(norm) !== -1) {
+          ordonnes.push(e); dejaTraites.push(norm);
+        }
+      });
+    }
+
+    elements.forEach(function (e) {
+      var norm = normaliserPourComparaison(e);
+      if (dejaTraites.indexOf(norm) === -1) { ordonnes.push(e); dejaTraites.push(norm); }
+    });
+
+    return ordonnes.slice(0, plafondParCategorie);
+  }
+
+  return {
+    savoirFaire: ordonnerCategorie('savoirFaire'),
+    savoirEtre: ordonnerCategorie('savoirEtre'),
+    savoirs: ordonnerCategorie('savoirs')
+  };
+}
+
+// TACHE (retour utilisateur : une seule categorie "Compétences
+// professionnelles", plafond uniforme a 5, tous les modeles sauf Chic) :
+// meme principe que classerCompetencesParPertinence() ci-dessus
+// (recommandations IA en priorite, puis referentiel du metier vise, puis
+// le reste), mais sur un SEUL pool fusionne (savoirFaire+savoirEtre+savoirs)
+// au lieu de 3 plafonds separes. Resultat entierement place dans
+// savoirFaire (savoirEtre/savoirs vides) : tous les generateurs de CV
+// existants concatenent deja les 3 champs a l'affichage (verifie sur les
+// 6 gabarits) -- aucune modification necessaire de leur cote, la fusion
+// se fait silencieusement en amont.
+function unifierEtPlafonnerCompetences(competencesObjetCV, recommandationsCompetences, metierCible, plafondTotal) {
+  var metierRef = (REFERENTIEL_METIERS_ERIP || []).filter(function (m) { return m.nom === metierCible; })[0] || null;
+  var pool = []
+    .concat((competencesObjetCV && competencesObjetCV.savoirFaire) || [])
+    .concat((competencesObjetCV && competencesObjetCV.savoirEtre) || [])
+    .concat((competencesObjetCV && competencesObjetCV.savoirs) || []);
+
+  var dejaTraites = [];
+  var ordonnes = [];
+
+  (recommandationsCompetences || []).forEach(function (reco) {
+    var texteReco = normaliserPourComparaison(reco.texte);
+    if (!texteReco) { return; }
+    var trouve = pool.filter(function (e) {
+      return normaliserPourComparaison(e) === texteReco && dejaTraites.indexOf(normaliserPourComparaison(e)) === -1;
+    })[0];
+    if (trouve !== undefined) { ordonnes.push(trouve); dejaTraites.push(normaliserPourComparaison(trouve)); }
   });
 
-  var decision = deciderListeTextes(toutesCompetencesTexte, recommandationsCompetences, capaciteCompetences);
+  if (metierRef) {
+    var referentielNorm = []
+      .concat(metierRef.savoirFaire || [])
+      .concat(metierRef.savoirEtre || [])
+      .concat(metierRef.savoirs || [])
+      .map(normaliserPourComparaison);
+    pool.forEach(function (e) {
+      var norm = normaliserPourComparaison(e);
+      if (dejaTraites.indexOf(norm) === -1 && referentielNorm.indexOf(norm) !== -1) {
+        ordonnes.push(e); dejaTraites.push(norm);
+      }
+    });
+  }
 
-  var parSousCategorie = { savoirFaire: [], savoirEtre: [], savoirs: [] };
-  decision.elementsRetenus.forEach(function (e) {
-    var sc = sousCategorieParTexte[normaliserPourComparaison(e.element)] || 'savoirFaire';
-    parSousCategorie[sc].push(e.element);
+  pool.forEach(function (e) {
+    var norm = normaliserPourComparaison(e);
+    if (dejaTraites.indexOf(norm) === -1) { ordonnes.push(e); dejaTraites.push(norm); }
   });
 
-  return { parSousCategorie: parSousCategorie, decisionComplete: decision };
+  return { savoirFaire: ordonnes.slice(0, plafondTotal), savoirEtre: [], savoirs: [] };
 }
 
 // TACHE 4 : point d'entree CV-specifique. Prend l'objet CV DEJA normalise
@@ -6534,6 +8062,73 @@ function recommandationsIAPresentes(recommandations) {
     (recommandations.experiencesAMettreEnAvant || []).length > 0 ||
     (recommandations.competencesAValoriser || []).length > 0 ||
     (recommandations.rubriquesMasquables || []).length > 0;
+}
+
+// ============================================================
+// TACHE (correction regression : moteur de decision IA jamais rebranche
+// apres le passage au tout-DOCX) : appliquerMoteurDecisionCV() et
+// classerCompetencesParPertinence() existaient deja et fonctionnent
+// toujours -- mais plus personne ne les appelait depuis que l'ancien
+// apercu HTML (qui les invoquait) a ete remplace par le systeme DOCX
+// natif. Consequence concrete avant ce correctif : les recommandations
+// de l'IA (experiences/competences a mettre en avant selon le metier
+// vise) etaient calculees mais jamais appliquees au CV genere.
+//
+// Point d'entree UNIQUE, reutilise par les 3 endroits qui produisent un
+// CV (apercu integre, telechargement Word, texte a copier) -- pour ne
+// jamais dupliquer cette logique et garantir qu'un changement futur ne
+// beneficie qu'a un seul des trois par erreur.
+//
+// Retourne une Promise (obtenirMetaModeleType est asynchrone, va
+// chercher les "capacites" du modele) ; en cas d'echec (modele
+// introuvable, etc.), repli honnete sur le CV complet, sans decision IA
+// -- jamais de blocage de l'export pour cette raison.
+// ============================================================
+function construireObjetCVPourExport(modeleId) {
+  var objetCV = normaliserDonneesCV(dossier);
+  return obtenirMetaModeleType('cv', modeleId).then(function (meta) {
+    var capacites = (meta && meta.capacites) || {};
+    var recommandationsIACV = (dossier.ia && dossier.ia.cv && dossier.ia.cv.recommandations) || {};
+
+    // TACHE (retour utilisateur : "le diplome le plus eleve montre le
+    // niveau d'education, meme sans lien direct avec le metier vise --
+    // important pour les competences transferables/la reconversion") :
+    // trie les formations par rang RNCP decroissant AVANT le moteur de
+    // decision (voir _dnTrierFormationsParNiveauDecroissant(),
+    // formatA5CV.js) -- utile des qu'un modele plafonne les formations a
+    // moins que le nombre reel dans le dossier. Sans effet si l'IA
+    // recommande explicitement une formation precise.
+    var objetCVPourDecision = objetCV;
+    if (typeof _dnTrierFormationsParNiveauDecroissant === 'function') {
+      objetCVPourDecision = {};
+      Object.keys(objetCV).forEach(function (cle) { objetCVPourDecision[cle] = objetCV[cle]; });
+      objetCVPourDecision.formations = _dnTrierFormationsParNiveauDecroissant(objetCV.formations);
+    }
+
+    var objetDecide = recommandationsIAPresentes(recommandationsIACV)
+      ? appliquerMoteurDecisionCV(objetCVPourDecision, recommandationsIACV, capacites)
+      : objetCV;
+
+    // TACHE (retour utilisateur : "Compétences professionnelles" unifiee,
+    // plafond uniforme a 5, tous les modeles sauf Chic) : Chic garde
+    // volontairement son ancien comportement (categories separees) --
+    // exclusion explicite demandee, pas un oubli.
+    var recoCompetences = (recommandationsIACV.competencesAValoriser || []).map(function (c) {
+      return { texte: c.competence, justification: c.justification };
+    });
+    var objetFinal = {};
+    Object.keys(objetDecide).forEach(function (cle) { objetFinal[cle] = objetDecide[cle]; });
+    if (modeleId === 'chic') {
+      var plafondCompetences = capacites.competences || 5;
+      objetFinal.competences = classerCompetencesParPertinence(objetDecide.competences, recoCompetences, dossier.metierCible, plafondCompetences);
+    } else {
+      objetFinal.competences = unifierEtPlafonnerCompetences(objetDecide.competences, recoCompetences, dossier.metierCible, 5);
+    }
+
+    return objetFinal;
+  }).catch(function () {
+    return objetCV;
+  });
 }
 
 function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) {
@@ -6575,27 +8170,32 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
     objetDecide[spec.cle] = d.rubriqueMasquee ? [] : d.elementsRetenus.map(function (e) { return e.element; });
   });
 
-  // Cas particulier des competences (voir commentaire au-dessus de
-  // appliquerDecisionCompetences()).
-  var rubriqueCompetencesMasquee = rubriqueEstMasquee(rubriquesMasquables, 'competences');
-  if (rubriqueCompetencesMasquee) {
+  // TACHE (retour utilisateur : plafond de competences) : n'est plus geree
+  // ici -- deplacee vers classerCompetencesParPertinence(), appliquee
+  // SYSTEMATIQUEMENT (avec ou sans recommandation IA) aux points d'appel
+  // (chargerApercuCVInline/chargerEtAfficherApercuCV), contrairement au
+  // reste de cette fonction qui reste conditionne a recommandationsIAPresentes().
+  // On respecte neanmoins ici le masquage explicite de la rubrique par l'IA,
+  // s'il existe.
+  if (rubriqueEstMasquee(rubriquesMasquables, 'competences')) {
     objetDecide.competences = { savoirFaire: [], savoirEtre: [], savoirs: [] };
-  } else {
-    var recommandationsCompetences = (reco.competencesAValoriser || []).map(function (r) {
-      return { texte: r.competence, justification: r.justification };
-    });
-    var resultatCompetences = appliquerDecisionCompetences(objetCV.competences || {}, recommandationsCompetences, capacites.competences);
-    objetDecide.competences = resultatCompetences.parSousCategorie;
   }
 
   return objetDecide;
 }
 
-function ouvrirEcranValidationImport(onImportTermine) {
+function ouvrirEcranValidationImport(onImportTermine, onRetour) {
   if (!dossier.imports || !dossier.imports.courant) {
     alert('Aucun import en attente de validation.');
     return;
   }
+  // TACHE (correction bug : fenetres qui s'assombrissent en boucle) : cet
+  // ecran s'ouvre PAR-DESSUS un ecran de collage (etape 4 du wizard,
+  // toujours present en dessous depuis l'ajout du bouton Retour) sans le
+  // fermer -- neutralise son raccourci Entree tant que CET ecran-ci est
+  // au premier plan, pour eviter de redeclencher l'import du dessous a
+  // chaque frappe.
+  desactiverCollageInstantane();
   var resultatComparaison = comparerDonnees(dossier, dossier.imports.courant.donnees, SPECIFICATION_IMPORT);
   var contenuEcran = genererEcranValidationImport(resultatComparaison, SPECIFICATION_IMPORT);
 
@@ -6611,13 +8211,28 @@ function ouvrirEcranValidationImport(onImportTermine) {
     '</div>' +
     '<p class="text-muted small">Décochez ce que vous ne souhaitez pas ajouter, modifiez librement le texte avant de valider.</p>' +
     contenuEcran +
-    '<div class="d-flex justify-content-end mt-3">' +
+    '<div class="d-flex justify-content-between align-items-center mt-3">' +
+    (typeof onRetour === 'function'
+      ? '<button type="button" id="retourValidationImportBtn" class="btn btn-outline-secondary">&#8592; Retour</button>'
+      : '<span></span>') +
     '<button type="button" id="validerImportBtn" class="btn btn-primary">Valider ma sélection</button>' +
     '</div></div>';
   document.body.appendChild(fenetre);
 
   document.getElementById('fermerValidationImportBtn').addEventListener('click', function () { fenetre.remove(); });
   fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fenetre.remove(); } });
+  // TACHE (retour utilisateur : bouton Retour sur l'ecran de validation) :
+  // referme cet ecran et rend la main a l'appelant (ex. reafficher l'etape
+  // 2 du wizard, pour corriger le texte avant de reimporter) -- ne
+  // consomme PAS l'import en attente (dossier.imports.courant reste
+  // inchange, au cas ou la personne reviendrait directement valider).
+  var btnRetour = document.getElementById('retourValidationImportBtn');
+  if (btnRetour) {
+    btnRetour.addEventListener('click', function () {
+      fenetre.remove();
+      onRetour();
+    });
+  }
 
   document.getElementById('validerImportBtn').addEventListener('click', function () {
     var decisions = lireDecisionsValidationImport(resultatComparaison, SPECIFICATION_IMPORT);
@@ -6759,45 +8374,330 @@ function genererCSVCanva(inclureIdentite) {
   return entetes + '\n' + valeurs;
 }
 
-// TACHE (apercu du CV, Beta) : ouvre une fenetre dediee affichant le rendu
-// du CV a partir de "dossier" -> normaliserDonneesCV() -> rendreTemplate().
-// Lecture seule pour l'instant (aucun champ modifiable ici) : l'edition du
-// CV fera l'objet d'une tache independante, une fois ce flux valide.
-//
-// TACHE (selecteur de modele) : la fenetre contient desormais une liste
-// deroulante (construite a partir de MODELES_CV_DISPONIBLES, voir
-// modules/cv-editor/modelesDisponibles.js) permettant de changer de modele
-// SANS fermer la fenetre ni recharger l'application -- chargerEtAfficherApercuCV()
-// est appelee aussi bien a l'ouverture qu'a chaque changement de selection,
-// une seule fonction pour les deux cas (aucune logique dupliquee).
-//
-// GENERIQUE : aucun nom de modele n'est jamais fige dans ce code, ni ici ni
-// dans chargerEtAfficherApercuCV() -- tout provient de MODELES_CV_DISPONIBLES
-// et du parametre "modele". Ajouter un futur modele ne demande AUCUNE
-// modification de ces deux fonctions (voir modelesDisponibles.js).
-//
-// Reutilise exactement la meme technique de fenetre que ouvrirAideIA() plus
-// bas dans ce fichier (window.open('', ...) appele de facon SYNCHRONE au
-// clic, puis remplissage du contenu une fois les fichiers du modele charges),
-// et le meme principe de reference memorisee que fenetreIAOuverte.
-var fenetreApercuCVOuverte = null;
-// TACHE (V2 IA, etape 1) : memorise le dernier modele affiche dans la
-// fenetre d'apercu, pour pouvoir la rafraichir avec CE MEME modele des que
-// dossier.ia est mis a jour (voir rafraichirApercuCVSiOuvert() plus bas).
-var dernierModeleApercuAffiche = 'moderne';
-
 // TACHE (selecteur en cartes) : cache simple des metadonnees JSON de chaque
 // modele (colors, sections...), pour ne pas les re-telecharger a chaque
 // changement de modele -- ce sont de petits fichiers statiques qui ne
 // changent jamais en cours de session.
 var cacheMetaModelesCV = {};
 
-function obtenirMetaModele(idModele) {
-  if (cacheMetaModelesCV[idModele]) { return Promise.resolve(cacheMetaModelesCV[idModele]); }
-  return fetch('modules/cv-editor/templates/' + idModele + '/' + idModele + '.json')
+// TACHE (page Action, tache 4) : etat de l'apercu INLINE (accordeon).
+// TACHE (retour utilisateur : editeur de mise en page) : taillePct (zoom en
+// %, 100 = taille d'origine du modele), police (chaine CSS font-family,
+// vide = police d'origine du modele) et formatPage ('A4'/'A5') --
+// persistes par type de document, PARTAGES entre le petit apercu (iframe)
+// et le grand apercu (popup) : un changement dans l'un se reflete dans
+// l'autre a la prochaine (re)ouverture/rafraichissement.
+var etatApercuInline = {
+  // TACHE (refonte "Aperçu et finalisation" : palette de couleurs) :
+  // couleur ajoutee -- null = couleur d'origine du modele (comportement
+  // inchange), sinon un id de PALETTES_COULEURS_CV (voir
+  // coloriationDocxNatifCV.js).
+  // TACHE (format A5) : formatPage (deja present dans cet objet) reutilise
+  // tel quel -- 'A4' = format complet (comportement inchange), 'A5' =
+  // contenu recadre + page reduite (CV uniquement pour l'instant).
+  cv: { modele: null, modeleA5: 'portrait', couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' },
+  lettre: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' },
+  entretien: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' }
+};
+var POLICES_APERCU_DISPONIBLES = [
+  { id: '', nom: 'Police du modèle' },
+  { id: 'Arial, Helvetica, sans-serif', nom: 'Arial' },
+  { id: 'Georgia, "Times New Roman", serif', nom: 'Georgia' },
+  { id: '"Verdana", sans-serif', nom: 'Verdana' },
+  { id: '"Courier New", monospace', nom: 'Courier New' }
+];
+
+// TACHE (page Action, tache 5) : helpers generiques d'export, reutilisables
+// par tout format de document (aucune logique specifique au CV/a la lettre
+// ici). Meme technique de copie (avec repli) que celle deja utilisee dans
+// les popups existantes (ouvrirAideIA), juste factorisee car desormais
+// appelee depuis plusieurs endroits de la page principale.
+function copierTexteVersPressePapier(texte, boutonPourFeedback) {
+  function feedback() {
+    if (!boutonPourFeedback) { return; }
+    var t = boutonPourFeedback.textContent;
+    boutonPourFeedback.textContent = 'Copié !';
+    setTimeout(function () { boutonPourFeedback.textContent = t; }, 2000);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texte).then(feedback).catch(function () {
+      var z = document.createElement('textarea');
+      z.value = texte;
+      document.body.appendChild(z);
+      z.select();
+      document.execCommand('copy');
+      z.remove();
+      feedback();
+    });
+  } else {
+    var z2 = document.createElement('textarea');
+    z2.value = texte;
+    document.body.appendChild(z2);
+    z2.select();
+    document.execCommand('copy');
+    z2.remove();
+    feedback();
+  }
+}
+
+function telechargerFichierTexte(nomFichier, contenu, typeMime) {
+  var blob = new Blob([contenu], { type: typeMime || 'text/plain;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = nomFichier;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
+// TACHE (page Action, tache 6, option A validee) : chargement A LA DEMANDE
+// de html-docx-js (aucun poids ajoute pour les personnes qui n'exportent
+// jamais en DOCX). Mise en cache de la promesse : un seul chargement par
+// session, meme si plusieurs exports DOCX sont demandes.
+var _promesseLibrairieHtmlDocx = null;
+function chargerLibrairieHtmlDocx() {
+  if (_promesseLibrairieHtmlDocx) { return _promesseLibrairieHtmlDocx; }
+  _promesseLibrairieHtmlDocx = new Promise(function (resolve, reject) {
+    if (window.htmlDocx) { resolve(window.htmlDocx); return; }
+    var script = document.createElement('script');
+    // TACHE (independance reseau, meme traitement que docx.umd.js) :
+    // fichier local (modules/cv-editor/html-docx.js), plus de CDN externe.
+    // A telecharger une fois depuis https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js
+    // et placer tel quel a ce chemin (voir instructions fournies).
+    script.src = 'modules/cv-editor/html-docx.js';
+    script.onload = function () { window.htmlDocx ? resolve(window.htmlDocx) : reject(new Error('Librairie DOCX indisponible.')); };
+    script.onerror = function () { reject(new Error('Impossible de charger la librairie DOCX.')); };
+    document.head.appendChild(script);
+  });
+  return _promesseLibrairieHtmlDocx;
+}
+
+// TACHE (page Action, tache 6) : exporteur DOCX GENERIQUE et reutilisable --
+// prend en entree EXACTEMENT le HTML deja produit par rendreTemplate() (la
+// meme source que le PDF), jamais relu depuis l'iframe : CV et lettre
+// appellent cette meme fonction, aucune logique dupliquee par type de
+// document. Un echec (reseau, librairie indisponible...) ne bloque jamais
+// l'application : message clair, PDF et Copier restent utilisables.
+function exporterDocumentEnDocx(corpsRendu, styleCss, nomFichier, boutonPourFeedback) {
+  if (!corpsRendu) {
+    alert('L\'aperçu est encore en cours de chargement, patientez un instant puis réessayez.');
+    return;
+  }
+  var texteOriginal = boutonPourFeedback ? boutonPourFeedback.textContent : '';
+  if (boutonPourFeedback) { boutonPourFeedback.textContent = 'Génération…'; boutonPourFeedback.disabled = true; }
+  function restaurerBouton() {
+    if (boutonPourFeedback) { boutonPourFeedback.textContent = texteOriginal; boutonPourFeedback.disabled = false; }
+  }
+  chargerLibrairieHtmlDocx().then(function (htmlDocx) {
+    var pageComplete = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + (styleCss || '') + '</style></head><body>' + corpsRendu + '</body></html>';
+    var blob = htmlDocx.asBlob(pageComplete);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nomFichier;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    restaurerBouton();
+  }).catch(function () {
+    alert('Impossible de générer le fichier Word pour le moment. Vous pouvez exporter en PDF ou copier le texte à la place.');
+    restaurerBouton();
+  });
+}
+
+// TACHE (page Action, tache 4) : choisit, parmi MODELES_CV_DISPONIBLES (dans
+// l'ordre du manifeste), le premier modele dont les capacites (deja
+// existantes, JSON de chaque modele) accueillent l'integralite du contenu
+// reel du dossier -- aucune nouvelle donnee inventee, uniquement une
+// comparaison. A defaut, retombe sur le modele par defaut existant.
+function choisirModeleRecommandeCV(metasParModele) {
+  var nbExp = dossier.experiences.length;
+  var nbForm = dossier.formations.length;
+  var nbComp = resumeProfil().length;
+  var trouve = null;
+  MODELES_CV_DISPONIBLES.forEach(function (m) {
+    if (trouve) { return; }
+    var cap = (metasParModele[m.id] && metasParModele[m.id].capacites) || {};
+    var ok = (cap.experiences === undefined || nbExp <= cap.experiences) &&
+      (cap.formations === undefined || nbForm <= cap.formations) &&
+      (cap.competences === undefined || nbComp <= cap.competences);
+    if (ok) { trouve = m.id; }
+  });
+  return trouve || 'moderne';
+}
+
+function chargerApercuCVInline(modele) {
+  var zone = document.getElementById('zoneApercuInlineCV');
+  if (!zone) { return; }
+  // TACHE (retour utilisateur : sélecteur de modèles A5, comme pour A4) :
+  // etatApercuInline.cv.modele et .modeleA5 sont desormais deux champs
+  // DISTINCTS (le choix A5 ne doit jamais ecraser/deranger le choix A4,
+  // et inversement -- exigence explicite : "je ne veux pas que le format
+  // A4 soit adapte pour A5"). Stocke dans le bon champ selon le format
+  // actuellement actif.
+  if (etatApercuInline.cv.formatPage === 'A5') {
+    etatApercuInline.cv.modeleA5 = modele;
+  } else {
+    etatApercuInline.cv.modele = modele;
+  }
+
+  // TACHE (page Action, apercu inline reel) : reutilise EXACTEMENT le meme
+  // moteur de rendu que "Ouvrir le grand aperçu" (_rafraichirApercuDocx,
+  // apercuDocxIntegre.js) -- generalise pour accepter une zone/message
+  // differents de ceux du panneau plein ecran. Aucune divergence possible
+  // entre l'apercu inline, le grand apercu, et le fichier telecharge.
+  // TACHE (refonte "Aperçu et finalisation" : palette de couleurs) :
+  // transmet la couleur actuellement choisie (etatApercuInline.cv.couleur,
+  // null si aucune -- couleur d'origine du modele dans ce cas).
+  // TACHE (format A5) : transmet le format de page actuellement choisi
+  // (etatApercuInline.cv.formatPage, 'A4' par defaut -- comportement
+  // inchange dans ce cas).
+  if (typeof _rafraichirApercuDocx === 'function') {
+    _rafraichirApercuDocx('cv', modele, zone, document.getElementById('messageApercuInlineCV'), true, etatApercuInline.cv.couleur, etatApercuInline.cv.formatPage);
+  }
+}
+
+// TACHE (page Action, tache 4) : equivalent pour la lettre. Pas de moteur de
+// decision/capacites pour la lettre (n'existe pas aujourd'hui) -- fidele a
+// l'existant, aucune logique inventee.
+function chargerApercuLettreInline(modele) {
+  var zone = document.getElementById('zoneApercuInlineLettre');
+  if (!zone) { return; }
+  etatApercuInline.lettre.modele = modele;
+
+  if (typeof _rafraichirApercuDocx === 'function') {
+    _rafraichirApercuDocx('lettre', modele, zone, document.getElementById('messageApercuInlineLettre'), true, etatApercuInline.lettre.couleur, etatApercuInline.lettre.formatPage);
+  }
+}
+
+// TACHE (retour utilisateur : apercu Entretien) : meme principe que
+// chargerApercuLettreInline() ci-dessus -- pas de moteur de decision/
+// capacites pour l'entretien (n'existe pas, comme pour la lettre),
+// reutilise normaliserDonneesEntretien() (nouvelle, meme esprit que
+// normaliserDonneesLettre()) + rendreTemplate() (deja generique, aucune
+// modification).
+function chargerApercuEntretienInline(modele) {
+  var zone = document.getElementById('zoneApercuInlineEntretien');
+  if (!zone) { return; }
+  etatApercuInline.entretien.modele = modele;
+
+  if (typeof _rafraichirApercuDocx === 'function') {
+    _rafraichirApercuDocx('entretien', modele, zone, document.getElementById('messageApercuInlineEntretien'), true, etatApercuInline.entretien.couleur, etatApercuInline.entretien.formatPage);
+  }
+}
+
+// TACHE (page Action, tache 4) : point d'entree appele a chaque rendu de la
+// page Action si l'accordeon "Apercu et finalisation" est ouvert -- choisit
+// automatiquement un modele recommande (une seule fois, tant que la personne
+// n'a rien choisi elle-meme) puis charge l'apercu inline correspondant.
+// TACHE (retour utilisateur : editeur de mise en page) : dispatch commun,
+// evite de repeter le meme if/else CV/Lettre/Entretien a chaque endroit ou
+// l'apercu doit etre recharge (modele, taille, police...).
+function rechargerApercuInline(type, modele) {
+  if (type === 'lettre') { chargerApercuLettreInline(modele); }
+  else if (type === 'entretien') { chargerApercuEntretienInline(modele); }
+  else { chargerApercuCVInline(modele); }
+}
+
+function initialiserApercuInlineSiOuvert() {
+  var type = dossier.dernierDocumentPrepare || 'cv';
+  if (type === 'cv' && document.getElementById('zoneApercuInlineCV')) {
+    // TACHE (retour utilisateur : sélecteur de modèles A5, comme pour A4) :
+    // deux grilles DISTINCTES coexistent dans le DOM (une par format,
+    // l'autre masquee -- voir accordeonApercuDoc plus haut), on ne
+    // construit desormais QUE celle qui correspond au format actuellement
+    // actif, jamais les deux.
+    if (etatApercuInline.cv.formatPage === 'A5') {
+      var listeA5 = (typeof MODELES_A5_CV_DISPONIBLES !== 'undefined') ? MODELES_A5_CV_DISPONIBLES : [{ id: 'portrait', nom: 'Portrait' }];
+      Promise.all(listeA5.map(function (m) { return obtenirMetaModeleType('cv', m.id); })).then(function (metas) {
+        var carrouselA5 = document.getElementById('grilleModelesA5CV');
+        if (!carrouselA5) { return; }
+        var metasA5ParModele = {};
+        listeA5.forEach(function (m, i) { metasA5ParModele[m.id] = metas[i]; });
+        construireCarrouselModeles('cv', 'A5CV', listeA5, etatApercuInline.cv.modeleA5 || 'portrait', metasA5ParModele, 'modeleA5', 'CV');
+        // Le conteneur reel utilise par le reste du code (palette, apercu)
+        // reste "CV" -- seule la grille de MINIATURES vit sous un id
+        // distinct ('A5CV'). On reconstruit ici la palette/l'apercu sous
+        // le bon id ('CV', pas 'A5CV'), pour rester coherent avec le reste
+        // de l'accordeon "Aperçu et finalisation".
+        construireBoutonsFormatPage('cv', 'CV');
+        chargerApercuCVInline(etatApercuInline.cv.modeleA5 || 'portrait');
+      });
+      return;
+    }
+    Promise.all(MODELES_CV_DISPONIBLES.map(function (m) { return obtenirMetaModele(m.id); })).then(function (metas) {
+      var carrousel = document.getElementById('grilleModelesCV');
+      if (!carrousel) { return; }
+      var metasParModele = {};
+      MODELES_CV_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
+      if (!etatApercuInline.cv.choisiManuellement) {
+        etatApercuInline.cv.modele = choisirModeleRecommandeCV(metasParModele);
+      }
+      if (etatApercuInline.cv.formatPage !== 'A5') {
+        construireCarrouselModeles('cv', 'CV', MODELES_CV_DISPONIBLES, etatApercuInline.cv.modele || 'moderne', metasParModele);
+      }
+      construireBoutonsFormatPage('cv', 'CV');
+      chargerApercuCVInline(etatApercuInline.cv.modele || 'moderne');
+    });
+  } else if (type === 'lettre' && document.getElementById('zoneApercuInlineLettre')) {
+    Promise.all(MODELES_LETTRE_DISPONIBLES.map(function (m) { return obtenirMetaModeleType('lettre', m.id); })).then(function (metas) {
+      var carrousel = document.getElementById('grilleModelesLettre');
+      if (!carrousel) { return; }
+      var metasParModele = {};
+      MODELES_LETTRE_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
+      var modele = etatApercuInline.lettre.modele || 'sobre';
+      construireCarrouselModeles('lettre', 'Lettre', MODELES_LETTRE_DISPONIBLES, modele, metasParModele);
+      construireBoutonsFormatPage('lettre', 'Lettre');
+      chargerApercuLettreInline(modele);
+    });
+  } else if (type === 'entretien' && document.getElementById('zoneApercuInlineEntretien')) {
+    Promise.all(MODELES_ENTRETIEN_DISPONIBLES.map(function (m) { return obtenirMetaModeleType('entretien', m.id); })).then(function (metas) {
+      var carrousel = document.getElementById('grilleModelesEntretien');
+      if (!carrousel) { return; }
+      var metasParModele = {};
+      MODELES_ENTRETIEN_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
+      var modele = etatApercuInline.entretien.modele || 'clair';
+      construireCarrouselModeles('entretien', 'Entretien', MODELES_ENTRETIEN_DISPONIBLES, modele, metasParModele);
+      construireBoutonsFormatPage('entretien', 'Entretien');
+      chargerApercuEntretienInline(modele);
+    });
+  }
+}
+
+// TACHE (retour utilisateur : cartes de modeles pour Lettre/Entretien) :
+// version generique -- meme schema JSON (colors.primary/secondary/
+// background, sections) deja confirme present pour au moins un modele de
+// chaque type (cv, lettre "sobre"). Cache partage par type+id pour ne
+// jamais refetcher deux fois le meme modele.
+// TACHE (retour utilisateur : 5 designs A5, comme pour A4 -- on commence
+// par 2) : liste des modeles propres au format Mini CV (A5), INDEPENDANTE
+// de MODELES_CV_DISPONIBLES (A4) -- un choix de modele A5 ne doit jamais
+// affecter le choix A4, et inversement. "Portrait" reprend le design
+// existant (miniCvA5.js) comme base ; "Paysage" viendra ensuite.
+var MODELES_A5_CV_DISPONIBLES = [
+  { id: 'portrait', nom: 'Portrait' },
+  { id: 'paysage', nom: 'Paysage' }
+];
+
+var CHEMINS_TEMPLATES_PAR_TYPE = {
+  cv: 'modules/cv-editor/templates/',
+  lettre: 'modules/lettre-editor/templates/',
+  entretien: 'modules/entretien-editor/templates/'
+};
+function obtenirMetaModeleType(type, idModele) {
+  var cle = type + ':' + idModele;
+  if (cacheMetaModelesCV[cle]) { return Promise.resolve(cacheMetaModelesCV[cle]); }
+  var base = CHEMINS_TEMPLATES_PAR_TYPE[type] || CHEMINS_TEMPLATES_PAR_TYPE.cv;
+  return fetch(base + idModele + '/' + idModele + '.json')
     .then(function (r) { return r.ok ? r.json() : {}; })
-    .then(function (meta) { cacheMetaModelesCV[idModele] = meta; return meta; })
+    .then(function (meta) { cacheMetaModelesCV[cle] = meta; return meta; })
     .catch(function () { return {}; });
+}
+function obtenirMetaModele(idModele) {
+  return obtenirMetaModeleType('cv', idModele);
 }
 
 // Genere une miniature SVG generique a partir des SEULES metadonnees deja
@@ -6836,428 +8736,248 @@ function genererMiniatureSVG(meta) {
 // Construit le HTML des cartes (une par modele de MODELES_CV_DISPONIBLES),
 // avec indicateur visuel du modele actuellement selectionne. Aucune logique
 // specifique a un modele : entierement pilote par le manifeste + les JSON.
-function genererCartesSelecteurCV(modeleActif, metasParModele) {
-  return MODELES_CV_DISPONIBLES.map(function (m) {
+function genererCartesSelecteurModeles(modeles, modeleActif, metasParModele) {
+  return modeles.map(function (m) {
     var meta = metasParModele[m.id] || {};
     var actif = (m.id === modeleActif);
     return '<div class="carte-modele-cv' + (actif ? ' carte-modele-cv-active' : '') + '" data-modele="' + m.id + '">' +
       '<div class="carte-modele-cv-miniature">' + genererMiniatureSVG(meta) + '</div>' +
-      '<div class="carte-modele-cv-nom">' + m.nom + (actif ? ' &#9989;' : '') + '</div>' +
+      '<div class="carte-modele-cv-nom">' + m.nom + '</div>' +
       '</div>';
   }).join('');
 }
+// Conservee pour compatibilite (appelee ailleurs specifiquement pour le CV).
+function genererCartesSelecteurCV(modeleActif, metasParModele) {
+  return genererCartesSelecteurModeles(MODELES_CV_DISPONIBLES, modeleActif, metasParModele);
+}
 
-function ouvrirApercuCV(modele) {
-  if (!modele) { modele = 'moderne'; }
+// TACHE (retour utilisateur : selecteur en vignettes, etendu a Lettre et
+// Entretien) : construit le carrousel de l'accordeon "Apercu et
+// finalisation" -- reutilise integralement genererCartesSelecteurModeles()/
+// genererMiniatureSVG() (aucune duplication), cable le clic (choix manuel,
+// comme l'ancien <select>) et les deux fleches (defilement horizontal, pas
+// de logique de pagination complexe : le navigateur gere le scroll, les
+// fleches avancent d'environ une largeur de carrousel a chaque clic).
+// idSuffixe : 'CV'/'Lettre'/'Entretien', coherent avec les ids deja
+// utilises par zoneApercuInline*/messageApercuInline*.
+// TACHE (refonte "Aperçu et finalisation") : "carrouselModeles<idSuffixe>"
+// devient "grilleModeles<idSuffixe>" -- fini le defilement horizontal
+// avec fleches, place a une grille de 4 miniatures par ligne (voir
+// accordeonApercuDoc plus bas pour le squelette HTML). Miniatures
+// STRICTEMENT inchangees (genererCartesSelecteurModeles/
+// genererMiniatureSVG non touchees) : seule la disposition du
+// conteneur change.
+// TACHE (retour utilisateur : sélecteur A5, comme pour A4) : champEtat
+// (facultatif, 'modele' par defaut) permet de reutiliser cette meme
+// fonction pour un choix de modele STOCKE AILLEURS que etat.modele --
+// necessaire pour le nouveau selecteur Mini CV (A5), qui doit ecrire dans
+// etat.modeleA5 SANS jamais toucher au choix A4 (etat.modele).
+function construireCarrouselModeles(type, idSuffixe, modeles, modeleActif, metasParModele, champEtat, idSuffixePalette) {
+  champEtat = champEtat || 'modele';
+  // TACHE (retour utilisateur : palette de couleurs absente pour le
+  // sélecteur A5) : la grille de vignettes A5 vit sous un id distinct
+  // ('A5CV'), mais la palette de couleurs, elle, reste dans le MEME
+  // conteneur que l'A4 ('CV', un seul bloc "Couleurs disponibles" partage
+  // par les deux formats) -- idSuffixePalette permet de les decoupler.
+  // Par defaut (A4/lettre/entretien, appel inchange) : identique a idSuffixe.
+  idSuffixePalette = idSuffixePalette || idSuffixe;
+  var grille = document.getElementById('grilleModeles' + idSuffixe);
+  if (!grille) { return; }
+  grille.innerHTML = genererCartesSelecteurModeles(modeles, modeleActif, metasParModele);
+  grille.querySelectorAll('[data-modele]').forEach(function (carte) {
+    carte.addEventListener('click', function () {
+      var id = this.dataset.modele;
+      etatApercuInline[type][champEtat] = id;
+      etatApercuInline[type].choisiManuellement = true;
+      // TACHE (refonte : palette de couleurs) : un changement de modele
+      // conserve la couleur choisie si le nouveau modele la supporte
+      // aussi, sinon revient a la couleur d'origine du modele.
+      if (!(type === 'cv' && typeof modeleSupporteCouleurs === 'function' && modeleSupporteCouleurs(id))) {
+        etatApercuInline[type].couleur = null;
+      }
+      grille.querySelectorAll('[data-modele]').forEach(function (c) { c.classList.remove('carte-modele-cv-active'); });
+      this.classList.add('carte-modele-cv-active');
+      construirePaletteCouleurs(type, idSuffixePalette, id);
+      rechargerApercuInline(type, id);
+    });
+  });
+  construirePaletteCouleurs(type, idSuffixePalette, modeleActif);
+}
 
-  if (fenetreApercuCVOuverte && !fenetreApercuCVOuverte.closed) {
-    fenetreApercuCVOuverte.focus();
-    chargerEtAfficherApercuCV(modele);
-    return;
+// TACHE (refonte "Aperçu et finalisation" : palette de couleurs) :
+// affiche/masque et (re)construit la rangee de pastilles pour le modele
+// actuellement choisi. N'affiche la palette QUE si un modele est
+// selectionne ET qu'il supporte la couleur (voir spec : "uniquement
+// lorsqu'un modèle est sélectionné, la palette de couleurs"). Appelee au
+// chargement initial et a chaque changement de modele.
+function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
+  var bloc = document.getElementById('paletteCouleurs' + idSuffixe);
+  var zonePastilles = document.getElementById('pastillesCouleurs' + idSuffixe);
+  if (!bloc || !zonePastilles) { return; }
+  // TACHE (couleurs + formats pour la lettre et l'entretien) : chaque
+  // type a sa propre fonction de verification (un seul modele chacun
+  // aujourd'hui, mais structure prete pour en accueillir d'autres).
+  var FONCTIONS_SUPPORT_COULEURS = {
+    cv: typeof modeleSupporteCouleurs === 'function' ? modeleSupporteCouleurs : null,
+    lettre: typeof modeleLettreSupporteCouleurs === 'function' ? modeleLettreSupporteCouleurs : null,
+    entretien: typeof modeleEntretienSupporteCouleurs === 'function' ? modeleEntretienSupporteCouleurs : null
+  };
+  var fonctionSupport = FONCTIONS_SUPPORT_COULEURS[type];
+  var supporte = !!(modeleActif && fonctionSupport && fonctionSupport(modeleActif));
+  bloc.style.display = supporte ? 'block' : 'none';
+  if (!supporte) { return; }
+  var couleurActive = etatApercuInline[type].couleur;
+  var palettes = obtenirPalettesCouleursCV();
+  // TACHE (retour utilisateur : "Nuances rapides", 10 nuances par
+  // couleur) : uniquement disponible pour le CV pour l'instant
+  // (obtenirNuancesCouleurCV, coloriationDocxNatifCV.js) -- la lettre et
+  // l'entretien gardent le choix simple d'origine (un seul niveau par
+  // couleur), sans rangee depliable.
+  var avecNuances = (type === 'cv' && typeof obtenirNuancesCouleurCV === 'function');
+  var baseActive = couleurActive ? String(couleurActive).split('-')[0] : null;
+
+  function appliquerCouleur(couleurId) {
+    if (couleurId === etatApercuInline[type].couleur) { return; }
+    etatApercuInline[type].couleur = couleurId;
+    var modeleARecharger = (type === 'cv' && etatApercuInline.cv.formatPage === 'A5')
+      ? (etatApercuInline.cv.modeleA5 || 'portrait')
+      : etatApercuInline[type].modele;
+    rechargerApercuInline(type, modeleARecharger);
+    // Re-rendu complet : remet a jour quelle rangee de nuances est ouverte
+    // et laquelle est active, sans etat divergent possible.
+    construirePaletteCouleurs(type, idSuffixe, modeleActif);
   }
 
-  var win = window.open('', '_blank', 'width=1000,height=900,scrollbars=yes');
-  if (!win) { alert('Autorisez les fenetres pop-up pour cet outil.'); return; }
-  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">' +
-    '<title>Aperçu du CV</title></head><body style="font-family:sans-serif;padding:2rem;">' +
-    '<p>Chargement de l\'aperçu...</p></body></html>');
-  win.document.close();
-  fenetreApercuCVOuverte = win;
+  zonePastilles.innerHTML = palettes.map(function (p) {
+    var estBaseActive = (baseActive === p.id);
+    var nuances = avecNuances ? obtenirNuancesCouleurCV(p.id) : [];
+    var rangeeNuances = (avecNuances && estBaseActive)
+      ? '<div class="rangee-nuances-cv" style="display:flex;gap:0.3rem;margin-top:0.4rem;flex-wrap:wrap;max-width:220px;">' +
+        nuances.map(function (n) {
+          var actifNuance = (n.id === couleurActive) || (couleurActive === p.id && n.niveau === 10);
+          return '<button type="button" class="pastille-nuance-cv' + (actifNuance ? ' pastille-nuance-cv-active' : '') + '" ' +
+            'data-couleur="' + n.id + '" title="' + n.nom + '" aria-label="' + n.nom + '" style="background:#' + n.hex + ';"></button>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="groupe-couleur-cv" style="display:inline-block;vertical-align:top;margin-right:0.3rem;">' +
+      '<button type="button" class="pastille-couleur-cv' + (estBaseActive ? ' pastille-couleur-cv-active' : '') + '" ' +
+      'data-couleur-base="' + p.id + '" title="' + p.nom + (avecNuances ? ' — cliquez pour voir les nuances' : '') + '" ' +
+      'aria-label="Couleur ' + p.nom + '" style="background:#' + p.hex + ';"></button>' +
+      rangeeNuances + '</div>';
+  }).join('');
 
-  chargerEtAfficherApercuCV(modele);
-}
-
-// TACHE (indicateur de remplissage, generique) : construit le morceau de
-// JS (sous forme de texte) a injecter dans le <script> d'une fenetre
-// d'apercu (CV ou Lettre) pour mesurer, DANS LE NAVIGATEUR, la hauteur
-// reelle du contenu rendu et la comparer a la hauteur imprimable d'une
-// page A4 -- une seule logique, partagee, aucune duplication, aucune
-// dependance a un modele en particulier (elle ne connait que l'id d'un
-// element englobant, jamais une classe propre a Moderne/Classique/etc.).
-//
-// margeMm : la marge d'impression definie dans le @page CSS correspondant
-// (doit rester coherente avec elle, sinon la mesure serait fausse).
-function construireScriptIndicateurPage(margeMm) {
-  return (
-    'var MARGE_MM_PAGE=' + margeMm + ';' +
-    'var HAUTEUR_A4_MM=297;' +
-    'var PX_PAR_MM=96/25.4;' +
-    'var hauteurPageImprimablePx=(HAUTEUR_A4_MM-2*MARGE_MM_PAGE)*PX_PAR_MM;' +
-    'function calculerRemplissagePage(){' +
-      'var zone=document.getElementById("zoneMesurePage");' +
-      'var indicateur=document.getElementById("indicateurRemplissagePage");' +
-      'var repere=document.getElementById("reperePage");' +
-      'if(!zone||!indicateur){return;}' +
-      'var hauteurContenu=zone.scrollHeight;' +
-      'var pourcentage=Math.round((hauteurContenu/hauteurPageImprimablePx)*100);' +
-      'var icone=pourcentage<85?"\\uD83D\\uDFE2":(pourcentage<=100?"\\uD83D\\uDFE1":"\\uD83D\\uDD34");' +
-      'var texte=icone+" "+pourcentage+"% de la page utilisée";' +
-      'if(pourcentage>100){' +
-        'texte+=" — Le contenu dépasse d\'environ "+(pourcentage-100)+"% la première page.";' +
-      '}' +
-      'indicateur.textContent=texte;' +
-      'indicateur.style.color=pourcentage>100?"#b91c1c":(pourcentage>=85?"#92600a":"#15803d");' +
-      'if(repere){' +
-        'var positionRepere=Math.min(hauteurPageImprimablePx,hauteurContenu);' +
-        'repere.style.top=positionRepere+"px";' +
-      '}' +
-    '}' +
-    'calculerRemplissagePage();' +
-    'window.addEventListener("resize",calculerRemplissagePage);'
-  );
-}
-
-// Charge le template+style du modele demande, produit le rendu a partir de
-// "dossier", et reecrit ENTIEREMENT le contenu de la fenetre d'apercu deja
-// ouverte (barre de selection incluse) -- appelee a l'ouverture initiale ET
-// depuis le <select> a l'interieur de la fenetre (via window.opener).
-function chargerEtAfficherApercuCV(modele) {
-  var win = fenetreApercuCVOuverte;
-  if (!win || win.closed) { return; }
-  dernierModeleApercuAffiche = modele;
-
-  var cheminTemplate = 'modules/cv-editor/templates/' + modele + '/template.html';
-  var cheminStyle = 'modules/cv-editor/templates/' + modele + '/style.css';
-
-  Promise.all([
-    fetch(cheminTemplate).then(function (r) {
-      if (!r.ok) { throw new Error('Modele "' + modele + '" introuvable.'); }
-      return r.text();
-    }),
-    fetch(cheminStyle).then(function (r) { return r.ok ? r.text() : ''; }),
-    // TACHE (selecteur en cartes) : metadonnees de TOUS les modeles du
-    // manifeste (pas seulement celui affiche), necessaires pour dessiner
-    // chaque miniature de la grille de cartes.
-    Promise.all(MODELES_CV_DISPONIBLES.map(function (m) { return obtenirMetaModele(m.id); }))
-  ]).then(function (resultats) {
-    var templateHtml = resultats[0];
-    var styleCss = resultats[1];
-    var metas = resultats[2];
-    var metasParModele = {};
-    MODELES_CV_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
-
-    var objetCV = normaliserDonneesCV(dossier);
-    // TACHE (ajustement : moteur conditionnel, pas systematique) : le
-    // moteur de decision ne s'applique QUE si l'IA a reellement produit
-    // des recommandations exploitables. Sinon, comportement historique
-    // inchange : tout s'affiche, aucune selection automatique -- l'IA
-    // n'intervient que lorsqu'elle apporte une valeur ajoutee, elle ne
-    // modifie jamais silencieusement le comportement de l'application.
-    var recommandationsIACV = (dossier.ia && dossier.ia.cv && dossier.ia.cv.recommandations) || {};
-    var modeOptimiseParIA = recommandationsIAPresentes(recommandationsIACV);
-    var objetPourRendu = objetCV;
-    if (modeOptimiseParIA) {
-      var capacitesModeleActuel = (metasParModele[modele] && metasParModele[modele].capacites) || {};
-      objetPourRendu = appliquerMoteurDecisionCV(objetCV, recommandationsIACV, capacitesModeleActuel);
-    }
-    var corpsRendu = rendreTemplate(objetPourRendu, templateHtml);
-    var cartesHtml = genererCartesSelecteurCV(modele, metasParModele);
-
-    var pageComplete = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
-      '<title>Aperçu du CV</title>' +
-      '<style>' +
-      'body{margin:0;background:#F3F4F6;font-family:Arial,sans-serif;}' +
-      '.apercu-cv-barre{position:sticky;top:0;background:#FFFFFF;border-bottom:1px solid #E5E7EB;' +
-      'padding:0.8rem 1.2rem;z-index:10;}' +
-      '.apercu-cv-barre p{margin:0 0 0.6rem 0;font-weight:bold;}' +
-      '.apercu-cv-cartes{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0.8rem;}' +
-      '.carte-modele-cv{cursor:pointer;border:2px solid #E5E7EB;border-radius:8px;padding:0.4rem;' +
-      'width:100px;text-align:center;background:#FFFFFF;transition:border-color 0.15s;}' +
-      '.carte-modele-cv:hover{border-color:#93C5FD;}' +
-      '.carte-modele-cv-active{border-color:#2563EB;border-width:3px;background:#EFF6FF;}' +
-      '.carte-modele-cv-miniature svg{width:100%;height:auto;display:block;border-radius:4px;}' +
-      '.carte-modele-cv-nom{font-size:0.8rem;margin-top:0.4rem;color:#1F2937;}' +
-      '.apercu-cv-conteneur{padding:1.5rem 0;}' +
-      // TACHE (export PDF) : bouton d'impression, exclu de la grille de
-      // cartes (marge automatique a gauche pour le separer visuellement).
-      '.btn-imprimer-cv{margin-left:auto;align-self:center;background:#2563EB;color:#FFFFFF;border:none;' +
-      'border-radius:6px;padding:0.6rem 1.1rem;font-size:0.9rem;cursor:pointer;}' +
-      '.btn-imprimer-cv:hover{background:#1D4ED8;}' +
-      // TACHE (indicateur de remplissage + edition directe, generique) :
-      // bandeau d'indicateur, repere visuel de fin de page (ligne
-      // pointillee), et note sur l'edition directe -- rien de ceci ne
-      // depend du modele affiche.
-      '.apercu-cv-ligne-outils{display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;margin-top:0.6rem;}' +
-      '#indicateurRemplissagePage{font-size:0.85rem;font-weight:600;}' +
-      '.apercu-cv-note-edition{font-size:0.8rem;color:#6b7280;margin:0.4rem 0 0 0;}' +
-      '#zoneMesurePage{position:relative;outline:none;}' +
-      '#zoneMesurePage:focus{box-shadow:0 0 0 2px #93C5FD;border-radius:4px;}' +
-      '#reperePage{position:absolute;left:-12px;right:-12px;border-top:2px dashed #DC2626;pointer-events:none;}' +
-      '#reperePage::after{content:"Fin de la 1ère page A4";position:absolute;right:0;top:2px;' +
-      'font-size:0.7rem;color:#DC2626;background:#FFFFFF;padding:0 0.3rem;}' +
-      styleCss +
-      // TACHE (export PDF) : feuille @media print GENERIQUE, ajoutee une
-      // seule fois ici -- AUCUNE modification des style.css des 6 modeles.
-      // Les selecteurs par motif de classe ([class*="-bloc"], [class*=
-      // "-experience"], etc.) et l'element "section" couvrent l'ensemble
-      // des modeles existants (leurs conventions de nommage deja en place),
-      // sans avoir a lister chaque modele individuellement -- reste valable
-      // pour un futur modele qui suivrait la meme convention.
-      '@media print {' +
-      '.apercu-cv-barre { display: none !important; }' +
-      'body { background: #FFFFFF !important; }' +
-      '.apercu-cv-conteneur { padding: 0 !important; }' +
-      '#reperePage { display: none !important; }' +
-      // TACHE (police minimale 10pt) : empeche tout re-echelonnement du
-      // "rem" au moment de l'impression (certains navigateurs ajustent la
-      // taille racine a l'impression) -- garantit que les tailles deja
-      // definies par chaque modele (en rem) restent fideles a ce qui est
-      // affiche a l'ecran, jamais reduites silencieusement.
-      'html { font-size: 100% !important; }' +
-      '@page { size: A4; margin: 15mm; }' +
-      '* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }' +
-      '.apercu-cv-conteneur section, ' +
-      '.apercu-cv-conteneur [class*="-bloc"], ' +
-      '.apercu-cv-conteneur [class*="-experience"], ' +
-      '.apercu-cv-conteneur [class*="-ligne"] { break-inside: avoid; }' +
-      '}' +
-      '</style>' +
-      '</head><body>' +
-      '<div class="apercu-cv-barre">' +
-      '<p>Modele de CV :</p>' +
-      '<div class="apercu-cv-cartes">' + cartesHtml +
-      '<button type="button" class="btn-imprimer-cv" id="btnImprimerCV">&#128196; Télécharger / Imprimer le PDF</button>' +
-      '</div>' +
-      '<div class="apercu-cv-ligne-outils">' +
-      '<span id="indicateurRemplissagePage"></span>' +
-      '</div>' +
-      (modeOptimiseParIA
-        // TACHE (transparence du moteur de decision) : rendu visible des
-        // que le moteur intervient reellement -- pour que la personne
-        // comprenne immediatement pourquoi elle ne voit pas tout son
-        // dossier, plutot que de croire que des informations ont disparu.
-        ? '<div class="mb-2" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:0.6rem 0.9rem;">' +
-          '<p class="mb-0 small"><strong>&#129302; Mode optimisé par l\'IA</strong> — Ce document a été optimisé pour ' +
-          'cette candidature. Certaines informations ont été volontairement masquées afin de respecter les contraintes ' +
-          'du modèle et de mettre en avant les éléments les plus pertinents.</p>' +
-          '</div>'
-        : '') +
-      '<p class="apercu-cv-note-edition">&#9997;&#65039; Le contenu ci-dessous est directement modifiable ' +
-      '(clic dans le texte). Ces ajustements ne sont pas enregistrés dans votre profil : ils ne concernent ' +
-      'que cet aperçu, avant impression.</p>' +
-      '</div>' +
-      '<div class="apercu-cv-conteneur">' +
-      '<div id="zoneMesurePage" contenteditable="true">' + corpsRendu + '<div id="reperePage"></div></div>' +
-      '</div>' +
-      '<script>' +
-      construireScriptIndicateurPage(15) +
-      'document.getElementById("zoneMesurePage").addEventListener("input", calculerRemplissagePage);' +
-      'document.querySelectorAll(".carte-modele-cv").forEach(function (carte) {' +
-      'carte.addEventListener("click", function () {' +
-      'window.opener.chargerEtAfficherApercuCV(this.dataset.modele);' +
-      '});' +
-      '});' +
-      'document.getElementById("btnImprimerCV").addEventListener("click", function () { window.print(); });' +
-      '<\/script>' +
-      '</body></html>';
-
-    win.document.open();
-    win.document.write(pageComplete);
-    win.document.close();
-  }).catch(function (erreur) {
-    win.document.open();
-    win.document.write('<p style="font-family:sans-serif;padding:2rem;">Impossible de charger l\'aperçu du CV : ' +
-      erreur.message + '</p>');
-    win.document.close();
+  zonePastilles.querySelectorAll('[data-couleur-base]').forEach(function (rond) {
+    rond.addEventListener('click', function () {
+      var baseId = this.dataset.couleurBase;
+      if (!avecNuances) {
+        // Pas de nuances pour ce type (lettre/entretien) : comportement
+        // simple d'origine, une couleur = un seul clic.
+        appliquerCouleur(baseId);
+        return;
+      }
+      // TACHE ("Nuances rapides") : un clic sur le rond deplie sa rangee
+      // de 10 nuances si elle n'etait pas deja ouverte (et selectionne la
+      // nuance 10/10 par defaut) ; un second clic la replie sans rien
+      // changer si elle etait deja ouverte pour cette couleur.
+      if (baseActive === baseId) {
+        baseActive = null;
+        construirePaletteCouleurs(type, idSuffixe, modeleActif);
+        return;
+      }
+      baseActive = baseId;
+      // Choix par defaut a l'ouverture : la nuance 10/10 (couleur pleine),
+      // sauf si une nuance de CETTE couleur est deja active.
+      if (!couleurActive || String(couleurActive).split('-')[0] !== baseId) {
+        appliquerCouleur(baseId + '-' + NB_NUANCES_CV);
+      } else {
+        construirePaletteCouleurs(type, idSuffixe, modeleActif);
+      }
+    });
+  });
+  zonePastilles.querySelectorAll('.pastille-nuance-cv').forEach(function (pastille) {
+    pastille.addEventListener('click', function (e) {
+      e.stopPropagation();
+      appliquerCouleur(this.dataset.couleur);
+    });
   });
 }
 
-// TACHE (V2 IA, etape 1 : lien assistant IA -> moteur de rendu) : rafraichit
-// l'apercu du CV, uniquement s'il est deja ouvert, avec le meme modele que
-// celui actuellement affiche -- sans rien faire sinon (aucune fenetre a
-// ouvrir de force). Appelee automatiquement des que dossier.ia est mis a
-// jour avec succes (voir plus bas, fenetre "Creer mon CV").
-function rafraichirApercuCVSiOuvert() {
-  if (fenetreApercuCVOuverte && !fenetreApercuCVOuverte.closed) {
-    chargerEtAfficherApercuCV(dernierModeleApercuAffiche);
-  }
-}
-
-// TACHE (Lettre V2, tache 2 : moteur de rendu) : meme mecanique exacte que
-// ouvrirApercuCV()/chargerEtAfficherApercuCV() -- reutilise rendreTemplate()
-// tel quel (deja generique, aucune modification necessaire), meme technique
-// de fenetre, meme principe d'impression PDF (@media print). Seule
-// difference deliberee : le corps de la lettre est directement editable
-// (contenteditable) dans l'apercu, et toute modification est immediatement
-// repercutee dans dossier.ia.lettre.lettre.texte, pour que le PDF imprime
-// corresponde exactement a ce qui est affiche.
-var fenetreApercuLettreOuverte = null;
-var dernierModeleApercuLettreAffiche = 'sobre';
-
-function ouvrirApercuLettre(modele) {
-  if (!modele) { modele = 'sobre'; }
-
-  if (fenetreApercuLettreOuverte && !fenetreApercuLettreOuverte.closed) {
-    fenetreApercuLettreOuverte.focus();
-    chargerEtAfficherApercuLettre(modele);
-    return;
-  }
-
-  var win = window.open('', '_blank', 'width=900,height=900,scrollbars=yes');
-  if (!win) { alert('Autorisez les fenetres pop-up pour cet outil.'); return; }
-  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">' +
-    '<title>Aperçu de la lettre</title></head><body style="font-family:sans-serif;padding:2rem;">' +
-    '<p>Chargement de l\'aperçu...</p></body></html>');
-  win.document.close();
-  fenetreApercuLettreOuverte = win;
-
-  chargerEtAfficherApercuLettre(modele);
-}
-
-function chargerEtAfficherApercuLettre(modele) {
-  var win = fenetreApercuLettreOuverte;
-  if (!win || win.closed) { return; }
-  dernierModeleApercuLettreAffiche = modele;
-
-  var cheminTemplate = 'modules/lettre-editor/templates/' + modele + '/template.html';
-  var cheminStyle = 'modules/lettre-editor/templates/' + modele + '/style.css';
-
-  Promise.all([
-    fetch(cheminTemplate).then(function (r) {
-      if (!r.ok) { throw new Error('Modele "' + modele + '" introuvable.'); }
-      return r.text();
-    }),
-    fetch(cheminStyle).then(function (r) { return r.ok ? r.text() : ''; })
-  ]).then(function (resultats) {
-    var templateHtml = resultats[0];
-    var styleCss = resultats[1];
-    var objetLettre = normaliserDonneesLettre(dossier);
-    var corpsRendu = rendreTemplate(objetLettre, templateHtml);
-
-    var pageComplete = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
-      '<title>Aperçu de la lettre</title>' +
-      '<style>' +
-      'body{margin:0;background:#F3F4F6;font-family:Arial,sans-serif;}' +
-      '.apercu-lettre-barre{position:sticky;top:0;background:#FFFFFF;border-bottom:1px solid #E5E7EB;' +
-      'padding:0.8rem 1.2rem;z-index:10;display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;}' +
-      '.apercu-lettre-barre span{font-size:0.85rem;color:#6b7280;}' +
-      '.btn-imprimer-lettre{margin-left:auto;background:#2563EB;color:#FFFFFF;border:none;' +
-      'border-radius:6px;padding:0.6rem 1.1rem;font-size:0.9rem;cursor:pointer;}' +
-      '.btn-imprimer-lettre:hover{background:#1D4ED8;}' +
-      '.apercu-lettre-conteneur{padding:1.5rem 0;}' +
-      // TACHE (indicateur de remplissage, generique) : meme mecanique que
-      // le CV, memes classes/ids -- rien de specifique a la lettre.
-      '#indicateurRemplissagePage{font-size:0.85rem;font-weight:600;}' +
-      '#zoneMesurePage{position:relative;}' +
-      '#reperePage{position:absolute;left:-12px;right:-12px;border-top:2px dashed #DC2626;pointer-events:none;}' +
-      '#reperePage::after{content:"Fin de la 1ère page A4";position:absolute;right:0;top:2px;' +
-      'font-size:0.7rem;color:#DC2626;background:#FFFFFF;padding:0 0.3rem;}' +
-      styleCss +
-      // TACHE (Lettre V2, tache 2) : meme feuille @media print que le CV
-      // (memes principes : masquer l'interface, marges A4, conserver les
-      // couleurs, eviter les coupures de bloc) -- rien de nouveau a
-      // reinventer ici.
-      '@media print {' +
-      '.apercu-lettre-barre { display: none !important; }' +
-      'body { background: #FFFFFF !important; }' +
-      '.apercu-lettre-conteneur { padding: 0 !important; }' +
-      '#reperePage { display: none !important; }' +
-      // TACHE (police minimale 10pt) : voir la meme regle, memes raisons,
-      // que dans l'apercu CV.
-      'html { font-size: 100% !important; }' +
-      '@page { size: A4; margin: 20mm; }' +
-      '* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }' +
-      '.lettre-sobre-corps { break-inside: avoid; }' +
-      '}' +
-      '</style>' +
-      '</head><body>' +
-      '<div class="apercu-lettre-barre">' +
-      '<span>&#9997;&#65039; Le texte est directement modifiable ci-dessous.</span>' +
-      '<span id="indicateurRemplissagePage" style="margin-left:auto;"></span>' +
-      '<button type="button" class="btn-imprimer-lettre" id="btnImprimerLettre">&#128196; Télécharger / Imprimer le PDF</button>' +
-      '</div>' +
-      '<div class="apercu-lettre-conteneur">' +
-      '<div id="zoneMesurePage">' + corpsRendu + '<div id="reperePage"></div></div>' +
-      '</div>' +
-      '<script>' +
-      construireScriptIndicateurPage(20) +
-      'var zoneEditable=document.getElementById("lettreTexteEditable");' +
-      'if(zoneEditable){zoneEditable.addEventListener("input",function(){' +
-      'if(window.opener&&window.opener.dossier&&window.opener.dossier.ia&&window.opener.dossier.ia.lettre&&window.opener.dossier.ia.lettre.lettre){' +
-      'window.opener.dossier.ia.lettre.lettre.texte=this.innerText;' +
-      '}' +
-      'calculerRemplissagePage();' +
-      '});}' +
-      'var btnImprimerLettre=document.getElementById("btnImprimerLettre");' +
-      'if(btnImprimerLettre){btnImprimerLettre.addEventListener("click",function(){window.print();});}' +
-      '<\/script>' +
-      '</body></html>';
-
-    win.document.open();
-    win.document.write(pageComplete);
-    win.document.close();
-  }).catch(function (erreur) {
-    win.document.open();
-    win.document.write('<p style="font-family:sans-serif;padding:2rem;">Impossible de charger l\'aperçu de la lettre : ' +
-      erreur.message + '</p>');
-    win.document.close();
+// TACHE (format A5) : cable les 2 boutons "A4 complet"/"A5 compact" de
+// l'accordeon -- CV uniquement (les boutons ne sont meme pas construits
+// pour lettre/entretien, voir accordeonApercuDoc). Meme principe que
+// construirePaletteCouleurs() : bascule etatApercuInline.cv.formatPage et
+// rafraichit l'apercu, rien de plus (le contenu recadre est entierement
+// gere par formatA5CV.js).
+function construireBoutonsFormatPage(type, idSuffixe) {
+  var zone = document.getElementById('boutonsFormatPage' + idSuffixe);
+  if (!zone) { return; }
+  zone.querySelectorAll('[data-format-page]').forEach(function (bouton) {
+    bouton.addEventListener('click', function () {
+      var valeur = this.dataset.formatPage;
+      if (valeur === etatApercuInline[type].formatPage) { return; }
+      etatApercuInline[type].formatPage = valeur;
+      // TACHE (retour utilisateur : "je ne veux pas voir les modeles A4
+      // dans l'option A5") : un simple rafraichissement de l'apercu ne
+      // suffit pas ici -- il faut aussi basculer entre la grille de
+      // modeles et le message explicatif (voir accordeonApercuDoc plus
+      // haut), qui depend de ce meme etatApercuInline[type].formatPage.
+      // Un re-rendu complet de la page est le moyen le plus sur de
+      // garder les deux parfaitement synchronises.
+      pageResultats();
+    });
   });
 }
 
+function construireCarrouselModelesCV(modeleActif, metasParModele) {
+  construireCarrouselModeles('cv', 'CV', MODELES_CV_DISPONIBLES, modeleActif, metasParModele);
+}
+
+// TACHE (retour utilisateur : retrait vieux systeme de popup) : la popup
+// qu'elle rafraichissait (chargerEtAfficherApercuCV) est supprimee -- ne
+// fait plus rien, mais reste definie car appelee ailleurs (ouvrirAideIA(),
+// et un point d'entree "Creer mon CV") sans les casser.
+function rafraichirApercuCVSiOuvert() {}
+
+function fermerAideIA() {
+  var f = document.getElementById('fenetreAideIA');
+  if (f) { f.remove(); }
+  if (fenetreIAOuverte) { fenetreIAOuverte.closed = true; }
+  fenetreIAOuverte = null;
+}
+
+// TACHE (retour utilisateur : plus de popups, dernier ecran converti) :
+// ancienne fenetre window.open() transformee en ecran integre dans la
+// page (meme principe que tous les autres ecrans de l'appli desormais).
+// Consequence directe : plus besoin du pont cross-fenetre window.opener.X
+// -- toutes les fonctions (analyserReponseIACV, genererCSVCanva...) sont
+// appelees DIRECTEMENT, meme document. Reutilise le composant partage de
+// collage instantane (activerCollageInstantane/htmlCollageInstantane) pour
+// les 3 zones de collage (CV/Lettre/Entretien), comme demande.
 function ouvrirAideIA(type) {
+  fermerAideIA();
   var profil = texteProfil(type);
-  var prefixe = promptCache(type, '').replace(/\n+$/, '');   // instructions seules
-  // TACHE (V2 IA, etape 1) : prompt separe, uniquement utilise dans la
-  // fenetre "Creer mon CV" (estFenetreCV plus bas), mais calcule ici pour
-  // rester au meme endroit que les autres prompts de cette fonction.
+  var prefixe = promptCache(type, '').replace(/\n+$/, '');
   var promptAccrocheComplet = promptCache('accroche', profil);
-  var titres = { cv: '📄 Creer un CV', lettre: '✉️ Lettre de motivation', entretien: '🎤 Preparer un entretien' };
+  var titres = { cv: '📄 Créer un CV', lettre: '✉️ Lettre de motivation', entretien: '🎤 Préparer un entretien' };
   var titre = titres[type] || 'Assistant IA';
-  var aDepose = !!dossier.cvAnalyse;              // la personne a depose son CV sur le site
+  var aDepose = !!dossier.cvAnalyse;
   var cvTexte = dossier.cvTexte || '';
-  // TÂCHE 8 : lettre de motivation redigee/importee, soumise a la meme regle d'anonymisation que le CV.
   var lettreTexte = (dossier.lettreMotivation && dossier.lettreMotivation.texte) ? dossier.lettreMotivation.texte.trim() : '';
   var aLettre = !!lettreTexte;
-
   var estLettre = (type === 'lettre');
   var estEntretien = (type === 'entretien');
-  // TACHE (demande : export Canva) : uniquement pertinent pour le CV.
-  // TACHE (correction, coherence Anonymiser) : deux versions calculees a
-  // l'avance (comme CV_RAW/CV_ANON), le choix se fait dynamiquement dans la
-  // fenetre selon l'etat EN DIRECT du bouton Anonymiser (pas fige a
-  // l'ouverture).
-  // TACHE (deplacement export Canva) : le CSV n'est plus precalcule ici --
-  // il est desormais recalcule EN DIRECT au moment du clic sur le bouton
-  // (voir plus bas, section Exporter), via window.opener.genererCSVCanva(),
-  // pour refleter le texte ameliore tel que saisi a ce moment-la (le champ
-  // de saisie vit desormais dans cette meme fenetre, voir plus bas).
   var estFenetreCV = (type === 'cv');
-  // TACHE (correction anonymisation) : le bouton Anonymiser et le bloc
-  // Identite civile sont desormais proposes pour TOUS les parcours, y compris
-  // l'entretien (coherence demandee : meme fonctionnement partout). L'ancienne
-  // regle "jamais d'option pour l'entretien" (TACHE 43) est levee : l'entretien
-  // beneficie du meme anonymat selectif que le CV et la lettre.
-  var afficherAnon = (aDepose || aLettre);
 
-  // TACHE (correction anonymisation) : anonymisation SELECTIVE, jamais
-  // exclusive. anonymiserTexte() retire uniquement les donnees identifiantes
-  // (nom, prenom, adresse, telephone, e-mail, liens connus) et conserve tout
-  // le reste du texte (experiences, competences, formulations). Les deux
-  // versions (brute et anonymisee) sont toujours calculees ; le choix entre
-  // les deux se fait dynamiquement dans la fenetre via le bouton Anonymiser.
-  var cvTexteAnonymise = anonymiserTexte(cvTexte);
-  var lettreTexteAnonymisee = anonymiserTexte(lettreTexte);
-  // TACHE (correction anonymisation, faille comblee) : le "Profil du candidat"
-  // (experiences, entreprise visee, liens...) n'etait jusqu'ici JAMAIS filtre,
-  // meme en mode anonymise -- une adresse, un telephone ou un lien tape dans
-  // un champ libre (entreprise, lien d'offre...) partait donc tel quel. Meme
-  // traitement desormais applique au profil qu'au CV/lettre.
-  var profilAnonymise = anonymiserTexte(profil);
-
-  // TACHE (correction anonymisation) : identite transmise uniquement si
-  // l'utilisateur desactive explicitement l'anonymisation, quel que soit le parcours.
   var id = dossier.identite || {};
   var lignesIdentite = [];
   if (id.nom) { lignesIdentite.push('Nom : ' + id.nom); }
   if (id.prenom) { lignesIdentite.push('Prenom : ' + id.prenom); }
-  if (id.age) { lignesIdentite.push('Age : ' + id.age + ' ans'); }
   if (id.adresse) { lignesIdentite.push('Adresse : ' + id.adresse); }
   if (id.ville) { lignesIdentite.push('Ville : ' + id.ville); }
   if (id.telephone) { lignesIdentite.push('Telephone : ' + id.telephone); }
   if (id.email) { lignesIdentite.push('E-mail : ' + id.email); }
   var identiteTexte = lignesIdentite.join('\n');
 
-  // Contexte pour les mises en avant (lettre uniquement pour les questions ; entretien reutilise le choix)
   var mobiliteDispo = !!(dossier.permis && (dossier.permis.possede === true || dossier.permis.vehicule === true));
   var candActif = (dossier.objectif && dossier[dossier.objectif]) || {};
   var proximiteDispo = !!((candActif && candActif.structure) || (dossier.valeurs && dossier.valeurs.indexOf('proximite') !== -1));
@@ -7266,127 +8986,110 @@ function ouvrirAideIA(type) {
   var prefMob = !!(dossier.miseEnAvant && dossier.miseEnAvant.mobilite);
   var prefProx = !!(dossier.miseEnAvant && dossier.miseEnAvant.proximite);
 
-  // Civilite par defaut = celle du Dossier Candidat (rubrique "Mon identite"
-  // sur Mon projet), modifiable ponctuellement dans cette fenetre.
   var civiliteDefaut = (id.civilite === 'Madame' || id.civilite === 'Monsieur') ? id.civilite : 'Non précisée';
 
-  // TACHE (correction anonymisation) : bloc "Votre identite" (civilite),
-  // desormais affiche pour tous les parcours, y compris l'entretien.
   var blocIdentiteCard =
-    '<div class="card"><h3>Votre identite</h3>' +
-    '<p class="aide">La civilite sert uniquement a adapter l\'ecriture. Elle est <strong>toujours transmise</strong>, meme en mode anonymise.</p>' +
-    '<div class="civilite">' +
-    '<label><input type="radio" name="civ" value="Madame"' + (civiliteDefaut === 'Madame' ? ' checked' : '') + '> Madame</label>' +
-    '<label><input type="radio" name="civ" value="Monsieur"' + (civiliteDefaut === 'Monsieur' ? ' checked' : '') + '> Monsieur</label>' +
-    '<label><input type="radio" name="civ" value="Non précisée"' + (civiliteDefaut === 'Non précisée' ? ' checked' : '') + '> Ne pas preciser</label>' +
+    '<div class="aideia-card"><h3>Votre identité</h3>' +
+    '<p class="aideia-aide">La civilité sert uniquement à adapter l\'écriture.</p>' +
+    '<div class="aideia-civilite">' +
+    '<label><input type="radio" name="aideiaCiv" value="Madame"' + (civiliteDefaut === 'Madame' ? ' checked' : '') + '> Madame</label>' +
+    '<label><input type="radio" name="aideiaCiv" value="Monsieur"' + (civiliteDefaut === 'Monsieur' ? ' checked' : '') + '> Monsieur</label>' +
+    '<label><input type="radio" name="aideiaCiv" value="Non précisée"' + (civiliteDefaut === 'Non précisée' ? ' checked' : '') + '> Ne pas préciser</label>' +
     '</div></div>';
 
-  // Bloc anonymisation : des qu'un CV depose OU une lettre de motivation existe.
-  var blocAnonymiser = afficherAnon
-    ? '<div class="card"><h3>2. Vos donnees personnelles</h3>' +
-      '<button class="btn-anon" id="btnAnon" data-anon="1">Anonymiser</button>' +
-      '<p class="aide" id="noteAnon"><strong>Bouton rouge = donnees anonymisees.</strong> ' +
-      'Par defaut, votre CV' + (aLettre ? ' et votre lettre de motivation sont transmis' : ' est transmis') +
-      ' a l\'IA, mais votre nom, prenom, telephone, adresse et e-mail sont retires du texte avant l\'envoi. ' +
-      'Si vous acceptez de transmettre votre identite complete pour un resultat plus personnalise, cliquez : le bouton ' +
-      'passe au vert. Vous pouvez revenir en arriere a tout moment.</p></div>'
-    : '';
-
-  // Questions de mise en avant : uniquement dans la fenetre Lettre, et seulement si l'info existe
   var blocLettre = '';
   if (montrerMobilite || montrerProximite) {
-    blocLettre = '<div class="card"><h3>Mise en avant dans la lettre</h3>';
+    blocLettre = '<div class="aideia-card"><h3>Mise en avant dans la lettre</h3>';
     if (montrerMobilite) {
-      blocLettre += '<p class="question">&#128663; Souhaitez-vous mettre en avant votre mobilite ?</p>' +
-        '<div class="civilite"><label><input type="radio" name="mob" value="oui"' + (prefMob ? ' checked' : '') + '> Oui</label>' +
-        '<label><input type="radio" name="mob" value="non"' + (prefMob ? '' : ' checked') + '> Non</label></div>';
+      blocLettre += '<p class="aideia-question">&#128663; Souhaitez-vous mettre en avant votre mobilité ?</p>' +
+        '<div class="aideia-civilite"><label><input type="radio" name="aideiaMob" value="oui"' + (prefMob ? ' checked' : '') + '> Oui</label>' +
+        '<label><input type="radio" name="aideiaMob" value="non"' + (prefMob ? '' : ' checked') + '> Non</label></div>';
     }
     if (montrerProximite) {
-      blocLettre += '<p class="question">&#128205; Souhaitez-vous mettre en avant la proximite de votre domicile avec l\'entreprise ?</p>' +
-        '<div class="civilite"><label><input type="radio" name="prox" value="oui"' + (prefProx ? ' checked' : '') + '> Oui</label>' +
-        '<label><input type="radio" name="prox" value="non"' + (prefProx ? '' : ' checked') + '> Non</label></div>';
+      blocLettre += '<p class="aideia-question">&#128205; Souhaitez-vous mettre en avant la proximité de votre domicile avec l\'entreprise ?</p>' +
+        '<div class="aideia-civilite"><label><input type="radio" name="aideiaProx" value="oui"' + (prefProx ? ' checked' : '') + '> Oui</label>' +
+        '<label><input type="radio" name="aideiaProx" value="non"' + (prefProx ? '' : ' checked') + '> Non</label></div>';
     }
     blocLettre += '</div>';
   }
 
-  // TACHE (correction anonymisation) : bloc "Profil du candidat" unifie,
-  // identique pour tous les parcours (l'ancienne version speciale pour
-  // l'entretien, sans etatCivilite/etatDonnees, est retiree par coherence).
   var blocProfilCandidat =
-    '<div class="card"><h3>&#128100; Profil du candidat</h3>' +
-    '<p class="etat" id="etatCivilite"></p>' +
-    '<p class="etat" id="etatDonnees"></p>' +
+    '<div class="aideia-card"><h3>&#128100; Profil du candidat</h3>' +
+    '<p class="aideia-etat" id="aideiaEtatCivilite"></p>' +
+    '<p class="aideia-etat" id="aideiaEtatDonnees"></p>' +
     '<div class="d-flex justify-content-between align-items-center">' +
-    '<p class="aide mb-0">Apercu exact de ce qui sera transmis a l\'IA :</p>' +
-    '<button type="button" class="btn-editer-apercu" id="btnEditerApercu">&#9999;&#65039; Je modifie</button>' +
+    '<p class="aideia-aide mb-0">Aperçu exact de ce qui sera transmis à l\'IA :</p>' +
+    '<button type="button" class="aideia-btn-editer-apercu" id="aideiaBtnEditerApercu">&#9999;&#65039; Je modifie</button>' +
     '</div>' +
-    '<div class="profil" id="apercuProfil"></div>' +
-    '<textarea class="profil-edit" id="apercuProfilEdit" hidden></textarea>' +
-    '<div id="zoneValiderApercu" hidden>' +
-    '<button type="button" class="btn-copy" id="btnValiderApercu">&#9989; Je valide</button>' +
+    '<div class="aideia-profil" id="aideiaApercuProfil"></div>' +
+    '<textarea class="aideia-profil-edit" id="aideiaApercuProfilEdit" hidden></textarea>' +
+    '<div id="aideiaZoneValiderApercu" hidden>' +
+    '<button type="button" class="aideia-btn-copy" id="aideiaBtnValiderApercu">&#9989; Je valide</button>' +
     '</div>' +
-    '<p class="aide" id="noteApercuModifie" hidden>&#8635; Ce texte a ete modifie manuellement. ' +
-    '<a href="#" id="lienRevenirApercuAuto">Revenir a la version automatique</a></p>' +
+    '<p class="aideia-aide" id="aideiaNoteApercuModifie" hidden>&#8635; Ce texte a été modifié manuellement. ' +
+    '<a href="#" id="aideiaLienRevenirApercuAuto">Revenir à la version automatique</a></p>' +
     '</div>';
 
-  var htmlContent =
-    '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>' + titre + '</title>' +
-    '<style>body{font-family:Segoe UI,sans-serif;max-width:900px;margin:2rem auto;padding:2rem;background:#f5f7fb;}' +
-    'h1{color:#0b1a33;}.card{background:white;border-radius:1.2rem;padding:1.5rem;margin:1rem 0;box-shadow:0 4px 12px rgba(0,0,0,0.08);}' +
-    '.profil{background:#f0f4fa;padding:1rem;border-radius:0.75rem;white-space:pre-wrap;border-left:4px solid #0d6efd;line-height:1.6;}' +
-    '.etat{margin:0.4rem 0;font-size:1.1rem;color:#0b1a33;}.etat strong{color:#0d6efd;}' +
-    '.question{font-weight:600;margin:0.9rem 0 0.3rem;color:#0b1a33;}' +
-    '.ia-grid{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0;}' +
-    '.ia-btn{background:#0d6efd;color:white;padding:0.7rem 1.4rem;border-radius:40px;text-decoration:none;font-weight:600;}' +
-    '.btn-copy,.btn-anon{border:none;padding:0.9rem 2rem;border-radius:40px;cursor:pointer;font-weight:700;font-size:1.1rem;color:white;}' +
-    '.btn-copy{background:#198754;}.btn-copy:hover{background:#157347;}' +
-    '.btn-anon[data-anon="1"]{background:#dc3545;}.btn-anon[data-anon="0"]{background:#198754;}' +
-    '.civilite{margin:0.5rem 0;}.civilite label{margin-right:1.2rem;font-weight:600;cursor:pointer;}' +
-    '.aide{color:#4a5b6e;font-size:0.95rem;margin-top:0.6rem;}' +
-    '.btn-editer-apercu{background:#eef1f6;border:2px solid #d5dbe4;color:#0b1a33;border-radius:30px;' +
+  var styleAideIA = '<style>' +
+    '#fenetreAideIA .aideia-card{background:white;border-radius:1.2rem;padding:1.5rem;margin:1rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:1px solid #E5E7EB;}' +
+    '#fenetreAideIA .aideia-profil{background:#f0f4fa;padding:1rem;border-radius:0.75rem;white-space:pre-wrap;border-left:4px solid #0d6efd;line-height:1.6;max-height:260px;overflow-y:auto;}' +
+    '#fenetreAideIA .aideia-etat{margin:0.4rem 0;font-size:1.05rem;color:#0b1a33;}#fenetreAideIA .aideia-etat strong{color:#0d6efd;}' +
+    '#fenetreAideIA .aideia-question{font-weight:600;margin:0.9rem 0 0.3rem;color:#0b1a33;}' +
+    '#fenetreAideIA .aideia-ia-grid{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0;}' +
+    '#fenetreAideIA .aideia-ia-btn{background:#0d6efd;color:white;padding:0.7rem 1.4rem;border-radius:40px;text-decoration:none;font-weight:600;}' +
+    '#fenetreAideIA .aideia-btn-copy{border:none;padding:0.9rem 2rem;border-radius:40px;cursor:pointer;font-weight:700;font-size:1.1rem;color:white;background:#198754;}' +
+    '#fenetreAideIA .aideia-btn-copy:hover{background:#157347;}' +
+    '#fenetreAideIA .aideia-civilite{margin:0.5rem 0;}#fenetreAideIA .aideia-civilite label{margin-right:1.2rem;font-weight:600;cursor:pointer;}' +
+    '#fenetreAideIA .aideia-aide{color:#4a5b6e;font-size:0.95rem;margin-top:0.6rem;}' +
+    '#fenetreAideIA .aideia-btn-editer-apercu{background:#eef1f6;border:2px solid #d5dbe4;color:#0b1a33;border-radius:30px;' +
     'padding:0.35rem 1rem;font-weight:600;font-size:0.9rem;cursor:pointer;white-space:nowrap;}' +
-    '.btn-editer-apercu:hover{background:#dde3ec;}' +
-    '.profil-edit{width:100%;min-height:260px;background:#f0f4fa;padding:1rem;border-radius:0.75rem;' +
+    '#fenetreAideIA .aideia-btn-editer-apercu:hover{background:#dde3ec;}' +
+    '#fenetreAideIA .aideia-profil-edit{width:100%;min-height:200px;background:#f0f4fa;padding:1rem;border-radius:0.75rem;' +
     'border:1px solid #0d6efd;border-left:4px solid #0d6efd;line-height:1.6;font-family:inherit;font-size:1rem;box-sizing:border-box;}' +
-    '#zoneValiderApercu{margin-top:0.8rem;}</style></head><body>' +
-    '<h1>' + titre + '</h1>' +
+    '#fenetreAideIA #aideiaZoneValiderApercu{margin-top:0.8rem;}' +
+    '</style>';
+
+  var htmlContent =
+    styleAideIA +
+    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+    '<h4 class="mb-0">' + titre + '</h4>' +
+    '<button type="button" id="fermerAideIABtn" class="btn btn-sm btn-outline-secondary" style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
+    '</div>' +
     blocProfilCandidat +
     blocIdentiteCard +
-    blocAnonymiser +
     blocLettre +
-    '<div class="card"><h3>' + (afficherAnon ? '3. ' : '') + 'Copiez tout</h3>' +
-    '<button class="btn-copy" id="btnCopier">Copier</button>' +
-    '<p class="aide">' + (estEntretien
+    '<div class="aideia-card"><h3>Copiez tout</h3>' +
+    '<button class="aideia-btn-copy" id="aideiaBtnCopier">Copier</button>' +
+    '<p class="aideia-aide">' + (estEntretien
       ? 'En cliquant, le contexte de votre préparation d\'entretien est copié, prêt à l\'emploi. ' +
         'Ouvrez l\'IA de votre choix, créez une nouvelle conversation, cliquez dans la zone de saisie, ' +
         'puis faites <strong>Ctrl + V</strong> et appuyez sur <strong>Entrée</strong> : votre séance ' +
         'commencera automatiquement, sans rien taper de plus.'
-      : 'En cliquant, votre profil <strong>et les instructions pour l\'IA</strong> sont copies. ' +
+      : 'En cliquant, votre profil <strong>et les instructions pour l\'IA</strong> sont copiés. ' +
         'Ouvrez ensuite l\'IA de votre choix et collez avec <strong>Ctrl + V</strong> dans la zone de message.') + '</p></div>' +
-    '<div class="card"><h3>' + (afficherAnon ? '4. ' : '') + 'Choisissez votre IA</h3><div class="ia-grid">' +
-    '<a href="https://claude.ai/" target="_blank" class="ia-btn">Claude</a>' +
-    '<a href="https://chat.openai.com/" target="_blank" class="ia-btn">ChatGPT</a>' +
-    '<a href="https://gemini.google.com/" target="_blank" class="ia-btn">Gemini</a>' +
-    '<a href="https://www.perplexity.ai/" target="_blank" class="ia-btn">Perplexity</a>' +
-    '<a href="https://chat.mistral.ai/" target="_blank" class="ia-btn">Mistral</a>' +
+    '<div class="aideia-card"><h3>Choisissez votre IA</h3><div class="aideia-ia-grid">' +
+    '<a href="https://claude.ai/" target="_blank" class="aideia-ia-btn">Claude</a>' +
+    '<a href="https://chat.openai.com/" target="_blank" class="aideia-ia-btn">ChatGPT</a>' +
+    '<a href="https://gemini.google.com/" target="_blank" class="aideia-ia-btn">Gemini</a>' +
+    '<a href="https://www.perplexity.ai/" target="_blank" class="aideia-ia-btn">Perplexity</a>' +
+    '<a href="https://chat.mistral.ai/" target="_blank" class="aideia-ia-btn">Mistral</a>' +
     '</div></div>' +
     (estFenetreCV
-      ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
+      ? '<details class="aideia-card"><summary style="cursor:pointer;list-style:none;">' +
         '<strong>&#129302; Importer la réponse de l\'assistant IA</strong> ' +
         '<span style="color:#6b7280;font-size:0.85rem;">(accroche, points forts, mots-clés)</span>' +
         '</summary>' +
         '<div style="margin-top:0.9rem;">' +
-        '<p class="mb-2 small text-muted">Copiez ce prompt, collez-le dans ChatGPT, Claude, Gemini (ou l\'IA de votre choix) ci-dessous, ' +
-        'puis copiez <strong>l\'intégralité de sa réponse</strong> (pas besoin de n\'en garder qu\'une partie) et collez-la ci-dessous.</p>' +
-        '<button class="btn-copy" id="btnCopierPromptAccroche" style="margin-bottom:0.8rem;">Copier le prompt</button>' +
-        '<textarea class="form-control mb-2" id="texteReponseIACV" rows="8" ' +
-        'placeholder="Collez ici l\'intégralité de la réponse de l\'assistant IA..."></textarea>' +
-        '<button class="btn-copy" id="btnAnalyserReponseIACV" style="background:#0d9488;">Importer dans le CV</button>' +
+        '<p class="mb-2 small text-muted">Copiez ce prompt, collez-le dans ChatGPT, Claude, Gemini (ou l\'IA de votre choix), ' +
+        'puis copiez <strong>l\'intégralité de sa réponse</strong> (pas besoin de n\'en garder qu\'une partie).</p>' +
+        '<button class="aideia-btn-copy" id="aideiaBtnCopierPromptAccroche" style="margin-bottom:0.8rem;">Copier le prompt</button>' +
+        htmlCollageInstantane('AideIACV',
+          '<button type="button" class="btn btn-primary btn-sm mt-2" id="btnAnalyserReponseIACV">Importer dans le CV</button>') +
         '<div id="messageAnalyseIACV" class="mt-2 small" style="min-height:1.2em;"></div>' +
         '</div></details>'
       : '') +
     (estFenetreCV
-      ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
+      ? '<details class="aideia-card"><summary style="cursor:pointer;list-style:none;">' +
         '<strong>&#128228; Exporter</strong> <span style="color:#6b7280;font-size:0.85rem;">(fonctions d\'export, dont Canva)</span>' +
         '</summary>' +
         '<div style="margin-top:0.9rem;">' +
@@ -7396,293 +9099,315 @@ function ouvrirAideIA(type) {
         '<textarea class="form-control mb-3" id="texteAmelioreCanvaInputPopup" rows="6" ' +
         'placeholder="Collez ici la réponse de l\'assistant IA (CV amélioré)...">' + echapperAttribut(dossier.texteAmelioreCanva || '') + '</textarea>' +
         '<h3>&#128444; Exporter pour Canva</h3>' +
-        '<button class="btn-copy" id="btnExportCanva" style="background:#7c3aed;">Télécharger le fichier (CSV)</button>' +
-        '<p class="aide">Téléchargez ce fichier, puis importez-le dans Canva via <strong>Bulk Create</strong> ' +
+        '<button class="aideia-btn-copy" id="btnExportCanva" style="background:#7c3aed;">Télécharger le fichier (CSV)</button>' +
+        '<p class="aideia-aide">Téléchargez ce fichier, puis importez-le dans Canva via <strong>Bulk Create</strong> ' +
         '(fonctionnalité Canva Pro) pour remplir automatiquement un gabarit de CV avec vos informations. ' +
         'Si les noms de champs de votre gabarit sont différents, vous pouvez renommer la 1ère ligne du fichier ' +
-        'avant de l\'importer. Ce fichier respecte le bouton Anonymiser ci-dessus : vos coordonnées ne sont pas ' +
-        'incluses tant qu\'il est actif.</p>' +
+        'avant de l\'importer.</p>' +
         '</div></details>'
       : '') +
     (estLettre
-      ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
+      ? '<details class="aideia-card"><summary style="cursor:pointer;list-style:none;">' +
         '<strong>&#129302; Importer la réponse de l\'assistant IA</strong> ' +
         '<span style="color:#6b7280;font-size:0.85rem;">(accroche, arguments, lettre complète)</span>' +
         '</summary>' +
         '<div style="margin-top:0.9rem;">' +
         '<p class="mb-2 small text-muted">Copiez l\'intégralité de la réponse de l\'assistant IA (obtenue avec le ' +
-        'bouton "Copier" ci-dessus) et collez-la ci-dessous.</p>' +
-        '<textarea class="form-control mb-2" id="texteReponseIALettre" rows="8" ' +
-        'placeholder="Collez ici l\'intégralité de la réponse de l\'assistant IA...">' +
-        '</textarea>' +
-        '<button class="btn-copy" id="btnAnalyserReponseIALettre" style="background:#0d9488;">Importer dans la lettre</button>' +
+        'bouton "Copier" ci-dessus).</p>' +
+        htmlCollageInstantane('AideIALettre',
+          '<button type="button" class="btn btn-primary btn-sm mt-2" id="btnAnalyserReponseIALettre">Importer dans la lettre</button>') +
         '<div id="messageAnalyseIALettre" class="mt-2 small" style="min-height:1.2em;"></div>' +
         '</div></details>'
       : '') +
-    // TACHE (bandeau contextuel Impression) : le bouton "Apercu de ma
-    // lettre" a ete retire d'ici -- il vit desormais sur la page Action,
-    // dans le bandeau "Imprimer ma lettre de motivation", exactement comme
-    // pour le CV (dont le bouton d'apercu n'a jamais ete duplique dans sa
-    // propre popup non plus).
     (estEntretien
-      ? '<details class="card"><summary style="cursor:pointer;list-style:none;">' +
+      ? '<details class="aideia-card"><summary style="cursor:pointer;list-style:none;">' +
         '<strong>&#129302; Importer le bilan de votre préparation</strong> ' +
         '<span style="color:#6b7280;font-size:0.85rem;">(présentation, points à préparer, questions)</span>' +
         '</summary>' +
         '<div style="margin-top:0.9rem;">' +
         '<p class="mb-2 small text-muted">Une fois votre séance de préparation terminée, copiez le <strong>dernier ' +
-        'message</strong> de l\'assistant IA (le bilan final de la séance) et collez-le ci-dessous.</p>' +
-        '<textarea class="form-control mb-2" id="texteReponseIAEntretien" rows="8" ' +
-        'placeholder="Collez ici le bilan final de votre séance de préparation...">' +
-        '</textarea>' +
-        '<button class="btn-copy" id="btnAnalyserReponseIAEntretien" style="background:#0d9488;">Importer la préparation</button>' +
+        'message</strong> de l\'assistant IA (le bilan final de la séance).</p>' +
+        htmlCollageInstantane('AideIAEntretien',
+          '<button type="button" class="btn btn-primary btn-sm mt-2" id="btnAnalyserReponseIAEntretien">Importer la préparation</button>') +
         '<div id="messageAnalyseIAEntretien" class="mt-2 small" style="min-height:1.2em;"></div>' +
         '</div></details>'
-      : '') +
-    '<script>(function(){' +
-    'var PREFIXE=' + JSON.stringify(prefixe) + ';' +
-    'var PROFIL=' + JSON.stringify(profil) + ';' +
-    'var PROFIL_ANON=' + JSON.stringify(profilAnonymise) + ';' +
-    'var CV_RAW=' + JSON.stringify(cvTexte) + ';' +
-    'var CV_ANON=' + JSON.stringify(cvTexteAnonymise) + ';' +
-    'var HAS_CV=' + JSON.stringify(aDepose) + ';' +
-    'var LETTRE_RAW=' + JSON.stringify(lettreTexte) + ';' +
-    'var LETTRE_ANON=' + JSON.stringify(lettreTexteAnonymisee) + ';' +
-    'var HAS_LETTRE=' + JSON.stringify(aLettre) + ';' +
-    'var IDENTITE=' + JSON.stringify(identiteTexte) + ';' +
-    'var EST_LETTRE=' + JSON.stringify(estLettre) + ';' +
-    'var EST_ENTRETIEN=' + JSON.stringify(estEntretien) + ';' +
-    'var PREF_MOB=' + JSON.stringify(prefMob) + ';' +
-    'var PREF_PROX=' + JSON.stringify(prefProx) + ';' +
-    // TACHE (correction anonymisation) : meme comportement par defaut pour
-    // tous les parcours desormais (anonymise par defaut, bascule possible).
-    'var anon=' + JSON.stringify(dossier.anonymiser !== false) + ';' +
-    'var btnAnon=document.getElementById("btnAnon");' +
-    'if(btnAnon){btnAnon.dataset.anon=anon?"1":"0";btnAnon.textContent=anon?"Anonymiser":"Donnees transmises (OK)";' +
-    'btnAnon.addEventListener("click",function(){anon=!anon;this.dataset.anon=anon?"1":"0";this.textContent=anon?"Anonymiser":"Donnees transmises (OK)";' +
-    'document.getElementById("noteAnon").innerHTML=anon?"<strong>Bouton rouge = donnees anonymisees.</strong> Votre CV et vos documents sont transmis, mais votre nom, prenom, telephone, adresse et e-mail sont retires.":"<strong>Bouton vert = identite complete transmise</strong> pour un resultat plus complet. Cliquez a nouveau pour revenir a l\'anonymat.";maj();});}' +
-    'function civ(){var r=document.querySelector("input[name=civ]:checked");return r?r.value:"Non précisée";}' +
-    'function mob(){if(EST_LETTRE){var r=document.querySelector("input[name=mob]:checked");return !!(r&&r.value==="oui");}if(EST_ENTRETIEN){return PREF_MOB;}return false;}' +
-    'function prox(){if(EST_LETTRE){var r=document.querySelector("input[name=prox]:checked");return !!(r&&r.value==="oui");}if(EST_ENTRETIEN){return PREF_PROX;}return false;}' +
-    'function prefs(){var s="";if(mob()){s+="- Mettre en avant la mobilite du candidat (permis / vehicule).\\n";}if(prox()){s+="- Mettre en avant la proximite du domicile avec l\'entreprise.\\n";}return s;}' +
-    // TACHE (correction anonymisation) : coeur du correctif. texteCV()/texteLettre()
-    // choisissent dynamiquement entre la version brute et la version anonymisee
-    // (donnees identifiantes retirees, TOUT le reste du contenu conserve).
-    'function texteCV(){return anon?CV_ANON:CV_RAW;}' +
-    'function texteLettre(){return anon?LETTRE_ANON:LETTRE_RAW;}' +
-    'function texteProfilFn(){return anon?PROFIL_ANON:PROFIL;}' +
-    // TACHE (demande : apercu editable) : si la personne a modifie et valide
-    // l'apercu, ce texte remplace ENTIEREMENT ce qui est copie -- plus besoin
-    // de reconstruire le texte automatique dans ce cas.
-    'var texteApercuOverride=null;' +
-    'function construire(){' +
-    'if(texteApercuOverride!==null){return texteApercuOverride;}' +
-    'if(EST_ENTRETIEN){' +
-      // TACHE 36 : ordre demande specifiquement pour l'entretien : le contexte
-      // d'abord, puis le prompt "Preparation d'entretien", puis "Start" a la
-      // toute fin (le mot declencheur est deja inclus, l'utilisateur n'a plus
-      // rien a taper lui-meme).
-      'var t2="";' +
-      'if(HAS_CV&&texteCV()){t2+="CV actuel de la personne a reutiliser"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteCV()+"\\n\\n";}' +
-      'if(HAS_LETTRE&&texteLettre()){t2+="Lettre de motivation deja redigee par la personne"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteLettre()+"\\n\\n";}' +
-      't2+=texteProfilFn();' +
-      't2+="\\n\\n"+PREFIXE;' +
-      't2+="\\n\\nStart";' +
-      'return t2;' +
-    '}' +
-    'var t=PREFIXE+"\\n\\n";var c=civ();if(c){t+="Civilite : "+c+"\\n";}var p=prefs();if(p){t+=p;}' +
-    'if(IDENTITE&&!anon){t+="\\nIdentite du candidat :\\n"+IDENTITE+"\\n";}' +
-    'if(HAS_CV){t+="\\nCV actuel de la personne a reutiliser"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteCV()+"\\n";}' +
-    'if(HAS_LETTRE){t+="\\nLettre de motivation deja redigee par la personne"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteLettre()+"\\n";}' +
-    't+="\\n"+texteProfilFn();return t;}' +
-    'function apercu(){' +
-    'if(texteApercuOverride!==null){return texteApercuOverride;}' +
-    'var t="";var c=civ();if(c){t+="Civilite : "+c+"\\n";}var p=prefs();if(p){t+=p;}' +
-    'if(IDENTITE&&!anon){t+="\\nIdentite transmise : "+IDENTITE.replace(/\\n/g," | ")+"\\n";}' +
-    // TACHE (correction, apercu pas "exact") : l'apercu affichait seulement
-    // une mention entre crochets pour le CV/la lettre, sans jamais montrer
-    // leur contenu reel -- alors que ce contenu (avec experiences, missions,
-    // formation... ecrites dedans) part bel et bien tel quel a l'IA via
-    // construire(). L'apercu affiche desormais exactement le meme contenu.
-    'if(HAS_CV){t+="\\nCV actuel de la personne a reutiliser"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteCV()+"\\n";}' +
-    'if(HAS_LETTRE){t+="\\nLettre de motivation deja redigee par la personne"+(anon?" (donnees personnelles retirees)":"")+" :\\n"+texteLettre()+"\\n";}' +
-    't+="\\n"+texteProfilFn();return t;}' +
-    'function maj(){' +
-    'var elCiv=document.getElementById("etatCivilite");if(elCiv){elCiv.innerHTML="\\uD83D\\uDC64 Civilite : <strong>"+civ()+"</strong>";}' +
-    'var elDon=document.getElementById("etatDonnees");if(elDon){elDon.innerHTML=((HAS_CV||HAS_LETTRE)&&!anon)?"\\uD83D\\uDD13 Donnees personnelles : <strong>Identite complete</strong>":"\\uD83D\\uDD12 Donnees personnelles : <strong>\\uD83D\\uDFE2 Anonymisees</strong>";}' +
-    'document.getElementById("apercuProfil").textContent=apercu();' +
-    // TACHE (demande : synchronisation) : la civilite choisie ICI repercute
-    // desormais vers "Vous" (Mon projet/page Action), pour TOUS les
-    // parcours (avant, seul miseEnAvant etait renvoye, et seulement pour la
-    // lettre). Rafraichit la page ouvrante si elle affiche "Vous" en ce moment.
-    'try{if(window.opener&&window.opener.dossier){' +
-    'window.opener.dossier.identite=window.opener.dossier.identite||{};' +
-    'window.opener.dossier.identite.civilite=(civ()==="Non précisée")?null:civ();' +
-    'if(EST_LETTRE){window.opener.dossier.miseEnAvant={mobilite:mob(),proximite:prox()};}' +
-    'if(typeof window.opener.rafraichirSiIdentiteAffichee==="function"){window.opener.rafraichirSiIdentiteAffichee();}' +
-    '}}catch(err){}' +
-    '}' +
-    // TACHE (demande : synchronisation) : sens inverse -- appele depuis la
-    // page ouvrante quand la civilite change dans "Vous", pour repercuter
-    // ici sans avoir a refermer/rouvrir cette fenetre.
-    'window.synchroniserCivilite=function(civilite){' +
-    'var val=(civilite==="Madame"||civilite==="Monsieur")?civilite:"Non précisée";' +
-    'var r=document.querySelector(\'input[name=civ][value="\'+val+\'"]\');' +
-    'if(r){r.checked=true;maj();}' +
-    '};' +
-    'Array.prototype.forEach.call(document.querySelectorAll("input[name=civ],input[name=mob],input[name=prox]"),function(el){el.addEventListener("change",maj);});' +
-    'maj();' +
-    // TACHE (demande : apercu editable) : "Je modifie" bascule vers une
-    // zone de texte librement modifiable ; "Je valide" enregistre cette
-    // version (elle remplace alors TOUT ce qui est copie) ; un lien permet
-    // de revenir a la version automatique a tout moment.
-    'var elApercu=document.getElementById("apercuProfil");' +
-    'var elApercuEdit=document.getElementById("apercuProfilEdit");' +
-    'var elBtnEditer=document.getElementById("btnEditerApercu");' +
-    'var elZoneValider=document.getElementById("zoneValiderApercu");' +
-    'var elNoteModifie=document.getElementById("noteApercuModifie");' +
-    'if(elBtnEditer){elBtnEditer.addEventListener("click",function(){' +
-    'elApercuEdit.value=apercu();' +
-    'elApercu.hidden=true;elBtnEditer.hidden=true;elApercuEdit.hidden=false;elZoneValider.hidden=false;' +
-    'elApercuEdit.focus();' +
-    '});}' +
-    'var elBtnValider=document.getElementById("btnValiderApercu");' +
-    'if(elBtnValider){elBtnValider.addEventListener("click",function(){' +
-    'texteApercuOverride=elApercuEdit.value;' +
-    'elApercu.textContent=texteApercuOverride;' +
-    'elApercu.hidden=false;elBtnEditer.hidden=false;elApercuEdit.hidden=true;elZoneValider.hidden=true;' +
-    'elNoteModifie.hidden=false;' +
-    '});}' +
-    'var elLienRevenir=document.getElementById("lienRevenirApercuAuto");' +
-    'if(elLienRevenir){elLienRevenir.addEventListener("click",function(e){' +
-    'e.preventDefault();texteApercuOverride=null;elNoteModifie.hidden=true;maj();' +
-    '});}' +
-    'document.getElementById("btnCopier").addEventListener("click",function(){var TXT=construire();' +
-    'navigator.clipboard.writeText(TXT).then(function(){var b=document.getElementById("btnCopier");b.textContent="Copie !";setTimeout(function(){b.textContent="Copier";},2000);})' +
-    '.catch(function(){var z=document.createElement("textarea");z.value=TXT;document.body.appendChild(z);z.select();document.execCommand("copy");z.remove();alert("Copie !");});' +
-    '});' +
-    // TACHE (V2 IA, etape 1 : lien assistant IA -> moteur de rendu) :
-    // bouton "Copier le prompt" (accroche), meme technique de copie que le
-    // bouton "Copier" principal juste au-dessus (avec repli si le
-    // presse-papier est indisponible).
-    'var PROMPT_ACCROCHE=' + JSON.stringify(promptAccrocheComplet) + ';' +
-    'var btnCopierPromptAccroche=document.getElementById("btnCopierPromptAccroche");' +
-    'if(btnCopierPromptAccroche){btnCopierPromptAccroche.addEventListener("click",function(){' +
-    'navigator.clipboard.writeText(PROMPT_ACCROCHE).then(function(){var b=btnCopierPromptAccroche;var t=b.textContent;b.textContent="Copié !";setTimeout(function(){b.textContent=t;},2000);})' +
-    '.catch(function(){var z=document.createElement("textarea");z.value=PROMPT_ACCROCHE;document.body.appendChild(z);z.select();document.execCommand("copy");z.remove();alert("Copié !");});' +
-    '});}' +
-    // Bouton "Importer dans le CV" : delegue TOUT le parsing a
-    // window.opener.analyserReponseIACV() (recherche/extraction tolerante
-    // d\'un bloc JSON, meme noye dans la partie redactionnelle de la
-    // reponse -- une seule logique de parsing, partagee, jamais dupliquee
-    // dans cette fenetre). Message clair affiche dans tous les cas --
-    // jamais d\'exception brute visible par la personne, jamais de
-    // plantage de l\'application.
-    'var btnAnalyserReponseIACV=document.getElementById("btnAnalyserReponseIACV");' +
-    'var messageAnalyseIACV=document.getElementById("messageAnalyseIACV");' +
-    'if(btnAnalyserReponseIACV){btnAnalyserReponseIACV.addEventListener("click",function(){' +
-    'var texte=document.getElementById("texteReponseIACV").value;' +
-    'if(!(window.opener&&window.opener.analyserReponseIACV&&window.opener.dossier)){' +
-    'messageAnalyseIACV.style.color="#b91c1c";messageAnalyseIACV.textContent="Impossible de communiquer avec la fenêtre principale.";return;' +
-    '}' +
-    'var resultat=window.opener.analyserReponseIACV(texte);' +
-    'if(!resultat.succes){messageAnalyseIACV.style.color="#b91c1c";messageAnalyseIACV.textContent="⚠️ "+resultat.erreur;return;}' +
-    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
-    'if(!window.opener.dossier.ia.cv){window.opener.dossier.ia.cv={profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}};}' +
-    'window.opener.dossier.ia.cv.profil=resultat.valeurs.profil;' +
-    'window.opener.dossier.ia.cv.pointsForts=resultat.valeurs.pointsForts;' +
-    'window.opener.dossier.ia.cv.motsCles=resultat.valeurs.motsCles;' +
-    'window.opener.dossier.ia.cv.recommandations=resultat.valeurs.recommandations;' +
-    'if(typeof window.opener.rafraichirApercuCVSiOuvert==="function"){window.opener.rafraichirApercuCVSiOuvert();}' +
-    'messageAnalyseIACV.style.color="inherit";' +
-    'if(typeof window.opener.genererResumeImportCV==="function"){' +
-    'messageAnalyseIACV.innerHTML=window.opener.genererResumeImportCV(resultat.valeurs,window.opener.dossier);' +
-    '}else{messageAnalyseIACV.textContent="✅ Import réussi. L\'aperçu du CV a été mis à jour.";}' +
-    '});}' +
-    // TACHE (integration Lettre V2) : meme schema que le CV -- delegue tout
-    // le parsing a window.opener.analyserReponseIALettre(), jamais de
-    // logique dupliquee dans cette fenetre. Message clair dans tous les
-    // cas, jamais d'exception brute, jamais de plantage.
-    'var btnAnalyserReponseIALettre=document.getElementById("btnAnalyserReponseIALettre");' +
-    'var messageAnalyseIALettre=document.getElementById("messageAnalyseIALettre");' +
-    'if(btnAnalyserReponseIALettre){btnAnalyserReponseIALettre.addEventListener("click",function(){' +
-    'var texte=document.getElementById("texteReponseIALettre").value;' +
-    'if(!(window.opener&&window.opener.analyserReponseIALettre&&window.opener.dossier)){' +
-    'messageAnalyseIALettre.style.color="#b91c1c";messageAnalyseIALettre.textContent="Impossible de communiquer avec la fenêtre principale.";return;' +
-    '}' +
-    'var resultatLettre=window.opener.analyserReponseIALettre(texte);' +
-    'if(!resultatLettre.succes){messageAnalyseIALettre.style.color="#b91c1c";messageAnalyseIALettre.textContent="⚠️ "+resultatLettre.erreur;return;}' +
-    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
-    'if(!window.opener.dossier.ia.lettre){window.opener.dossier.ia.lettre={};}' +
-    'window.opener.dossier.ia.lettre.accroche=resultatLettre.valeurs.accroche;' +
-    'window.opener.dossier.ia.lettre.arguments=resultatLettre.valeurs.arguments;' +
-    'window.opener.dossier.ia.lettre.lettre=resultatLettre.valeurs.lettre;' +
-    'messageAnalyseIALettre.style.color="inherit";' +
-    'if(typeof window.opener.genererResumeGeneriqueImportIA==="function"&&window.opener.SPEC_AFFICHAGE_LETTRE){' +
-    'var valeursResumeLettre={accroche:resultatLettre.valeurs.accroche,arguments:resultatLettre.valeurs.arguments,texteLettre:resultatLettre.valeurs.lettre.texte};' +
-    'messageAnalyseIALettre.innerHTML=window.opener.genererResumeGeneriqueImportIA(valeursResumeLettre,window.opener.SPEC_AFFICHAGE_LETTRE);' +
-    '}else{messageAnalyseIALettre.textContent="✅ Import réussi ("+resultatLettre.valeurs.arguments.length+" argument(s) retenu(s)).";}' +
-    '});}' +
-    // TACHE (integration Entretien V2) : meme schema que le CV et la Lettre
-    // -- delegue tout le parsing a window.opener.analyserReponseIAEntretien(),
-    // et le resume a la fonction GENERIQUE window.opener.genererResumeGeneriqueImportIA()
-    // (reutilise SPEC_AFFICHAGE_ENTRETIEN, deja definie cote opener -- aucune
-    // duplication). Jamais d'exception brute, jamais de plantage.
-    'var btnAnalyserReponseIAEntretien=document.getElementById("btnAnalyserReponseIAEntretien");' +
-    'var messageAnalyseIAEntretien=document.getElementById("messageAnalyseIAEntretien");' +
-    'if(btnAnalyserReponseIAEntretien){btnAnalyserReponseIAEntretien.addEventListener("click",function(){' +
-    'var texte=document.getElementById("texteReponseIAEntretien").value;' +
-    'if(!(window.opener&&window.opener.analyserReponseIAEntretien&&window.opener.dossier)){' +
-    'messageAnalyseIAEntretien.style.color="#b91c1c";messageAnalyseIAEntretien.textContent="Impossible de communiquer avec la fenêtre principale.";return;' +
-    '}' +
-    'var resultatEntretien=window.opener.analyserReponseIAEntretien(texte);' +
-    'if(!resultatEntretien.succes){messageAnalyseIAEntretien.style.color="#b91c1c";messageAnalyseIAEntretien.textContent="⚠️ "+resultatEntretien.erreur;return;}' +
-    'if(!window.opener.dossier.ia){window.opener.dossier.ia={cv:{profil:"",pointsForts:[],motsCles:[],recommandations:{typeCV:{valeur:null,justification:""},experiencesAMettreEnAvant:[],competencesAValoriser:[],rubriquesMasquables:[]}},lettre:{},entretien:{}};}' +
-    'if(!window.opener.dossier.ia.entretien){window.opener.dossier.ia.entretien={};}' +
-    'window.opener.dossier.ia.entretien.presentation=resultatEntretien.valeurs.presentation;' +
-    'window.opener.dossier.ia.entretien.pointsAPreparer=resultatEntretien.valeurs.pointsAPreparer;' +
-    'window.opener.dossier.ia.entretien.questionsAnticipees=resultatEntretien.valeurs.questionsAnticipees;' +
-    'window.opener.dossier.ia.entretien.questionsDuCandidat=resultatEntretien.valeurs.questionsDuCandidat;' +
-    'messageAnalyseIAEntretien.style.color="inherit";' +
-    'if(typeof window.opener.genererResumeGeneriqueImportIA==="function"&&window.opener.SPEC_AFFICHAGE_ENTRETIEN){' +
-    'messageAnalyseIAEntretien.innerHTML=window.opener.genererResumeGeneriqueImportIA(resultatEntretien.valeurs,window.opener.SPEC_AFFICHAGE_ENTRETIEN);' +
-    '}else{messageAnalyseIAEntretien.textContent="✅ Import réussi.";}' +
-    '});}' +
-    'var inputTexteAmelioreCanvaPopup=document.getElementById("texteAmelioreCanvaInputPopup");' +
-    'if(inputTexteAmelioreCanvaPopup){inputTexteAmelioreCanvaPopup.addEventListener("input",function(){' +
-    'if(window.opener&&window.opener.dossier){window.opener.dossier.texteAmelioreCanva=this.value;}' +
-    '});}' +
-    'var btnExportCanva=document.getElementById("btnExportCanva");' +
-    'if(btnExportCanva){btnExportCanva.addEventListener("click",function(){' +
-    // TACHE (correction, coherence Anonymiser) : lit "anon" EN DIRECT au
-    // moment du clic (deja mis a jour par le bouton Anonymiser de cette
-    // fenetre), pas une valeur figee a l'ouverture. Le CSV lui-meme est
-    // desormais recalcule EN DIRECT via window.opener.genererCSVCanva(),
-    // pour refleter le texte ameliore tel que saisi juste au-dessus, sans
-    // dupliquer la logique de generation du CSV dans cette fenetre.
-    'var csvChoisi=(window.opener&&window.opener.genererCSVCanva)?window.opener.genererCSVCanva(!anon):"";' +
-    'var blob=new Blob(["\\uFEFF"+csvChoisi],{type:"text/csv;charset=utf-8;"});' +
-    'var url=URL.createObjectURL(blob);' +
-    'var a=document.createElement("a");a.href=url;a.download="canva_cv.csv";document.body.appendChild(a);a.click();' +
-    'document.body.removeChild(a);URL.revokeObjectURL(url);' +
-    '});}' +
-    '})();<\/script>' +
-    '</body></html>';
+      : '');
 
-  var win = window.open('', '_blank', 'width=920,height=860,scrollbars=yes');
-  if (win) { win.document.write(htmlContent); win.document.close(); fenetreIAOuverte = win; }
-  else { alert('Autorisez les fenetres pop-up pour cet outil.'); }
+  var fenetre = document.createElement('div');
+  fenetre.id = 'fenetreAideIA';
+  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);z-index:2000;' +
+    'display:flex;align-items:center;justify-content:center;padding:1rem;';
+  fenetre.innerHTML = '<div style="background:#F8F9FB;border-radius:1.5rem;max-width:920px;width:100%;' +
+    'max-height:92vh;overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' + htmlContent + '</div>';
+  document.body.appendChild(fenetre);
+  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerAideIA(); } });
+  document.getElementById('fermerAideIABtn').addEventListener('click', fermerAideIA);
+
+  // ---- logique interne (equivalent du script embarque de l'ancienne
+  // popup, dans le MEME document desormais -- plus de window.opener) ----
+  function civ() { var r = document.querySelector('input[name=aideiaCiv]:checked'); return r ? r.value : 'Non précisée'; }
+  function mob() { if (estLettre) { var r = document.querySelector('input[name=aideiaMob]:checked'); return !!(r && r.value === 'oui'); } if (estEntretien) { return prefMob; } return false; }
+  function prox() { if (estLettre) { var r = document.querySelector('input[name=aideiaProx]:checked'); return !!(r && r.value === 'oui'); } if (estEntretien) { return prefProx; } return false; }
+  function prefs() {
+    var s = '';
+    if (mob()) { s += '- Mettre en avant la mobilité du candidat (permis / véhicule).\n'; }
+    if (prox()) { s += '- Mettre en avant la proximité du domicile avec l\'entreprise.\n'; }
+    return s;
+  }
+  function texteCV() { return cvTexte; }
+  function texteLettreFn() { return lettreTexte; }
+  function texteProfilFn() { return profil; }
+  var texteApercuOverride = null;
+
+  function construire() {
+    if (texteApercuOverride !== null) { return texteApercuOverride; }
+    if (estEntretien) {
+      var t2 = '';
+      if (aDepose && texteCV()) { t2 += 'CV actuel de la personne à réutiliser :\n' + texteCV() + '\n\n'; }
+      if (aLettre && texteLettreFn()) { t2 += 'Lettre de motivation déjà rédigée par la personne :\n' + texteLettreFn() + '\n\n'; }
+      t2 += texteProfilFn();
+      t2 += '\n\n' + prefixe;
+      t2 += '\n\nStart';
+      return t2;
+    }
+    var t = prefixe + '\n\n';
+    var c = civ();
+    if (c) { t += 'Civilité : ' + c + '\n'; }
+    var p = prefs();
+    if (p) { t += p; }
+    if (identiteTexte) { t += '\nIdentité du candidat :\n' + identiteTexte + '\n'; }
+    if (aDepose) { t += '\nCV actuel de la personne à réutiliser :\n' + texteCV() + '\n'; }
+    if (aLettre) { t += '\nLettre de motivation déjà rédigée par la personne :\n' + texteLettreFn() + '\n'; }
+    t += '\n' + texteProfilFn();
+    return t;
+  }
+  function apercu() {
+    if (texteApercuOverride !== null) { return texteApercuOverride; }
+    var t = '';
+    var c = civ();
+    if (c) { t += 'Civilité : ' + c + '\n'; }
+    var p = prefs();
+    if (p) { t += p; }
+    if (identiteTexte) { t += '\nIdentité transmise : ' + identiteTexte.replace(/\n/g, ' | ') + '\n'; }
+    if (aDepose) { t += '\nCV actuel de la personne à réutiliser :\n' + texteCV() + '\n'; }
+    if (aLettre) { t += '\nLettre de motivation déjà rédigée par la personne :\n' + texteLettreFn() + '\n'; }
+    t += '\n' + texteProfilFn();
+    return t;
+  }
+  function maj() {
+    var elCiv = document.getElementById('aideiaEtatCivilite');
+    if (elCiv) { elCiv.innerHTML = '\uD83D\uDC64 Civilité : <strong>' + civ() + '</strong>'; }
+    var elDon = document.getElementById('aideiaEtatDonnees');
+    if (elDon) { elDon.innerHTML = (aDepose || aLettre) ? '\uD83D\uDD13 Données personnelles : <strong>Identité complète</strong>' : ''; }
+    var elApercuProfil = document.getElementById('aideiaApercuProfil');
+    if (elApercuProfil) { elApercuProfil.textContent = apercu(); }
+    dossier.identite = dossier.identite || {};
+    dossier.identite.civilite = (civ() === 'Non précisée') ? null : civ();
+    if (estLettre) { dossier.miseEnAvant = { mobilite: mob(), proximite: prox() }; }
+    if (typeof rafraichirSiIdentiteAffichee === 'function') { rafraichirSiIdentiteAffichee(); }
+  }
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('#fenetreAideIA input[name=aideiaCiv],#fenetreAideIA input[name=aideiaMob],#fenetreAideIA input[name=aideiaProx]'),
+    function (el) { el.addEventListener('change', maj); }
+  );
+  maj();
+
+  var elApercu = document.getElementById('aideiaApercuProfil');
+  var elApercuEdit = document.getElementById('aideiaApercuProfilEdit');
+  var elBtnEditer = document.getElementById('aideiaBtnEditerApercu');
+  var elZoneValider = document.getElementById('aideiaZoneValiderApercu');
+  var elNoteModifie = document.getElementById('aideiaNoteApercuModifie');
+  if (elBtnEditer) {
+    elBtnEditer.addEventListener('click', function () {
+      elApercuEdit.value = apercu();
+      elApercu.hidden = true; elBtnEditer.hidden = true; elApercuEdit.hidden = false; elZoneValider.hidden = false;
+      elApercuEdit.focus();
+    });
+  }
+  var elBtnValider = document.getElementById('aideiaBtnValiderApercu');
+  if (elBtnValider) {
+    elBtnValider.addEventListener('click', function () {
+      texteApercuOverride = elApercuEdit.value;
+      elApercu.textContent = texteApercuOverride;
+      elApercu.hidden = false; elBtnEditer.hidden = false; elApercuEdit.hidden = true; elZoneValider.hidden = true;
+      elNoteModifie.hidden = false;
+    });
+  }
+  var elLienRevenir = document.getElementById('aideiaLienRevenirApercuAuto');
+  if (elLienRevenir) {
+    elLienRevenir.addEventListener('click', function (e) {
+      e.preventDefault(); texteApercuOverride = null; elNoteModifie.hidden = true; maj();
+    });
+  }
+
+  document.getElementById('aideiaBtnCopier').addEventListener('click', function () {
+    var TXT = construire();
+    var b = this;
+    var texteOriginal = b.textContent;
+    navigator.clipboard.writeText(TXT).then(function () {
+      b.textContent = 'Copié !'; setTimeout(function () { b.textContent = texteOriginal; }, 2000);
+    }).catch(function () {
+      var z = document.createElement('textarea'); z.value = TXT; document.body.appendChild(z); z.select();
+      document.execCommand('copy'); z.remove(); alert('Copié !');
+    });
+  });
+
+  var btnCopierPromptAccroche = document.getElementById('aideiaBtnCopierPromptAccroche');
+  if (btnCopierPromptAccroche) {
+    btnCopierPromptAccroche.addEventListener('click', function () {
+      var b = this; var texteOriginal = b.textContent;
+      navigator.clipboard.writeText(promptAccrocheComplet).then(function () {
+        b.textContent = 'Copié !'; setTimeout(function () { b.textContent = texteOriginal; }, 2000);
+      }).catch(function () {
+        var z = document.createElement('textarea'); z.value = promptAccrocheComplet; document.body.appendChild(z); z.select();
+        document.execCommand('copy'); z.remove(); alert('Copié !');
+      });
+    });
+  }
+
+  // ---- Import CV (collage instantane) ----
+  var messageAnalyseIACV = document.getElementById('messageAnalyseIACV');
+  if (document.getElementById('btnAnalyserReponseIACV')) {
+    activerCollageInstantane({
+      idZoneAuto: 'zoneCollageAutoAideIACV', idZoneApercu: 'zoneApercuCollageAideIACV',
+      idTextarea: 'texteCollageAideIACV', idBoutonColler: 'btnCollerAutoAideIACV',
+      idBoutonCollerManuel: 'btnCollerManuelAideIACV', idBoutonImporter: 'btnAnalyserReponseIACV',
+      onErreur: function (msg) { messageAnalyseIACV.style.color = '#b91c1c'; messageAnalyseIACV.textContent = '⚠️ ' + msg; }
+    });
+    document.getElementById('btnAnalyserReponseIACV').addEventListener('click', function () {
+      var texte = document.getElementById('texteCollageAideIACV').value;
+      var resultat = analyserReponseIACV(texte);
+      if (!resultat.succes) { messageAnalyseIACV.style.color = '#b91c1c'; messageAnalyseIACV.textContent = '⚠️ ' + resultat.erreur; return; }
+      if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+      if (!dossier.ia.cv) { dossier.ia.cv = { profil: '', pointsForts: [], motsCles: [], recommandations: { typeCV: { valeur: null, justification: '' }, experiencesAMettreEnAvant: [], competencesAValoriser: [], rubriquesMasquables: [] } }; }
+      dossier.ia.cv.profil = resultat.valeurs.profil;
+      dossier.ia.cv.pointsForts = resultat.valeurs.pointsForts;
+      dossier.ia.cv.motsCles = resultat.valeurs.motsCles;
+      dossier.ia.cv.recommandations = resultat.valeurs.recommandations;
+      if (typeof rafraichirApercuCVSiOuvert === 'function') { rafraichirApercuCVSiOuvert(); }
+      messageAnalyseIACV.style.color = 'inherit';
+      messageAnalyseIACV.innerHTML = (typeof genererResumeImportCV === 'function')
+        ? genererResumeImportCV(resultat.valeurs, dossier)
+        : '✅ Import réussi. L\'aperçu du CV a été mis à jour.';
+    });
+  }
+
+  // ---- Import Lettre (collage instantane) ----
+  var messageAnalyseIALettre = document.getElementById('messageAnalyseIALettre');
+  if (document.getElementById('btnAnalyserReponseIALettre')) {
+    activerCollageInstantane({
+      idZoneAuto: 'zoneCollageAutoAideIALettre', idZoneApercu: 'zoneApercuCollageAideIALettre',
+      idTextarea: 'texteCollageAideIALettre', idBoutonColler: 'btnCollerAutoAideIALettre',
+      idBoutonCollerManuel: 'btnCollerManuelAideIALettre', idBoutonImporter: 'btnAnalyserReponseIALettre',
+      onErreur: function (msg) { messageAnalyseIALettre.style.color = '#b91c1c'; messageAnalyseIALettre.textContent = '⚠️ ' + msg; }
+    });
+    document.getElementById('btnAnalyserReponseIALettre').addEventListener('click', function () {
+      var texte = document.getElementById('texteCollageAideIALettre').value;
+      var resultatLettre = analyserReponseIALettre(texte);
+      if (!resultatLettre.succes) { messageAnalyseIALettre.style.color = '#b91c1c'; messageAnalyseIALettre.textContent = '⚠️ ' + resultatLettre.erreur; return; }
+      if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+      if (!dossier.ia.lettre) { dossier.ia.lettre = {}; }
+      dossier.ia.lettre.accroche = resultatLettre.valeurs.accroche;
+      dossier.ia.lettre.arguments = resultatLettre.valeurs.arguments;
+      dossier.ia.lettre.lettre = resultatLettre.valeurs.lettre;
+      messageAnalyseIALettre.style.color = 'inherit';
+      if (typeof genererResumeGeneriqueImportIA === 'function' && typeof SPEC_AFFICHAGE_LETTRE !== 'undefined') {
+        var valeursResumeLettre = { accroche: resultatLettre.valeurs.accroche, arguments: resultatLettre.valeurs.arguments, texteLettre: resultatLettre.valeurs.lettre.texte };
+        messageAnalyseIALettre.innerHTML = genererResumeGeneriqueImportIA(valeursResumeLettre, SPEC_AFFICHAGE_LETTRE);
+      } else {
+        messageAnalyseIALettre.textContent = '✅ Import réussi (' + resultatLettre.valeurs.arguments.length + ' argument(s) retenu(s)).';
+      }
+    });
+  }
+
+  // ---- Import Entretien (collage instantane) ----
+  var messageAnalyseIAEntretien = document.getElementById('messageAnalyseIAEntretien');
+  if (document.getElementById('btnAnalyserReponseIAEntretien')) {
+    activerCollageInstantane({
+      idZoneAuto: 'zoneCollageAutoAideIAEntretien', idZoneApercu: 'zoneApercuCollageAideIAEntretien',
+      idTextarea: 'texteCollageAideIAEntretien', idBoutonColler: 'btnCollerAutoAideIAEntretien',
+      idBoutonCollerManuel: 'btnCollerManuelAideIAEntretien', idBoutonImporter: 'btnAnalyserReponseIAEntretien',
+      onErreur: function (msg) { messageAnalyseIAEntretien.style.color = '#b91c1c'; messageAnalyseIAEntretien.textContent = '⚠️ ' + msg; }
+    });
+    document.getElementById('btnAnalyserReponseIAEntretien').addEventListener('click', function () {
+      var texte = document.getElementById('texteCollageAideIAEntretien').value;
+      var resultatEntretien = analyserReponseIAEntretien(texte);
+      if (!resultatEntretien.succes) { messageAnalyseIAEntretien.style.color = '#b91c1c'; messageAnalyseIAEntretien.textContent = '⚠️ ' + resultatEntretien.erreur; return; }
+      if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
+      if (!dossier.ia.entretien) { dossier.ia.entretien = {}; }
+      dossier.ia.entretien.presentation = resultatEntretien.valeurs.presentation;
+      dossier.ia.entretien.pointsAPreparer = resultatEntretien.valeurs.pointsAPreparer;
+      dossier.ia.entretien.questionsAnticipees = resultatEntretien.valeurs.questionsAnticipees;
+      dossier.ia.entretien.questionsDuCandidat = resultatEntretien.valeurs.questionsDuCandidat;
+      messageAnalyseIAEntretien.style.color = 'inherit';
+      if (typeof genererResumeGeneriqueImportIA === 'function' && typeof SPEC_AFFICHAGE_ENTRETIEN !== 'undefined') {
+        messageAnalyseIAEntretien.innerHTML = genererResumeGeneriqueImportIA(resultatEntretien.valeurs, SPEC_AFFICHAGE_ENTRETIEN);
+      } else {
+        messageAnalyseIAEntretien.textContent = '✅ Import réussi.';
+      }
+    });
+  }
+
+  var inputTexteAmelioreCanvaPopup = document.getElementById('texteAmelioreCanvaInputPopup');
+  if (inputTexteAmelioreCanvaPopup) {
+    inputTexteAmelioreCanvaPopup.addEventListener('input', function () { dossier.texteAmelioreCanva = this.value; });
+  }
+  var btnExportCanva = document.getElementById('btnExportCanva');
+  if (btnExportCanva) {
+    btnExportCanva.addEventListener('click', function () {
+      var csvChoisi = (typeof genererCSVCanva === 'function') ? genererCSVCanva(true) : '';
+      var blob = new Blob(['\uFEFF' + csvChoisi], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = url; a.download = 'canva_cv.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+  }
+
+  // TACHE (compatibilite) : fenetreIAOuverte etait une vraie reference de
+  // fenetre (win.closed, win.synchroniserCivilite) -- reste un objet avec
+  // la MEME forme, pour que le seul autre point d'appel existant (wireIdentite,
+  // synchronisation civilite depuis "Vous") continue de fonctionner sans
+  // aucune modification a cet autre endroit.
+  fenetreIAOuverte = {
+    closed: false,
+    synchroniserCivilite: function (civilite) {
+      var val = (civilite === 'Madame' || civilite === 'Monsieur') ? civilite : 'Non précisée';
+      var r = document.querySelector('#fenetreAideIA input[name=aideiaCiv][value="' + val + '"]');
+      if (r) { r.checked = true; maj(); }
+    }
+  };
 }
 
 /* ------------------------------------------------------------
    9. REINITIALISATION + LANCEMENT
    ------------------------------------------------------------ */
+// TACHE (retour utilisateur : confirmation avant "Recommencer") : le
+// bouton "Recommencer" appelle desormais cette fonction plutot que
+// recommencer() directement -- reutilise la modale deja existante dans
+// l'app (confirmerAction(), voir plus bas, deja utilisee par
+// reinitialiserSession()) pour rester coherent visuellement, plutot
+// qu'une boite de dialogue navigateur qui detonnerait avec le reste.
+// IMPORTANT : recommencer() elle-meme reste SANS confirmation integree
+// -- reinitialiserSession() (plus bas) l'appelle deja APRES sa propre
+// confirmation ; en ajouter une seconde a l'interieur de recommencer()
+// aurait double la demande de confirmation pour ce chemin-la.
+function confirmerRecommencer() {
+  confirmerAction(
+    'Recommencer ?',
+    'Toutes les informations saisies seront définitivement effacées. Cette action est irréversible.',
+    'Recommencer', 'btn-danger',
+    function () { recommencer(); }
+  );
+}
+
 function recommencer() {
+  revelerSpecifiqueCandidatureRemplie = false;
   dossier = {
     modeCreation: null, objectif: null, activites: [], actions: [], environnement: [],
     valeurs: [], metiersAjoutes: [], metiersExclus: [], metierCible: null, typeCV: 'general',
     metiersCandidats: [], modeMetierCible: null, secteurCible: null,
-    identite: { civilite: null, nom: '', prenom: '', adresse: '', telephone: '', email: '', ville: '', age: '' }, anonymiser: true,
+    identite: { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' },
     entretienDirect: { structure: '', poste: '' },
     rechercheEntreprise: { structure: '' },
     catalogueActif: {}, experiences: [], experiencesPerso: [],
@@ -7696,6 +9421,8 @@ function recommencer() {
     immersion: { structure: '', poste: '', lien: '', duree: '', dates: '', heures: '', type: '', dispo: [] },
     miseEnAvant: { mobilite: false, proximite: false },
     lettreMotivation: { texte: '' },
+    cvTermine: false,
+    lettreTerminee: false,
     texteAmelioreCanva: '',
     ia: creerDossierIAVide(),
     // TACHE (Tache 2 : preparation du moteur d'import) : voir les
@@ -7703,7 +9430,9 @@ function recommencer() {
     logiciels: [],
     imports: { courant: null },
     metiersHorsRepertoire: [],
-    dernierDocumentPrepare: null
+    dernierDocumentPrepare: null,
+    preferencesIA: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+    profilTexteManuel: null
   };
   blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: false, metier: false };
   historiquePages = ['cv'];
@@ -7805,8 +9534,8 @@ function confirmerAction(titre, texte, labelConfirmer, classeConfirmer, onConfir
 window.dossier = dossier;
 window.naviguerVers = naviguerVers;
 window.recommencer = recommencer;
+window.confirmerRecommencer = confirmerRecommencer;
 window.ouvrirAideIA = ouvrirAideIA;
-window.suggererMetiers = suggererMetiers;
 window.deduireCompetences = deduireCompetences;
 window.obtenirSavoirs = obtenirSavoirs;
 window.construireProfil = construireProfil;

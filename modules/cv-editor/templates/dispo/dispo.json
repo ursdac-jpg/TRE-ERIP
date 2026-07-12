@@ -1,0 +1,11 @@
+{
+  "id": "dispo",
+  "nom": "Dispo",
+  "description": "Une colonne compacte, bandeau de disponibilite en tete (saisonnier, hotellerie, grande distribution).",
+  "colors": {
+    "primary": "#C2410C",
+    "secondary": "#C2410C",
+    "background": "#FFFFFF"
+  },
+  "sections": ["identite", "profil", "competences", "langues", "permis", "loisirs", "experiences", "formations"]
+}

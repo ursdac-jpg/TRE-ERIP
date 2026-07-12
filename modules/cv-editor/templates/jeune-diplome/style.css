@@ -1,5 +1,8 @@
 /* modules/cv-editor/templates/jeune-diplome/style.css
-   Presentation moderne et engageante, avec emplacement photo. */
+   Presentation moderne et engageante, avec emplacement photo.
+
+   TACHE (retour utilisateur : poste vise plus visible) : .cv-jeune-diplome-objectif
+   agrandi (1rem -> 1.2rem). */
 
 .cv-jeune-diplome {
   font-family: 'Nunito', 'Segoe UI', Arial, sans-serif;
@@ -37,10 +40,10 @@
 }
 
 .cv-jeune-diplome-objectif {
-  font-size: 1rem;
-  color: #334155;
+  font-size: 1.2rem;
+  color: #1D4ED8;
   margin: 0 0 0.4rem 0;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .cv-jeune-diplome-coordonnees {

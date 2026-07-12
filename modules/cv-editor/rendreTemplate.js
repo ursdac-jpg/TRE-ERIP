@@ -94,18 +94,21 @@ function rendreTemplate(objetCV, templateHtml) {
   // reouverture du meme type de bloc), puis en repetant jusqu'a ce que
   // plus aucun bloc ne subsiste (utile si un #if contient un #each, ou
   // l'inverse).
+  //
+  // TACHE (correction bug : #if imbrique dans #each mal resolu) : #each
+  // doit etre traite AVANT #if dans chaque passage. Sinon, un {{#if champ}}
+  // imbrique dans un {{#each}} est evalue sur la MEME chaine "texte" avant
+  // que le {{#each}} qui l'entoure n'ait ete deroule -- si "champ" n'existe
+  // pas sur l'objet racine (cas frequent : un champ scalaire d'un element
+  // de tableau, ex. {{#each experiences}}{{#if missions}}...), le bloc est
+  // supprime a tort, AVANT meme que #each ait pu le resoudre avec le bon
+  // element courant comme scope. En traitant #each en premier, le contenu
+  // du #if imbrique est extrait tel quel puis resolu par l'appel recursif
+  // traiterBlocs(contenu, element) ci-dessous, avec le scope correct.
   function traiterBlocs(texte, scope) {
     var precedent;
     do {
       precedent = texte;
-
-      texte = texte.replace(
-        /\{\{#if\s+([\w.]+)\s*\}\}((?:(?!\{\{#if)(?!\{\{\/if)[\s\S])*?)\{\{\/if\}\}/g,
-        function (correspondance, chemin, contenu) {
-          var valeur = obtenirValeur(scope, chemin.trim());
-          return estValeurVraie(valeur) ? contenu : '';
-        }
-      );
 
       texte = texte.replace(
         /\{\{#each\s+([\w.]+)\s*\}\}((?:(?!\{\{#each)(?!\{\{\/each)[\s\S])*?)\{\{\/each\}\}/g,
@@ -118,6 +121,14 @@ function rendreTemplate(objetCV, templateHtml) {
             var contenuInterieur = traiterBlocs(contenu, element);
             return substituerMarqueursSimples(contenuInterieur, element);
           }).join('');
+        }
+      );
+
+      texte = texte.replace(
+        /\{\{#if\s+([\w.]+)\s*\}\}((?:(?!\{\{#if)(?!\{\{\/if)[\s\S])*?)\{\{\/if\}\}/g,
+        function (correspondance, chemin, contenu) {
+          var valeur = obtenirValeur(scope, chemin.trim());
+          return estValeurVraie(valeur) ? contenu : '';
         }
       );
     } while (texte !== precedent);

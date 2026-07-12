@@ -12,6 +12,10 @@
   TACHE (gestion intelligente des rubriques) : chaque rubrique facultative
   est entouree d'un bloc conditionnel generique -- si la donnee est vide, la rubrique
   entiere (titre inclus) disparait.
+
+  TACHE (retour utilisateur : permis/vehicule en fin de Coordonnees) : la
+  section "Permis de conduire" separee est retiree -- devient la derniere
+  ligne du tableau de coordonnees, seulement si le permis est possede.
 -->
 <div class="cv-institutionnel">
 
@@ -24,6 +28,9 @@
     <tr><td>Telephone</td><td>{{identite.telephone}}</td></tr>
     <tr><td>E-mail</td><td>{{identite.email}}</td></tr>
     <tr><td>Adresse</td><td>{{identite.adresse}} {{identite.ville}}</td></tr>
+    {{#if permis.possede}}
+    <tr><td>Permis</td><td>{{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}</td></tr>
+    {{/if}}
   </table>
 
   <section class="cv-institutionnel-bloc">
@@ -86,11 +93,6 @@
     <ul>{{#each langues}}<li>{{langue}} — niveau {{niveau}}</li>{{/each}}</ul>
   </section>
   {{/if}}
-
-  <section class="cv-institutionnel-bloc">
-    <h2>Permis de conduire</h2>
-    <p>{{permis.possede}} — {{permis.categories}}</p>
-  </section>
 
   {{#if engagements}}
   <section class="cv-institutionnel-bloc">

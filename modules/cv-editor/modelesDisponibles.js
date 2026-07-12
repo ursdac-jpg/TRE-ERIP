@@ -19,5 +19,14 @@ var MODELES_CV_DISPONIBLES = [
   { id: 'elegant', nom: 'Élégant' },
   { id: 'minimaliste', nom: 'Minimaliste' },
   { id: 'institutionnel', nom: 'Institutionnel' },
-  { id: 'jeune-diplome', nom: 'Jeune diplômé' }
+  { id: 'jeune-diplome', nom: 'Jeune diplômé' },
+  { id: 'moderne-green', nom: 'Moderne Green' },
+  { id: 'aquarelle', nom: 'Aquarelle' },
+  { id: 'geometrique', nom: 'Géométrique' },
+  { id: 'ruban', nom: 'Ruban' },
+  { id: 'trajectoire', nom: 'Trajectoire' },
+  { id: 'impact', nom: 'Impact' },
+  { id: 'dispo', nom: 'Dispo' },
+  { id: 'creatif', nom: 'Créatif' },
+  { id: 'chic', nom: 'Chic' },
 ];

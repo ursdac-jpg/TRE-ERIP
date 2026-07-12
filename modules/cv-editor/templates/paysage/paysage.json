@@ -1,0 +1,11 @@
+{
+  "id": "paysage",
+  "nom": "Paysage",
+  "description": "Mini CV (A5), format paysage : bandeau d'en-tête horizontal (photo, nom, coordonnées), puis 2 colonnes compactes en dessous.",
+  "colors": {
+    "primary": "#0F766E",
+    "secondary": "#0F766E",
+    "background": "#FFFFFF"
+  },
+  "sections": ["photo", "identite", "profil", "competences", "langues", "permis", "loisirs", "experiences", "formations"]
+}

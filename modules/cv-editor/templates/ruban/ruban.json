@@ -1,0 +1,38 @@
+{
+  "id": "ruban",
+  "nom": "Ruban",
+  "description": "CV deux colonnes, fond blanc, ruban decoratif en separation et decor calligraphique en en-tete.",
+  "layout": {
+    "type": "sidebar-left",
+    "sidebarWidth": "40%",
+    "contentWidth": "60%"
+  },
+  "colors": {
+    "primary": "#E2006E",
+    "secondary": "#F7A8C4",
+    "text": "#1F2937",
+    "background": "#FFFFFF"
+  },
+  "fonts": {
+    "title": "Poppins",
+    "body": "Nunito Sans"
+  },
+  "sections": [
+    "photo",
+    "identite",
+    "profil",
+    "competences",
+    "langues",
+    "permis",
+    "loisirs",
+    "engagements",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "certifications"
+  ],
+  "capacites": {
+    "experiences": 4, "formations": 3, "competences": 6,
+    "langues": 4, "certifications": 3, "loisirs": 3, "engagements": 2
+  }
+}

@@ -1,6 +1,9 @@
 /* modules/cv-editor/templates/institutionnel/style.css
    Presentation sobre et structuree, adaptee aux candidatures France
-   Travail / collectivites. Pas de photo, couleurs neutres. */
+   Travail / collectivites. Pas de photo, couleurs neutres.
+
+   TACHE (retour utilisateur : poste vise plus visible) : .cv-institutionnel-objectif
+   agrandi (0.95rem -> 1.1rem) et mis en gras. */
 
 .cv-institutionnel {
   font-family: 'Times New Roman', Georgia, serif;
@@ -23,8 +26,9 @@
 }
 
 .cv-institutionnel-objectif {
-  font-size: 0.95rem;
-  color: #33334D;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #1A1A2E;
   margin: 0;
 }
 

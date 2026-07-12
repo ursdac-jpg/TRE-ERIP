@@ -1,0 +1,37 @@
+{
+  "id": "aquarelle",
+  "nom": "Aquarelle",
+  "description": "CV deux colonnes, fond ivoire et decor aquarelle en en-tete.",
+  "layout": {
+    "type": "sidebar-left",
+    "sidebarWidth": "38%",
+    "contentWidth": "62%"
+  },
+  "colors": {
+    "primary": "#C08457",
+    "secondary": "#FBF5EC",
+    "text": "#1B2340",
+    "background": "#FBF5EC"
+  },
+  "fonts": {
+    "title": "Playfair Display",
+    "body": "Nunito Sans"
+  },
+  "sections": [
+    "identite",
+    "profil",
+    "competences",
+    "langues",
+    "permis",
+    "loisirs",
+    "engagements",
+    "experiences",
+    "experiencesPersonnelles",
+    "formations",
+    "certifications"
+  ],
+  "capacites": {
+    "experiences": 4, "formations": 3, "competences": 6,
+    "langues": 4, "certifications": 3, "loisirs": 3, "engagements": 2
+  }
+}

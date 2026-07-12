@@ -1,0 +1,170 @@
+/* ============================================================
+   modules/cv-editor/templates/trajectoire/style.css
+   ------------------------------------------------------------
+   Presentation du modele "Trajectoire" : colonne laterale sobre en
+   blanc, contenu principal en frise chronologique (bandeaux de section
+   pleine largeur + ligne date/detail par experience et formation).
+   Toutes les regles sont scopees sous .cv-trajectoire (meme convention
+   que les autres modeles) -- aucune regle globale, aucune taille de
+   page fixee ici (geree par le conteneur d'apercu de l'application).
+   ============================================================ */
+
+.cv-trajectoire {
+  --marine: #14213D;
+  --marine-clair: #3A5DAE;
+  --texte: #1F2937;
+  --texte-muted: #6B7280;
+  --fond: #FFFFFF;
+
+  font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: var(--texte);
+  background: var(--fond);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.cv-trajectoire h1, .cv-trajectoire h2 { margin: 0; }
+.cv-trajectoire p, .cv-trajectoire ul { margin: 0; }
+.cv-trajectoire ul { padding: 0; list-style: none; }
+
+/* COLONNES ------------------------------------------------------ */
+.cv-trajectoire-corps { display: flex; align-items: flex-start; }
+
+.cv-trajectoire-sidebar {
+  width: 30%;
+  padding: 1.8rem 1.4rem 2rem 1.8rem;
+  box-sizing: border-box;
+}
+
+.cv-trajectoire-contenu {
+  width: 70%;
+  box-sizing: border-box;
+  padding-bottom: 1.5rem;
+}
+
+/* SIDEBAR ------------------------------------------------------ */
+.cv-trajectoire-photo {
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  margin: 0 0 1rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.cv-trajectoire-nom {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--texte);
+  line-height: 1.2;
+}
+
+.cv-trajectoire-poste {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--marine-clair);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cv-trajectoire-bloc { margin-top: 1.6rem; }
+
+.cv-trajectoire-titre-bloc {
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--marine);
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 2px solid var(--marine);
+}
+
+.cv-trajectoire-texte {
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.cv-trajectoire-liste-coordonnees li {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  font-size: 0.8rem; line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+.cv-trajectoire-liste-coordonnees li:last-child { margin-bottom: 0; }
+.cv-trajectoire-icone { flex-shrink: 0; width: 1rem; display: inline-flex; align-items: center; justify-content: center; }
+
+.cv-trajectoire-liste-langues li {
+  display: flex; justify-content: space-between; gap: 0.5rem;
+  font-size: 0.82rem; margin-bottom: 0.35rem;
+}
+.cv-trajectoire-langue-niveau { color: var(--texte-muted); }
+
+.cv-trajectoire-sidebar .cv-trajectoire-liste-puces li {
+  position: relative; padding-left: 0.9rem;
+  font-size: 0.8rem; line-height: 1.4; margin-bottom: 0.4rem;
+}
+.cv-trajectoire-sidebar .cv-trajectoire-liste-puces li::before {
+  content: "•"; position: absolute; left: 0; color: var(--marine-clair); font-weight: 700;
+}
+
+/* CONTENU PRINCIPAL : bandeaux + frise ------------------------------ */
+.cv-trajectoire-bandeau {
+  background: var(--marine);
+  color: #FFFFFF;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.55rem 1.2rem;
+  margin: 0 0 1rem;
+}
+.cv-trajectoire-contenu > .cv-trajectoire-bandeau:not(:first-child) { margin-top: 1.6rem; }
+
+.cv-trajectoire-ligne {
+  display: flex;
+  gap: 1rem;
+  padding: 0 1.2rem;
+  margin-bottom: 1.1rem;
+}
+.cv-trajectoire-date {
+  flex: none;
+  width: 90px;
+  font-size: 0.78rem;
+  color: var(--marine-clair);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.cv-trajectoire-detail { flex: 1; min-width: 0; }
+
+.cv-trajectoire-titre-poste {
+  display: inline-block;
+  background: var(--marine);
+  color: #FFFFFF;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  margin-bottom: 0.4rem;
+}
+
+.cv-trajectoire-lieu {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--texte-muted);
+  margin-bottom: 0.3rem;
+}
+
+.cv-trajectoire-contenu .cv-trajectoire-liste-puces li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.82rem; line-height: 1.45;
+  margin-bottom: 0.3rem;
+}
+.cv-trajectoire-contenu .cv-trajectoire-liste-puces li::before {
+  content: "•"; position: absolute; left: 0; color: var(--marine); font-weight: 700;
+}
+
+/* IMPRESSION ------------------------------------------------------ */
+@media print {
+  .cv-trajectoire { max-width: none; }
+}

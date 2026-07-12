@@ -21,6 +21,7 @@
     <p class="cv-classique-objectif">{{objectifProfessionnel}}</p>
     <p class="cv-classique-coordonnees">
       {{identite.telephone}} · {{identite.email}} · {{identite.adresse}} {{identite.ville}}
+      {{#if permis.possede}} · Permis {{permis.categories}}{{#if permis.vehicule}} — {{permis.vehicule}}{{/if}}{{/if}}
     </p>
   </header>
 
@@ -76,11 +77,6 @@
     <ul>{{#each langues}}<li>{{langue}} ({{niveau}})</li>{{/each}}</ul>
   </section>
   {{/if}}
-
-  <section class="cv-classique-bloc">
-    <h2>Permis</h2>
-    <p>{{permis.possede}} — {{permis.categories}} {{#if permis.vehicule}}(vehicule personnel){{/if}}</p>
-  </section>
 
   {{#if certifications}}
   <section class="cv-classique-bloc">

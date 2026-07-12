@@ -1,0 +1,11 @@
+{
+  "id": "portrait",
+  "nom": "Portrait",
+  "description": "Mini CV (A5), format portrait : photo centrée, nom et métier visé en tête, 2 colonnes compactes en dessous.",
+  "colors": {
+    "primary": "#0F766E",
+    "secondary": "#0F766E",
+    "background": "#FFFFFF"
+  },
+  "sections": ["photo", "identite", "profil", "competences", "langues", "permis", "loisirs", "experiences", "formations"]
+}
