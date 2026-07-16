@@ -1,7 +1,7 @@
 {
   "id": "trajectoire",
   "nom": "Trajectoire",
-  "description": "CV colonne laterale sobre et contenu principal en frise chronologique (bandeaux de section pleine largeur).",
+  "description": "CV colonne latérale sobre et contenu principal en frise chronologique (bandeaux de section pleine largeur).",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "30%",

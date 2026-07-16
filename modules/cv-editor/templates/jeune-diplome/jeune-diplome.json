@@ -1,7 +1,7 @@
 {
   "id": "jeune-diplome",
-  "nom": "Jeune diplome",
-  "description": "CV moderne, formations mises en avant, adapte aux profils avec peu d'experience professionnelle.",
+  "nom": "Jeune diplômé",
+  "description": "CV moderne, formations mises en avant, adapté aux profils avec peu d'expérience professionnelle.",
   "layout": {
     "type": "header-photo-left"
   },

@@ -46,7 +46,7 @@ La lettre ne raconte pas tout le parcours. Une expérience, une compétence ou u
 
 ## Cohérence d'ensemble
 
-L'accroche, les arguments retenus et le texte complet de la lettre doivent former une seule stratégie cohérente, pas des éléments juxtaposés. Relis l'ensemble avant de conclure : est-ce que chaque argument choisi sert bien "Pourquoi cette personne", "Pourquoi cette entreprise" ou "Pourquoi maintenant" ? Si un argument ne sert clairement aucune des trois, il n'a pas sa place dans cette lettre.
+L'accroche, les arguments retenus et chacune des 3 versions du texte de la lettre doivent former une seule stratégie cohérente, pas des éléments juxtaposés. Relis l'ensemble avant de conclure : est-ce que chaque argument choisi sert bien "Pourquoi cette personne", "Pourquoi cette entreprise" ou "Pourquoi maintenant" ? Si un argument ne sert clairement aucune des trois, il n'a sa place dans aucune des 3 versions.
 
 ## Consignes de fiabilité
 
@@ -55,15 +55,19 @@ Ne jamais inventer une expérience, une motivation, un fait sur l'entreprise ou 
 ## Ta tâche
 
 1. Détermine ta stratégie (angle retenu, arguments sélectionnés) selon la méthode ci-dessus.
-2. Rédige la lettre complète : un objet court et pertinent, puis le corps entier de la lettre (formule d'appel, développement, formule de politesse), prêt à être affiché et imprimé tel quel — pas un résumé, pas des fragments, la lettre elle-même.
-3. Avant de conclure, relis ta lettre comme le ferait un recruteur exigeant : répond-elle clairement aux trois questions (pourquoi cette personne, pourquoi cette entreprise ou ce secteur, pourquoi maintenant) ? Le vocabulaire est-il celui du secteur visé ? Tient-elle sur une seule page sans aucune phrase de remplissage ? Si un point peut encore être resserré ou renforcé, corrige-le avant de répondre plutôt que de livrer un premier jet perfectible.
+2. Rédige 3 versions complètes et distinctes de la lettre, chacune avec un objet court et pertinent puis le corps entier (formule d'appel, développement, formule de politesse), prêtes à être affichées et imprimées telles quelles — pas des résumés, pas des fragments, la lettre elle-même à chaque fois. Les 3 versions doivent raconter la même histoire (mêmes faits, même candidature) mais avec un angle ou un ton réellement différent d'une version à l'autre — par exemple une plus factuelle et directe, une plus incarnée et personnelle, une plus centrée sur la cohérence du projet ou la reconversion selon le contexte — jamais trois fois la même lettre reformulée à l'identique. La personne choisira ensuite celle qui lui convient le mieux, et pourra la modifier librement.
+3. Avant de conclure, relis chacune de tes 3 versions comme le ferait un recruteur exigeant : répond-elle clairement aux trois questions (pourquoi cette personne, pourquoi cette entreprise ou ce secteur, pourquoi maintenant) ? Le vocabulaire est-il celui du secteur visé ? Tient-elle sur une seule page sans aucune phrase de remplissage ? Si un point peut encore être resserré ou renforcé, corrige-le avant de répondre plutôt que de livrer un premier jet perfectible.
 
 ## Format de ta réponse
 
-D'abord quelques phrases lisibles à destination de la personne, présentant l'angle retenu et expliquant brièvement ta stratégie.
+D'abord quelques phrases lisibles à destination de la personne, présentant les 3 versions et expliquant brièvement ce qui les différencie.
 
 Termine ensuite IMPÉRATIVEMENT ta réponse par un bloc de code contenant uniquement du JSON strictement valide, exactement selon ce format, sans aucun texte après ce bloc :
 
 ```json
-{"accroche": "...", "arguments": ["...", "..."], "lettre": {"objet": "...", "texte": "..."}}
+{"accroche": "...", "arguments": ["...", "..."], "versions": [
+  {"objet": "...", "texte": "..."},
+  {"objet": "...", "texte": "..."},
+  {"objet": "...", "texte": "..."}
+]}
 ```

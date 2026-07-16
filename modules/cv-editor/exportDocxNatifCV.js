@@ -70,6 +70,40 @@ function _dnTexteProfil(objetCV) {
 function _dnListe(valeur) { return Array.isArray(valeur) ? valeur.filter(Boolean) : []; }
 function _dnTexteJoint(valeur) { return Array.isArray(valeur) ? valeur.filter(Boolean).join(', ') : (valeur || ''); }
 
+// TACHE (retour utilisateur : grossir le texte quand il y a peu de contenu,
+// le reduire quand il y en a beaucoup, jamais sous 12pt) : applique
+// UNIQUEMENT au texte courant (paragraphes, puces) des modeles generiques
+// (deuxColonnes/uneColonne) -- jamais aux titres de section, dont la
+// taille reste un choix stylistique propre a chaque modele, independant
+// du volume de contenu. "poids" est une estimation grossiere du volume
+// reel (nombre d'elements + longueur du texte des missions), pas un
+// comptage exact -- suffisant pour ajuster une echelle, pas pour une
+// decision de contenu (voir appliquerMoteurDecisionCV pour ca).
+function _dnEchelleTexteCourant(objetCV) {
+  var poids = 0;
+  var experiences = _dnListe(objetCV.experiences);
+  poids += experiences.length * 3;
+  experiences.forEach(function (e) { poids += Math.ceil((e.missions || '').length / 90); });
+  poids += _dnListe(objetCV.formations).length * 1.5;
+  var comp = objetCV.competences || {};
+  poids += (_dnListe(comp.savoirFaire).length + _dnListe(comp.savoirEtre).length + _dnListe(comp.savoirs).length) * 0.5;
+  poids += _dnListe(objetCV.langues).length * 0.5;
+  poids += _dnListe(objetCV.certifications).length * 0.5;
+  poids += _dnListe(objetCV.loisirs).length * 0.3;
+  poids += _dnListe(objetCV.engagements).length * 0.3;
+  // Reperes empiriques : ~10 = profil tres court (peu d'experience, peu de
+  // rubriques remplies), ~30 et plus = CV dense qui a deja besoin d'etre
+  // resserre. Interpolation lineaire simple entre les deux.
+  if (poids <= 10) { return 1.2; }
+  if (poids >= 30) { return 0.85; }
+  return 1.2 - (poids - 10) * (0.35 / 20);
+}
+// docx-js exprime les tailles en demi-points : 24 = 12pt. Plancher fixe,
+// jamais contourne quel que soit le facteur d'echelle calcule ci-dessus.
+function _dnTailleAvecPlancher(tailleBase, echelle) {
+  return Math.max(24, Math.round((tailleBase || 24) * (echelle || 1)));
+}
+
 // ============================================================
 // Constructeur generique : mise en page "deux colonnes" (bandeau
 // lateral + contenu principal), utilise par Aquarelle, Moderne Vert,
@@ -91,6 +125,10 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
   var TEXTE_SIDEBAR = opts.styleBandeau === 'plein' ? 'FFFFFF' : (opts.texteSidebar || '1B2340');
   var TEXTE_PRINCIPAL = opts.textePrincipal || '1F2937';
   var AUCUNE_BORDURE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  // TACHE (retour utilisateur : taille du texte selon le volume de
+  // contenu) : calculee une fois, appliquee au texte courant seulement
+  // (titreSidebar/titrePrincipal non concernes, voir _dnEchelleTexteCourant).
+  var echelleTexte = _dnEchelleTexteCourant(objetCV);
 
   function titreSidebar(texte) {
     var props = { spacing: { before: 260, after: 100 }, children: [ new TextRun({ text: texte.toUpperCase(), bold: true, color: TEXTE_SIDEBAR, size: 17, font: opts.police || 'Calibri' }) ] };
@@ -103,16 +141,16 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
   function texteSimple(texte, o) {
     o = o || {};
     return new Paragraph({ spacing: { after: o.after !== undefined ? o.after : 100 },
-      children: [ new TextRun({ text: texte, size: o.size || 18, italics: !!o.italics, bold: !!o.bold, color: o.color || TEXTE_PRINCIPAL, font: 'Calibri' }) ] });
+      children: [ new TextRun({ text: texte, size: _dnTailleAvecPlancher(o.size || 18, echelleTexte), italics: !!o.italics, bold: !!o.bold, color: o.color || TEXTE_PRINCIPAL, font: 'Calibri' }) ] });
   }
   function texteSidebarLigne(texte, o) {
     o = o || {};
     return new Paragraph({ spacing: { after: o.after !== undefined ? o.after : 100 },
-      children: [ new TextRun({ text: texte, size: o.size || 17, italics: !!o.italics, bold: !!o.bold, color: TEXTE_SIDEBAR, font: 'Calibri' }) ] });
+      children: [ new TextRun({ text: texte, size: _dnTailleAvecPlancher(o.size || 17, echelleTexte), italics: !!o.italics, bold: !!o.bold, color: TEXTE_SIDEBAR, font: 'Calibri' }) ] });
   }
   function puce(texte, refNumerotation, couleurPuce, taille) {
     return new Paragraph({ numbering: { reference: refNumerotation, level: 0 }, spacing: { after: 60 },
-      children: [ new TextRun({ text: texte, size: taille || 18, color: couleurPuce, font: 'Calibri' }) ] });
+      children: [ new TextRun({ text: texte, size: _dnTailleAvecPlancher(taille || 18, echelleTexte), color: couleurPuce, font: 'Calibri' }) ] });
   }
 
   var refPucesSidebar = 'puces-sidebar-cv';
@@ -164,7 +202,7 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
   // liste de competences pertinentes, pas une taxonomie interne.
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
   if (loisirsTexte) {
-    contenuSidebar.push(titreSidebar("Centres d'intérêt"));
+    contenuSidebar.push(titreSidebar("Centres d’intérêt"));
     contenuSidebar.push(texteSidebarLigne(loisirsTexte));
   }
   var engagementsTexte = _dnTexteJoint(objetCV.engagements);
@@ -184,18 +222,32 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirEtre))
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirs));
   if (competencesToutes.length) {
-    contenuPrincipal.push(titrePrincipal('Compétences professionnelles'));
+    contenuPrincipal.push(titrePrincipal('Compétences'));
     competencesToutes.forEach(function (c) { contenuPrincipal.push(puce(c, refPucesPrincipal, PRIMAIRE, 18)); });
   }
   var experiences = _dnListe(objetCV.experiences);
   if (experiences.length) {
     contenuPrincipal.push(titrePrincipal('Expérience professionnelle'));
-    experiences.forEach(function (e) {
-      contenuPrincipal.push(texteSimple(e.poste, { bold: true, size: 19, after: 20 }));
-      var meta = [e.entreprise, [e.dateDebut, e.dateFin].filter(Boolean).join(' - '), e.contrat].filter(Boolean).join(' · ');
-      contenuPrincipal.push(texteSimple(meta, { italics: true, size: 17, color: PRIMAIRE, after: 60 }));
-      if (e.missions) { contenuPrincipal.push(puce(e.missions, refPucesPrincipal, PRIMAIRE, 17)); }
-    });
+    // TACHE (retour utilisateur : "encore trop proche, réduire plus -- une
+    // expérience, lieu, date et 1 ligne pour la mission") : en A4 Essentiel,
+    // chaque experience tient sur UNE SEULE ligne (poste, lieu, dates,
+    // mission courte deja tronquee par _dnConstruireObjetCVRecadre) --
+    // plus de titre+sous-titre+puce separes comme en A4 Détaillé, pour
+    // pouvoir lister beaucoup d'experiences sans faire deborder la page.
+    if (opts.formatPage === 'A4-essentiel') {
+      experiences.forEach(function (e) {
+        var infosLigne = [e.entreprise, e.lieu, [e.dateDebut, e.dateFin].filter(Boolean).join(' - ')].filter(Boolean).join(' · ');
+        var ligne = e.poste + (infosLigne ? ' — ' + infosLigne : '') + (e.missions ? ' : ' + e.missions : '');
+        contenuPrincipal.push(puce(ligne, refPucesPrincipal, PRIMAIRE, 18));
+      });
+    } else {
+      experiences.forEach(function (e) {
+        contenuPrincipal.push(texteSimple(e.poste, { bold: true, size: 19, after: 20 }));
+        var meta = [e.entreprise, [e.dateDebut, e.dateFin].filter(Boolean).join(' - '), e.contrat].filter(Boolean).join(' · ');
+        contenuPrincipal.push(texteSimple(meta, { italics: true, size: 17, color: PRIMAIRE, after: 60 }));
+        if (e.missions) { contenuPrincipal.push(puce(e.missions, refPucesPrincipal, PRIMAIRE, 17)); }
+      });
+    }
   }
   var experiencesPerso = _dnListe(objetCV.experiencesPersonnelles);
   if (experiencesPerso.length) {
@@ -239,11 +291,16 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
     sections: [ {
       properties: { page: { margin: _dnMargePage({ top: 560, bottom: 560, left: 560, right: 560 }, opts.formatPage), size: opts.formatPage === 'A5' ? _dnTaillePageA5() : undefined } },
       children: [
-        new Paragraph({ spacing: { after: 40 }, children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 40, color: opts.couleurNom || PRIMAIRE, font: opts.police || 'Calibri' }) ] }),
+        // TACHE (retour utilisateur : "le nom reste sur la gauche en haut,
+        // juste le métier visé qui est en haut au centre") : nom repasse a
+        // gauche (alignement par defaut), seul le metier vise reste centre
+        // et agrandi.
+        new Paragraph({ spacing: { after: 40 }, children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 30, color: opts.couleurNom || PRIMAIRE, font: opts.police || 'Calibri' }) ] }),
       ].concat(objetCV.objectifProfessionnel ? [ new Paragraph({
+        alignment: AlignmentType.CENTER,
         border: { bottom: { color: opts.styleBandeau === 'bordure' ? (opts.secondaire || PRIMAIRE) : PRIMAIRE, space: 4, style: BorderStyle.SINGLE, size: 12 } },
         spacing: { after: 200 },
-        children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), bold: true, color: opts.styleBandeau === 'plein' ? '1B2340' : TEXTE_PRINCIPAL, size: 19, font: 'Calibri', characterSpacing: 20 }) ]
+        children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), bold: true, color: opts.styleBandeau === 'plein' ? '1B2340' : TEXTE_PRINCIPAL, size: 36, font: 'Calibri', characterSpacing: 20 }) ]
       }) ] : []).concat([
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
@@ -333,7 +390,7 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
   }
   var permis = objetCV.permis || {};
   if (identite.telephone || identite.email || identite.adresse || permis.possede) {
-    contenuSidebar.push(titreSidebar('Contact'));
+    contenuSidebar.push(titreSidebar('Coordonnées'));
     if (identite.telephone) { contenuSidebar.push(texteSimple(identite.telephone, { size: 15 })); }
     if (identite.email) { contenuSidebar.push(texteSimple(identite.email, { size: 15 })); }
     if (identite.adresse) { contenuSidebar.push(texteSimple(identite.adresse + (identite.ville ? ' ' + identite.ville : ''), { size: 15, after: 100 })); }
@@ -341,7 +398,7 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
   var texteProfil = _dnTexteProfil(objetCV);
   if (texteProfil) { contenuSidebar.push(titreSidebar('Profil')); contenuSidebar.push(texteSimple(texteProfil, { size: 15, after: 120 })); }
   var langues = _dnListe(objetCV.langues);
-  if (langues.length) { contenuSidebar.push(titreSidebar('Langue')); langues.forEach(function (l) { contenuSidebar.push(texteSimple(l.langue + ' — ' + l.niveau, { size: 15 })); }); }
+  if (langues.length) { contenuSidebar.push(titreSidebar('Langues')); langues.forEach(function (l) { contenuSidebar.push(texteSimple(l.langue + ' — ' + l.niveau, { size: 15 })); }); }
   // TACHE (retour utilisateur : une seule categorie "Competences") :
   // les savoirs manquaient ici (seuls savoirFaire+savoirEtre etaient
   // fusionnes) -- ajoutes pour une liste vraiment complete, coherente
@@ -351,7 +408,7 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirs));
   if (competencesToutes.length) { contenuSidebar.push(titreSidebar('Compétences')); competencesToutes.forEach(function (c) { contenuSidebar.push(puceSidebar(c)); }); }
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
-  if (loisirsTexte) { contenuSidebar.push(titreSidebar("Centres d'intérêt")); contenuSidebar.push(texteSimple(loisirsTexte, { size: 15 })); }
+  if (loisirsTexte) { contenuSidebar.push(titreSidebar("Centres d’intérêt")); contenuSidebar.push(texteSimple(loisirsTexte, { size: 15 })); }
 
   var contenuPrincipal = [];
   var experiences = _dnListe(objetCV.experiences);
@@ -359,14 +416,14 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
     contenuPrincipal.push(bandeauSection('Expérience professionnelle'));
     contenuPrincipal.push(new Paragraph({ children: [] }));
     experiences.forEach(function (e) {
-      var dateTexte = 'De ' + (e.dateDebut || '') + '\nà ' + (e.dateFin || 'aujourd\'hui');
+      var dateTexte = 'De ' + (e.dateDebut || '') + '\nà ' + (e.dateFin || 'aujourd’hui');
       contenuPrincipal.push(ligneFrise(dateTexte, e.poste + (e.entreprise ? ' — ' + e.entreprise : ''), e.contrat, e.missions));
       contenuPrincipal.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
     });
   }
   var formations = _dnListe(objetCV.formations);
   if (formations.length) {
-    contenuPrincipal.push(bandeauSection('Formation'));
+    contenuPrincipal.push(bandeauSection('Formations'));
     contenuPrincipal.push(new Paragraph({ children: [] }));
     formations.forEach(function (f) {
       contenuPrincipal.push(ligneFrise(f.annee || '', f.niveau + (f.intitule ? ' — ' + f.intitule : ''), f.etablissement, null));
@@ -414,6 +471,10 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
 
   var PRIMAIRE = opts.primaire, TEXTE = opts.texte || '1A1A1A', SECONDAIRE = opts.secondaire || '666666';
   var refPuces = 'puces-une-colonne';
+  // TACHE (retour utilisateur : taille du texte selon le volume de
+  // contenu) : voir _dnEchelleTexteCourant -- meme principe que dans
+  // _dnConstruireDeuxColonnes, titreSection non concerne.
+  var echelleTexte = _dnEchelleTexteCourant(objetCV);
 
   function titreSection(texte) {
     var props = { spacing: { before: 260, after: 120 },
@@ -424,10 +485,10 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
   function texte(t, o) {
     o = o || {};
     return new Paragraph({ spacing: { after: o.after !== undefined ? o.after : 100 }, alignment: o.centre ? AlignmentType.CENTER : undefined,
-      children: [ new TextRun({ text: t, size: o.size || 19, italics: !!o.italics, bold: !!o.bold, color: o.color || TEXTE, font: 'Calibri' }) ] });
+      children: [ new TextRun({ text: t, size: _dnTailleAvecPlancher(o.size || 19, echelleTexte), italics: !!o.italics, bold: !!o.bold, color: o.color || TEXTE, font: 'Calibri' }) ] });
   }
   function puce(t) {
-    return new Paragraph({ numbering: { reference: refPuces, level: 0 }, spacing: { after: 60 }, children: [ new TextRun({ text: t, size: 19, color: TEXTE, font: 'Calibri' }) ] });
+    return new Paragraph({ numbering: { reference: refPuces, level: 0 }, spacing: { after: 60 }, children: [ new TextRun({ text: t, size: _dnTailleAvecPlancher(19, echelleTexte), color: TEXTE, font: 'Calibri' }) ] });
   }
 
   var identite = objetCV.identite || {};
@@ -444,11 +505,16 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
     enfants.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 },
       children: [ new ImageRun({ data: octetsPhotoUneColonne, transformation: { width: 84, height: 84 }, type: _dnTypeImagePhoto(objetCV.photo.url) }) ] }));
   }
+  // TACHE (retour utilisateur : "le nom reste sur la gauche en haut, juste
+  // le métier visé qui est en haut au centre") : nom repasse au
+  // comportement d'origine (opts.centrerEntete pilote son alignement,
+  // comme le reste de l'en-tete) ; seul le metier vise est desormais
+  // TOUJOURS centre et agrandi, quel que soit opts.centrerEntete.
   enfants.push(new Paragraph({ alignment: opts.centrerEntete ? AlignmentType.CENTER : undefined, spacing: { after: 40 },
-    children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 44, color: PRIMAIRE, font: opts.police || 'Calibri' }) ] }));
+    children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 32, color: PRIMAIRE, font: opts.police || 'Calibri' }) ] }));
   if (objetCV.objectifProfessionnel) {
-    enfants.push(new Paragraph({ alignment: opts.centrerEntete ? AlignmentType.CENTER : undefined, spacing: { after: 120 },
-      children: [ new TextRun({ text: objetCV.objectifProfessionnel, bold: true, italics: !!opts.objectifItalique, color: SECONDAIRE, size: 21, font: 'Calibri' }) ] }));
+    enfants.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
+      children: [ new TextRun({ text: objetCV.objectifProfessionnel, bold: true, italics: !!opts.objectifItalique, color: SECONDAIRE, size: 36, font: 'Calibri' }) ] }));
   }
   var ligneCoordonnees = [identite.telephone, identite.email, [identite.adresse, identite.ville].filter(Boolean).join(' ')].filter(Boolean);
   if (permis.possede) { ligneCoordonnees.push('Permis ' + _dnTexteJoint(permis.categories) + (permis.vehicule ? ' — véhicule personnel' : '')); }
@@ -475,6 +541,18 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
       var exp = _dnListe(objetCV.experiences);
       if (!exp.length) { return []; }
       var r = [ titreSection('Expérience professionnelle') ];
+      // TACHE (retour utilisateur : "encore trop proche, réduire plus --
+      // une expérience, lieu, date et 1 ligne pour la mission") : meme
+      // rendu compact qu'en deuxColonnes en A4 Essentiel -- une seule
+      // ligne par experience, pas de titre+sous-titre+puce separes.
+      if (opts.formatPage === 'A4-essentiel') {
+        exp.forEach(function (e) {
+          var infosLigne = [e.entreprise, e.lieu, [e.dateDebut, e.dateFin].filter(Boolean).join(' - ')].filter(Boolean).join(' · ');
+          var ligne = e.poste + (infosLigne ? ' — ' + infosLigne : '') + (e.missions ? ' : ' + e.missions : '');
+          r.push(puce(ligne));
+        });
+        return r;
+      }
       exp.forEach(function (e) {
         r.push(texte(e.poste + (e.entreprise ? ' — ' + e.entreprise : ''), { bold: true, size: 20, after: 20 }));
         var meta = [e.lieu, [e.dateDebut, e.dateFin].filter(Boolean).join(' - '), e.contrat].filter(Boolean).join(' · ');
@@ -515,7 +593,7 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
     },
     loisirs: function () {
       var t = _dnTexteJoint(objetCV.loisirs);
-      return t ? [ titreSection("Centres d'intérêt"), texte(t) ] : [];
+      return t ? [ titreSection("Centres d’intérêt"), texte(t) ] : [];
     },
     engagements: function () {
       var t = _dnTexteJoint(objetCV.engagements);

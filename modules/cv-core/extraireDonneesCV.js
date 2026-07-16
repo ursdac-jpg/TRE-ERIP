@@ -35,18 +35,13 @@ function extraireDonneesCV(dossierSource) {
   var id = d.identite || {};
   var permis = d.permis || {};
 
-  var competences = (typeof deduireCompetences === 'function') ? deduireCompetences() : [];
-  // TACHE (retour utilisateur : "Compétences professionnelles" vide sur le
-  // CV genere) : utilisait categorieCompetence[c] en direct -- la table
-  // figee interne (~50 libelles) ne connait presque aucune competence
-  // importee depuis un vrai CV, donc ce filtre les ecartait presque toutes
-  // (categorieCompetence[c] === undefined, ni Savoir-faire ni Savoir-etre).
-  // categorieReelleCompetence() (app.js) corrige deja ce point ailleurs
-  // (Analyse de votre profil, score des metiers, texte transmis a l'IA) --
-  // ce fichier n'avait pas ete mis a jour en meme temps, d'ou le decalage
-  // observe entre "Analyse de votre profil" (correct) et le CV genere (vide).
-  var savoirFaire = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-faire' || categorieReelleCompetence(c) === undefined; });
-  var savoirEtre = competences.filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; });
+  // TACHE (dette technique, chantier 2) : utilise desormais les fonctions
+  // canoniques savoirFaireActuels()/savoirEtreActuels() (app.js) au lieu de
+  // reimplementer localement le meme filtre -- meme garde defensive
+  // typeof que pour deduireCompetences()/obtenirSavoirs() ci-dessous
+  // (ce fichier peut en principe etre charge/appele independamment).
+  var savoirFaire = (typeof savoirFaireActuels === 'function') ? savoirFaireActuels() : [];
+  var savoirEtre = (typeof savoirEtreActuels === 'function') ? savoirEtreActuels() : [];
   var savoirs = (typeof obtenirSavoirs === 'function') ? obtenirSavoirs() : [];
 
   return {

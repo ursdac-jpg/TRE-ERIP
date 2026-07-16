@@ -1,7 +1,7 @@
 {
   "id": "aquarelle",
   "nom": "Aquarelle",
-  "description": "CV deux colonnes, fond ivoire et decor aquarelle en en-tete.",
+  "description": "CV deux colonnes, fond ivoire et décor aquarelle en en-tête.",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "38%",

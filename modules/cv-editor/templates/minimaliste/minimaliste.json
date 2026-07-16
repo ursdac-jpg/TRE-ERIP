@@ -1,7 +1,7 @@
 {
   "id": "minimaliste",
   "nom": "Minimaliste",
-  "description": "CV extremement depouille, sans photo ni couleur d'accent.",
+  "description": "CV extrêmement dépouillé, sans photo ni couleur d'accent.",
   "layout": {
     "type": "single-column"
   },

@@ -1,7 +1,7 @@
 {
   "id": "impact",
   "nom": "Impact",
-  "description": "Deux colonnes, competences en pastilles colorees, sobre-mais-distinctif.",
+  "description": "Deux colonnes, compétences en pastilles colorées, sobre-mais-distinctif.",
   "colors": {
     "primary": "#0F172A",
     "secondary": "#0D9488",

@@ -23,508 +23,457 @@
 
 const baseMetiers = [
   {
-    id: "conseiller_vente", nom: "Conseiller de vente", rome: "D1214", secteur: "Commerce",
-    activites: ["clients", "magasin", "collegues", "marchandises"],
+    id: "conseiller_vente", nom: "Conseiller de vente", rome: "D1214", secteur: "Commerce",    activites: ["clients", "magasin", "collegues", "marchandises"],
     actions: ["vendre", "conseiller"],
     environnement: ["magasin"],
     valeurs: ["contact_humain", "evolution"],
-    savoirFaire: ["Merchandising", "Gestion des stocks", "Negociation", "Persuasion", "Conseil"],
-    savoirEtre: ["Relation client", "Communication", "Ecoute", "Sens du service", "Accueil"],
+    savoirFaire: ["Merchandising", "Gestion des stocks", "Négociation", "Persuasion", "Conseil"],
+    savoirEtre: ["Relation client", "Communication", "Écoute", "Sens du service", "Accueil"],
     savoirs: ["Techniques de vente", "Connaissance des produits", "Encaissement"]
   },
   {
-    id: "agent_accueil", nom: "Agent d'accueil", rome: "M1601", secteur: "Services",
-    activites: ["clients", "bureau", "ordinateur", "documents"],
+    id: "agent_accueil", nom: "Agent d'accueil", rome: "M1601", secteur: "Services",    activites: ["clients", "bureau", "ordinateur", "documents"],
     actions: ["conseiller", "organiser"],
     environnement: ["bureau"],
     valeurs: ["contact_humain", "horaires_fixes"],
     savoirFaire: ["Bureautique", "Gestion administrative", "Conseil"],
-    savoirEtre: ["Accueil", "Communication", "Ecoute", "Patience", "Sens du service"],
-    savoirs: ["Standard telephonique", "Procedures d'accueil"]
+    savoirEtre: ["Accueil", "Communication", "Écoute", "Patience", "Sens du service"],
+    savoirs: ["Standard téléphonique", "Procédures d'accueil"]
   },
   {
-    id: "teleconseiller", nom: "Teleconseiller", rome: "D1408", secteur: "Relation client",
-    activites: ["clients", "bureau", "collegues", "ordinateur", "documents"],
+    id: "teleconseiller", nom: "Téléconseiller", rome: "D1408", secteur: "Relation client",    activites: ["clients", "bureau", "collegues", "ordinateur", "documents"],
     actions: ["conseiller", "vendre"],
     environnement: ["bureau"],
     valeurs: ["contact_humain", "horaires_fixes"],
-    savoirFaire: ["Bureautique", "Negociation", "Persuasion", "Conseil"],
-    savoirEtre: ["Relation client", "Communication", "Ecoute", "Patience"],
+    savoirFaire: ["Bureautique", "Négociation", "Persuasion", "Conseil"],
+    savoirEtre: ["Relation client", "Communication", "Écoute", "Patience"],
     savoirs: ["Outils informatiques", "Scripts d'appel"]
   },
   {
-    id: "employe_libre_service", nom: "Employe libre-service", rome: "D1507", secteur: "Grande distribution",
-    activites: ["magasin", "seul", "collegues", "marchandises"],
+    id: "employe_libre_service", nom: "Employé libre-service", rome: "D1507", secteur: "Grande distribution",    activites: ["magasin", "seul", "collegues", "marchandises"],
     actions: ["organiser", "nettoyer"],
     environnement: ["magasin"],
     valeurs: ["stabilite", "horaires_fixes", "proximite"],
     savoirFaire: ["Merchandising", "Gestion des stocks", "Entretien"],
     savoirEtre: ["Rigueur", "Organisation", "Autonomie", "Endurance"],
-    savoirs: ["Rotation des produits", "Regles d'hygiene"]
+    savoirs: ["Rotation des produits", "Règles d'hygiène"]
   },
   {
-    id: "preparateur_commandes", nom: "Preparateur de commandes / Magasinier", rome: "N1103", secteur: "Logistique",
-    activites: ["machines", "seul", "collegues", "marchandises"],
+    id: "preparateur_commandes", nom: "Préparateur de commandes / Magasinier", rome: "N1103", secteur: "Logistique",    activites: ["machines", "seul", "collegues", "marchandises"],
     actions: ["organiser", "transporter"],
     environnement: ["usine"],
     valeurs: ["stabilite", "autonomie", "salaire"],
     savoirFaire: ["Logistique", "Gestion des stocks", "Conduite", "Planification"],
-    savoirEtre: ["Rigueur", "Organisation", "Autonomie", "Respect des delais"],
-    savoirs: ["CACES", "Logiciels de gestion d'entrepot"]
+    savoirEtre: ["Rigueur", "Organisation", "Autonomie", "Respect des délais"],
+    savoirs: ["CACES", "Logiciels de gestion d'entrepôt"]
   },
   {
-    id: "cariste", nom: "Cariste", rome: "N1101", secteur: "Logistique",
-    activites: ["machines", "seul", "marchandises"],
+    id: "cariste", nom: "Cariste", rome: "N1101", secteur: "Logistique",    activites: ["machines", "seul", "marchandises"],
     actions: ["transporter", "organiser"],
     environnement: ["usine"],
     valeurs: ["stabilite", "salaire"],
     savoirFaire: ["Conduite", "Logistique", "Gestion des stocks"],
-    savoirEtre: ["Rigueur", "Securite", "Autonomie"],
-    savoirs: ["CACES 1-3-5", "Regles de securite entrepot"]
+    savoirEtre: ["Rigueur", "Sécurité", "Autonomie"],
+    savoirs: ["CACES 1-3-5", "Règles de sécurité entrepôt"]
   },
   {
-    id: "chauffeur_livreur", nom: "Chauffeur-livreur", rome: "N4105", secteur: "Transport",
-    activites: ["deplacement", "seul", "clients", "marchandises", "vehicules"],
+    id: "chauffeur_livreur", nom: "Chauffeur-livreur", rome: "N4105", secteur: "Transport",    activites: ["deplacement", "seul", "clients", "marchandises", "vehicules"],
     actions: ["transporter", "organiser"],
     environnement: ["route"],
     valeurs: ["autonomie", "proximite"],
     savoirFaire: ["Conduite", "Logistique", "Planification"],
-    savoirEtre: ["Autonomie", "Gestion du temps", "Respect des delais", "Sens du service"],
-    savoirs: ["Code de la route", "Lecture d'itineraires"]
+    savoirEtre: ["Autonomie", "Gestion du temps", "Respect des délais", "Sens du service"],
+    savoirs: ["Code de la route", "Lecture d'itinéraires"]
   },
   {
-    id: "chauffeur_routier", nom: "Chauffeur routier", rome: "N4101", secteur: "Transport",
-    activites: ["deplacement", "seul", "vehicules"],
+    id: "chauffeur_routier", nom: "Chauffeur routier", rome: "N4101", secteur: "Transport",    activites: ["deplacement", "seul", "vehicules"],
     actions: ["transporter"],
     environnement: ["route"],
     valeurs: ["autonomie", "salaire"],
     savoirFaire: ["Conduite", "Logistique"],
-    savoirEtre: ["Autonomie", "Fiabilite", "Respect des delais"],
-    savoirs: ["Code de la route", "Reglementation des transports", "Permis C"]
+    savoirEtre: ["Autonomie", "Fiabilité", "Respect des délais"],
+    savoirs: ["Code de la route", "Réglementation des transports", "Permis C"]
   },
   {
-    id: "agent_entretien", nom: "Agent d'entretien", rome: "K2204", secteur: "Proprete",
-    activites: ["seul", "outils"],
+    id: "agent_entretien", nom: "Agent d'entretien", rome: "K2204", secteur: "Propreté",    activites: ["seul", "outils"],
     actions: ["nettoyer", "organiser"],
     environnement: ["bureau", "domicile"],
     valeurs: ["autonomie", "horaires_fixes", "proximite"],
-    savoirFaire: ["Hygiene", "Entretien"],
-    savoirEtre: ["Rigueur", "Autonomie", "Organisation", "Fiabilite"],
-    savoirs: ["Protocoles de nettoyage", "Securite des produits"]
+    savoirFaire: ["Hygiène", "Entretien"],
+    savoirEtre: ["Rigueur", "Autonomie", "Organisation", "Fiabilité"],
+    savoirs: ["Protocoles de nettoyage", "Sécurité des produits"]
   },
   {
-    id: "advf", nom: "Assistant de vie aux familles (ADVF)", rome: "K1302", secteur: "Services a la personne",
-    activites: ["personnes_agees", "seul", "deplacement"],
+    id: "advf", nom: "Assistant de vie aux familles (ADVF)", rome: "K1302", secteur: "Services à la personne",    activites: ["personnes_agees", "seul", "deplacement"],
     actions: ["soigner", "cuisiner", "nettoyer"],
     environnement: ["domicile"],
     valeurs: ["contact_humain", "proximite"],
-    savoirFaire: ["Soins", "Hygiene", "Cuisine", "Entretien"],
-    savoirEtre: ["Empathie", "Aide a la personne", "Ecoute", "Patience", "Bienveillance"],
+    savoirFaire: ["Soins", "Hygiène", "Cuisine", "Entretien"],
+    savoirEtre: ["Empathie", "Aide à la personne", "Écoute", "Patience", "Bienveillance"],
     savoirs: ["Gestes de premiers secours", "Manutention des personnes"]
   },
   {
-    id: "aide_soignant", nom: "Aide-soignant", rome: "J1501", secteur: "Sante",
-    activites: ["personnes_agees", "collegues"],
+    id: "aide_soignant", nom: "Aide-soignant", rome: "J1501", secteur: "Santé",    activites: ["personnes_agees", "collegues"],
     actions: ["soigner"],
     environnement: ["sante"],
     valeurs: ["contact_humain", "stabilite"],
-    savoirFaire: ["Soins", "Hygiene", "Precision"],
-    savoirEtre: ["Empathie", "Ecoute", "Bienveillance", "Travail en equipe"],
-    savoirs: ["Protocoles de soins", "Hygiene hospitaliere", "Gestes de premiers secours"]
+    savoirFaire: ["Soins", "Hygiène", "Précision"],
+    savoirEtre: ["Empathie", "Écoute", "Bienveillance", "Travail en équipe"],
+    savoirs: ["Protocoles de soins", "Hygiène hospitalière", "Gestes de premiers secours"]
   },
   {
-    id: "infirmier", nom: "Infirmier", rome: "J1506", secteur: "Sante",
-    activites: ["personnes_agees", "collegues"],
+    id: "infirmier", nom: "Infirmier", rome: "J1506", secteur: "Santé",    activites: ["personnes_agees", "collegues"],
     actions: ["soigner", "organiser", "analyser"],
     environnement: ["sante"],
     valeurs: ["contact_humain", "evolution", "salaire"],
-    savoirFaire: ["Soins", "Precision", "Planification"],
-    savoirEtre: ["Empathie", "Rigueur", "Responsabilite", "Travail en equipe"],
-    savoirs: ["Pharmacologie", "Protocoles medicaux"]
+    savoirFaire: ["Soins", "Précision", "Planification"],
+    savoirEtre: ["Empathie", "Rigueur", "Responsabilité", "Travail en équipe"],
+    savoirs: ["Pharmacologie", "Protocoles médicaux"]
   },
   {
-    id: "auxiliaire_petite_enfance", nom: "Auxiliaire petite enfance", rome: "K1303", secteur: "Petite enfance",
-    activites: ["enfants", "collegues"],
+    id: "auxiliaire_petite_enfance", nom: "Auxiliaire petite enfance", rome: "K1303", secteur: "Petite enfance",    activites: ["enfants", "collegues"],
     actions: ["soigner", "former", "creer"],
     environnement: ["sante"],
     valeurs: ["contact_humain", "horaires_fixes"],
-    savoirFaire: ["Soins", "Hygiene", "Transmission"],
-    savoirEtre: ["Patience", "Bienveillance", "Pedagogie", "Creativite", "Securite"],
-    savoirs: ["Developpement de l'enfant", "Regles de securite"]
+    savoirFaire: ["Soins", "Hygiène", "Transmission"],
+    savoirEtre: ["Patience", "Bienveillance", "Pédagogie", "Créativité", "Sécurité"],
+    savoirs: ["Développement de l'enfant", "Règles de sécurité"]
   },
   {
-    id: "animateur", nom: "Animateur", rome: "G1202", secteur: "Animation",
-    activites: ["enfants", "collegues", "exterieur"],
+    id: "animateur", nom: "Animateur", rome: "G1202", secteur: "Animation",    activites: ["enfants", "collegues", "exterieur"],
     actions: ["former", "creer", "organiser"],
     environnement: ["exterieur"],
     valeurs: ["contact_humain", "evolution"],
     savoirFaire: ["Transmission", "Gestion de projet", "Planification"],
-    savoirEtre: ["Pedagogie", "Creativite", "Communication", "Adaptabilite", "Esprit d'equipe"],
-    savoirs: ["Reglementation ACM", "Techniques d'animation"]
+    savoirEtre: ["Pédagogie", "Créativité", "Communication", "Adaptabilité", "Esprit d'équipe"],
+    savoirs: ["Réglementation ACM", "Techniques d'animation"]
   },
   {
-    id: "formateur", nom: "Formateur / Educateur", rome: "K2111", secteur: "Formation",
-    activites: ["enfants", "collegues", "bureau"],
+    id: "formateur", nom: "Formateur / Éducateur", rome: "K2111", secteur: "Formation",    activites: ["enfants", "collegues", "bureau"],
     actions: ["former", "conseiller", "organiser"],
     environnement: ["bureau"],
     valeurs: ["contact_humain", "evolution"],
-    savoirFaire: ["Formation", "Transmission", "Conseil", "Redaction"],
-    savoirEtre: ["Pedagogie", "Patience", "Communication", "Ecoute"],
-    savoirs: ["Ingenierie pedagogique", "Techniques d'evaluation"]
+    savoirFaire: ["Formation", "Transmission", "Conseil", "Rédaction"],
+    savoirEtre: ["Pédagogie", "Patience", "Communication", "Écoute"],
+    savoirs: ["Ingénierie pédagogique", "Techniques d'évaluation"]
   },
   {
-    id: "serveur", nom: "Serveur en restauration", rome: "G1803", secteur: "Hotellerie-restauration",
-    activites: ["clients", "collegues"],
+    id: "serveur", nom: "Serveur en restauration", rome: "G1803", secteur: "Hôtellerie-restauration",    activites: ["clients", "collegues"],
     actions: ["vendre", "conseiller"],
     environnement: ["cuisine"],
     valeurs: ["contact_humain"],
-    savoirFaire: ["Negociation", "Conseil"],
-    savoirEtre: ["Sens du service", "Communication", "Endurance", "Adaptabilite", "Accueil"],
-    savoirs: ["Hygiene alimentaire (HACCP)", "Techniques de service", "Encaissement"]
+    savoirFaire: ["Négociation", "Conseil"],
+    savoirEtre: ["Sens du service", "Communication", "Endurance", "Adaptabilité", "Accueil"],
+    savoirs: ["Hygiène alimentaire (HACCP)", "Techniques de service", "Encaissement"]
   },
   {
-    id: "cuisinier", nom: "Cuisinier / Commis de cuisine", rome: "G1602", secteur: "Hotellerie-restauration",
-    activites: ["collegues", "machines"],
+    id: "cuisinier", nom: "Cuisinier / Commis de cuisine", rome: "G1602", secteur: "Hôtellerie-restauration",    activites: ["collegues", "machines"],
     actions: ["cuisiner", "organiser"],
     environnement: ["cuisine"],
     valeurs: ["evolution"],
-    savoirFaire: ["Cuisine", "Hygiene", "Precision", "Planification"],
-    savoirEtre: ["Rigueur", "Creativite", "Esprit d'equipe", "Endurance", "Respect des normes"],
-    savoirs: ["Techniques culinaires", "Hygiene alimentaire (HACCP)"]
+    savoirFaire: ["Cuisine", "Hygiène", "Précision", "Planification"],
+    savoirEtre: ["Rigueur", "Créativité", "Esprit d'équipe", "Endurance", "Respect des normes"],
+    savoirs: ["Techniques culinaires", "Hygiène alimentaire (HACCP)"]
   },
   {
-    id: "agent_production", nom: "Agent de production", rome: "H2909", secteur: "Industrie",
-    activites: ["machines", "collegues"],
+    id: "agent_production", nom: "Agent de production", rome: "H2909", secteur: "Industrie",    activites: ["machines", "collegues"],
     actions: ["construire", "analyser", "organiser"],
     environnement: ["usine"],
     valeurs: ["stabilite", "horaires_fixes", "salaire"],
-    savoirFaire: ["Technique", "Precision", "Maintenance"],
-    savoirEtre: ["Rigueur", "Esprit d'equipe", "Respect des normes", "Fiabilite"],
-    savoirs: ["Regles de securite", "Procedures qualite"]
+    savoirFaire: ["Technique", "Précision", "Maintenance"],
+    savoirEtre: ["Rigueur", "Esprit d'équipe", "Respect des normes", "Fiabilité"],
+    savoirs: ["Règles de sécurité", "Procédures qualité"]
   },
   {
-    id: "technicien_maintenance", nom: "Technicien de maintenance", rome: "I1304", secteur: "Industrie",
-    activites: ["machines", "seul", "deplacement", "outils"],
+    id: "technicien_maintenance", nom: "Technicien de maintenance", rome: "I1304", secteur: "Industrie",    activites: ["machines", "seul", "deplacement", "outils"],
     actions: ["reparer", "analyser"],
     environnement: ["usine"],
     valeurs: ["autonomie", "evolution", "salaire"],
-    savoirFaire: ["Diagnostic", "Reparation", "Maintenance", "Technique", "Lecture de plans"],
-    savoirEtre: ["Autonomie", "Rigueur", "Adaptabilite"],
-    savoirs: ["Lecture de schemas", "Habilitations electriques"]
+    savoirFaire: ["Diagnostic", "Réparation", "Maintenance", "Technique", "Lecture de plans"],
+    savoirEtre: ["Autonomie", "Rigueur", "Adaptabilité"],
+    savoirs: ["Lecture de schémas", "Habilitations électriques"]
   },
   {
-    id: "mecanicien", nom: "Mecanicien automobile", rome: "I1604", secteur: "Automobile",
-    activites: ["machines", "seul", "vehicules", "outils"],
+    id: "mecanicien", nom: "Mécanicien automobile", rome: "I1604", secteur: "Automobile",    activites: ["machines", "seul", "vehicules", "outils"],
     actions: ["reparer", "analyser"],
     environnement: ["usine"],
     valeurs: ["stabilite", "autonomie"],
-    savoirFaire: ["Diagnostic", "Reparation", "Maintenance", "Technique", "Precision"],
+    savoirFaire: ["Diagnostic", "Réparation", "Maintenance", "Technique", "Précision"],
     savoirEtre: ["Rigueur", "Autonomie", "Raisonnement logique"],
-    savoirs: ["Mecanique automobile", "Electronique embarquee"]
+    savoirs: ["Mécanique automobile", "Électronique embarquée"]
   },
   {
-    id: "macon", nom: "Macon", rome: "F1703", secteur: "BTP",
-    activites: ["exterieur", "collegues", "machines", "outils"],
+    id: "macon", nom: "Maçon", rome: "F1703", secteur: "BTP",    activites: ["exterieur", "collegues", "machines", "outils"],
     actions: ["construire"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "salaire"],
-    savoirFaire: ["Batiment", "Lecture de plans", "Travail manuel"],
-    savoirEtre: ["Endurance", "Esprit d'equipe", "Securite", "Rigueur"],
-    savoirs: ["Normes de construction", "Securite sur chantier"]
+    savoirFaire: ["Bâtiment", "Lecture de plans", "Travail manuel"],
+    savoirEtre: ["Endurance", "Esprit d'équipe", "Sécurité", "Rigueur"],
+    savoirs: ["Normes de construction", "Sécurité sur chantier"]
   },
   {
-    id: "peintre", nom: "Peintre en batiment", rome: "F1606", secteur: "BTP",
-    activites: ["seul", "exterieur", "outils"],
+    id: "peintre", nom: "Peintre en bâtiment", rome: "F1606", secteur: "BTP",    activites: ["seul", "exterieur", "outils"],
     actions: ["construire", "creer"],
     environnement: ["exterieur", "domicile"],
     valeurs: ["autonomie", "proximite"],
-    savoirFaire: ["Batiment", "Travail manuel", "Precision"],
-    savoirEtre: ["Rigueur", "Autonomie", "Creativite"],
-    savoirs: ["Types de peintures", "Preparation des surfaces"]
+    savoirFaire: ["Bâtiment", "Travail manuel", "Précision"],
+    savoirEtre: ["Rigueur", "Autonomie", "Créativité"],
+    savoirs: ["Types de peintures", "Préparation des surfaces"]
   },
   {
-    id: "plombier", nom: "Plombier", rome: "F1603", secteur: "BTP",
-    activites: ["seul", "deplacement", "clients", "outils"],
+    id: "plombier", nom: "Plombier", rome: "F1603", secteur: "BTP",    activites: ["seul", "deplacement", "clients", "outils"],
     actions: ["reparer", "construire"],
     environnement: ["domicile", "exterieur"],
     valeurs: ["autonomie", "proximite", "salaire"],
-    savoirFaire: ["Reparation", "Diagnostic", "Lecture de plans", "Travail manuel"],
+    savoirFaire: ["Réparation", "Diagnostic", "Lecture de plans", "Travail manuel"],
     savoirEtre: ["Autonomie", "Rigueur", "Sens du service"],
     savoirs: ["Normes de plomberie", "Lecture de plans hydrauliques"]
   },
   {
-    id: "electricien", nom: "Electricien", rome: "F1602", secteur: "BTP",
-    activites: ["seul", "deplacement", "machines", "outils"],
+    id: "electricien", nom: "Électricien", rome: "F1602", secteur: "BTP",    activites: ["seul", "deplacement", "machines", "outils"],
     actions: ["reparer", "construire", "analyser"],
     environnement: ["exterieur", "domicile"],
     valeurs: ["autonomie", "evolution", "salaire"],
-    savoirFaire: ["Technique", "Lecture de plans", "Diagnostic", "Precision"],
-    savoirEtre: ["Rigueur", "Securite", "Autonomie", "Raisonnement logique"],
-    savoirs: ["Normes electriques", "Lecture de schemas electriques", "Habilitations"]
+    savoirFaire: ["Technique", "Lecture de plans", "Diagnostic", "Précision"],
+    savoirEtre: ["Rigueur", "Sécurité", "Autonomie", "Raisonnement logique"],
+    savoirs: ["Normes électriques", "Lecture de schémas électriques", "Habilitations"]
   },
   {
-    id: "paysagiste", nom: "Ouvrier paysagiste / Jardinier", rome: "A1203", secteur: "Espaces verts",
-    activites: ["exterieur", "seul", "machines", "outils"],
+    id: "paysagiste", nom: "Ouvrier paysagiste / Jardinier", rome: "A1203", secteur: "Espaces verts",    activites: ["exterieur", "seul", "machines", "outils"],
     actions: ["creer", "nettoyer", "construire"],
     environnement: ["exterieur", "espaces_verts"],
     valeurs: ["exterieur", "autonomie", "proximite"],
     savoirFaire: ["Entretien", "Travail manuel", "Conduite"],
-    savoirEtre: ["Endurance", "Autonomie", "Creativite", "Adaptabilite"],
-    savoirs: ["Vegetaux", "Materiel motorise"]
+    savoirEtre: ["Endurance", "Autonomie", "Créativité", "Adaptabilité"],
+    savoirs: ["Végétaux", "Matériel motorisé"]
   },
   {
-    id: "ouvrier_agricole", nom: "Ouvrier agricole / viticole", rome: "A1405", secteur: "Agriculture",
-    activites: ["exterieur", "collegues", "machines", "outils"],
+    id: "ouvrier_agricole", nom: "Ouvrier agricole / viticole", rome: "A1405", secteur: "Agriculture",    activites: ["exterieur", "collegues", "machines", "outils"],
     actions: ["transporter", "organiser", "nettoyer"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "proximite"],
     savoirFaire: ["Travail manuel", "Conduite", "Entretien"],
-    savoirEtre: ["Endurance", "Adaptabilite", "Esprit d'equipe"],
-    savoirs: ["Cycle de la vigne", "Materiel agricole"]
+    savoirEtre: ["Endurance", "Adaptabilité", "Esprit d'équipe"],
+    savoirs: ["Cycle de la vigne", "Matériel agricole"]
   },
   {
-    id: "agent_securite", nom: "Agent de securite", rome: "K2503", secteur: "Securite",
-    activites: ["seul", "magasin", "clients"],
+    id: "agent_securite", nom: "Agent de sécurité", rome: "K2503", secteur: "Sécurité",    activites: ["seul", "magasin", "clients"],
     actions: ["analyser", "organiser"],
     environnement: ["magasin", "bureau"],
     valeurs: ["stabilite", "horaires_fixes"],
     savoirFaire: ["Planification"],
-    savoirEtre: ["Securite", "Rigueur", "Fiabilite", "Responsabilite"],
+    savoirEtre: ["Sécurité", "Rigueur", "Fiabilité", "Responsabilité"],
     savoirs: ["CQP APS", "Consignes incendie", "Gestes de premiers secours"]
   },
   {
-    id: "assistant_administratif", nom: "Assistant administratif", rome: "M1607", secteur: "Administration",
-    activites: ["bureau", "seul", "collegues", "ordinateur", "documents"],
+    id: "assistant_administratif", nom: "Assistant administratif", rome: "M1607", secteur: "Administration",    activites: ["bureau", "seul", "collegues", "ordinateur", "documents"],
     actions: ["organiser", "analyser"],
     environnement: ["bureau"],
     valeurs: ["stabilite", "horaires_fixes"],
-    savoirFaire: ["Bureautique", "Gestion administrative", "Redaction", "Planification"],
-    savoirEtre: ["Organisation", "Rigueur", "Communication", "Fiabilite"],
-    savoirs: ["Outils bureautiques", "Orthographe", "Procedures administratives"]
+    savoirFaire: ["Bureautique", "Gestion administrative", "Rédaction", "Planification"],
+    savoirEtre: ["Organisation", "Rigueur", "Communication", "Fiabilité"],
+    savoirs: ["Outils bureautiques", "Orthographe", "Procédures administratives"]
   },
   {
-    id: "comptable", nom: "Comptable / Assistant comptable", rome: "M1203", secteur: "Gestion",
-    activites: ["bureau", "seul", "ordinateur", "documents"],
+    id: "comptable", nom: "Comptable / Assistant comptable", rome: "M1203", secteur: "Gestion",    activites: ["bureau", "seul", "ordinateur", "documents"],
     actions: ["analyser", "organiser"],
     environnement: ["bureau"],
     valeurs: ["stabilite", "salaire", "evolution"],
-    savoirFaire: ["Analyse de donnees", "Gestion financiere", "Bureautique", "Redaction"],
+    savoirFaire: ["Analyse de données", "Gestion financière", "Bureautique", "Rédaction"],
     savoirEtre: ["Rigueur", "Organisation", "Raisonnement logique"],
-    savoirs: ["Comptabilite generale", "Droit fiscal", "Logiciels comptables"]
+    savoirs: ["Comptabilité générale", "Droit fiscal", "Logiciels comptables"]
   },
   {
-    id: "chef_equipe", nom: "Chef d'equipe", rome: "M1302", secteur: "Encadrement",
-    activites: ["collegues", "machines", "documents"],
+    id: "chef_equipe", nom: "Chef d'équipe", rome: "M1302", secteur: "Encadrement",    activites: ["collegues", "machines", "documents"],
     actions: ["organiser", "former", "analyser"],
     environnement: ["usine", "exterieur"],
     valeurs: ["evolution", "salaire"],
     savoirFaire: ["Management", "Gestion de projet", "Planification", "Formation"],
-    savoirEtre: ["Leadership", "Coordination", "Responsabilite", "Travail en equipe"],
-    savoirs: ["Regles de securite", "Gestion de planning"]
+    savoirEtre: ["Leadership", "Coordination", "Responsabilité", "Travail en équipe"],
+    savoirs: ["Règles de sécurité", "Gestion de planning"]
   },
   {
-    id: "developpeur", nom: "Developpeur informatique", rome: "M1855", secteur: "Numerique",
-    activites: ["bureau", "seul", "collegues", "ordinateur"],
+    id: "developpeur", nom: "Développeur informatique", rome: "M1855", secteur: "Numérique",    activites: ["bureau", "seul", "collegues", "ordinateur"],
     actions: ["analyser", "creer"],
     environnement: ["bureau"],
     valeurs: ["evolution", "autonomie", "salaire"],
-    savoirFaire: ["Analyse de donnees", "Innovation", "Redaction", "Gestion de projet"],
+    savoirFaire: ["Analyse de données", "Innovation", "Rédaction", "Gestion de projet"],
     savoirEtre: ["Raisonnement logique", "Autonomie", "Rigueur", "Apprentissage"],
-    savoirs: ["Langages de programmation", "Bases de donnees", "Methodes agiles"]
+    savoirs: ["Langages de programmation", "Bases de données", "Méthodes agiles"]
   },
   {
-    id: "employe_polyvalent_restauration", nom: "Employe polyvalent de restauration / Aide de cuisine", rome: "G1603", secteur: "Restauration",
-    activites: ["clients", "collegues"],
+    id: "employe_polyvalent_restauration", nom: "Employé polyvalent de restauration / Aide de cuisine", rome: "G1603", secteur: "Restauration",    activites: ["clients", "collegues"],
     actions: ["cuisiner", "nettoyer", "organiser"],
     environnement: ["cuisine"],
     valeurs: ["contact_humain", "proximite"],
-    savoirFaire: ["Cuisine", "Hygiene", "Entretien"],
-    savoirEtre: ["Adaptabilite", "Esprit d'equipe", "Endurance", "Sens du service"],
-    savoirs: ["Hygiene alimentaire (HACCP)", "Preparation froide et chaude"]
+    savoirFaire: ["Cuisine", "Hygiène", "Entretien"],
+    savoirEtre: ["Adaptabilité", "Esprit d'équipe", "Endurance", "Sens du service"],
+    savoirs: ["Hygiène alimentaire (HACCP)", "Préparation froide et chaude"]
   },
   {
-    id: "plongeur", nom: "Plongeur en restauration", rome: "G1605", secteur: "Restauration",
-    activites: ["collegues", "seul"],
+    id: "plongeur", nom: "Plongeur en restauration", rome: "G1605", secteur: "Restauration",    activites: ["collegues", "seul"],
     actions: ["nettoyer", "organiser"],
     environnement: ["cuisine"],
     valeurs: ["proximite", "stabilite"],
-    savoirFaire: ["Hygiene", "Entretien"],
-    savoirEtre: ["Endurance", "Rigueur", "Esprit d'equipe"],
-    savoirs: ["Hygiene alimentaire (HACCP)", "Materiel de plonge"]
+    savoirFaire: ["Hygiène", "Entretien"],
+    savoirEtre: ["Endurance", "Rigueur", "Esprit d'équipe"],
+    savoirs: ["Hygiène alimentaire (HACCP)", "Matériel de plonge"]
   },
   {
-    id: "receptionniste", nom: "Receptionniste en hotellerie", rome: "G1703", secteur: "Hotellerie-tourisme",
-    activites: ["clients", "bureau", "ordinateur", "documents"],
+    id: "receptionniste", nom: "Réceptionniste en hôtellerie", rome: "G1703", secteur: "Hôtellerie-tourisme",    activites: ["clients", "bureau", "ordinateur", "documents"],
     actions: ["conseiller", "organiser"],
     environnement: ["bureau"],
     valeurs: ["contact_humain", "evolution"],
     savoirFaire: ["Bureautique", "Gestion administrative", "Conseil", "Planification"],
-    savoirEtre: ["Accueil", "Communication", "Sens du service", "Adaptabilite"],
-    savoirs: ["Anglais et langues etrangeres", "Logiciels de reservation", "Encaissement"]
+    savoirEtre: ["Accueil", "Communication", "Sens du service", "Adaptabilité"],
+    savoirs: ["Anglais et langues étrangères", "Logiciels de réservation", "Encaissement"]
   },
   {
-    id: "employe_etage", nom: "Employe d'etage en hotellerie", rome: "G1501", secteur: "Hotellerie-tourisme",
-    activites: ["seul", "collegues"],
+    id: "employe_etage", nom: "Employé d'étage en hôtellerie", rome: "G1501", secteur: "Hôtellerie-tourisme",    activites: ["seul", "collegues"],
     actions: ["nettoyer", "organiser"],
     environnement: ["bureau"],
     valeurs: ["horaires_fixes", "proximite"],
-    savoirFaire: ["Hygiene", "Entretien"],
-    savoirEtre: ["Rigueur", "Autonomie", "Fiabilite"],
-    savoirs: ["Protocoles de nettoyage", "Presentation des chambres"]
+    savoirFaire: ["Hygiène", "Entretien"],
+    savoirEtre: ["Rigueur", "Autonomie", "Fiabilité"],
+    savoirs: ["Protocoles de nettoyage", "Présentation des chambres"]
   },
   {
-    id: "barman", nom: "Barman / Employe de cafe", rome: "G1801", secteur: "Hotellerie-restauration",
-    activites: ["clients", "collegues"],
+    id: "barman", nom: "Barman / Employé de café", rome: "G1801", secteur: "Hôtellerie-restauration",    activites: ["clients", "collegues"],
     actions: ["vendre", "conseiller", "cuisiner"],
     environnement: ["cuisine"],
     valeurs: ["contact_humain"],
-    savoirFaire: ["Cuisine", "Negociation"],
+    savoirFaire: ["Cuisine", "Négociation"],
     savoirEtre: ["Sens du service", "Communication", "Endurance", "Accueil"],
-    savoirs: ["Encaissement", "Regles d'hygiene", "Preparation des boissons"]
+    savoirs: ["Encaissement", "Règles d'hygiène", "Préparation des boissons"]
   },
   {
-    id: "accueil_touristique", nom: "Agent d'accueil touristique", rome: "G1101", secteur: "Tourisme",
-    activites: ["clients", "bureau", "exterieur", "ordinateur"],
+    id: "accueil_touristique", nom: "Agent d'accueil touristique", rome: "G1101", secteur: "Tourisme",    activites: ["clients", "bureau", "exterieur", "ordinateur"],
     actions: ["conseiller", "organiser"],
     environnement: ["bureau", "exterieur"],
     valeurs: ["contact_humain", "exterieur"],
     savoirFaire: ["Conseil", "Planification", "Bureautique"],
-    savoirEtre: ["Accueil", "Communication", "Adaptabilite", "Ecoute"],
-    savoirs: ["Patrimoine local", "Anglais et langues etrangeres"]
+    savoirEtre: ["Accueil", "Communication", "Adaptabilité", "Écoute"],
+    savoirs: ["Patrimoine local", "Anglais et langues étrangères"]
   },
   {
-    id: "ouvrier_chai", nom: "Ouvrier de chai / Agent de cave", rome: "A1413", secteur: "Viticulture",
-    activites: ["machines", "collegues", "exterieur"],
+    id: "ouvrier_chai", nom: "Ouvrier de chai / Agent de cave", rome: "A1413", secteur: "Viticulture",    activites: ["machines", "collegues", "exterieur"],
     actions: ["organiser", "nettoyer", "analyser"],
     environnement: ["usine", "exterieur"],
     valeurs: ["proximite", "stabilite"],
-    savoirFaire: ["Technique", "Hygiene", "Precision", "Travail manuel"],
-    savoirEtre: ["Rigueur", "Esprit d'equipe", "Endurance"],
-    savoirs: ["Vinification", "Hygiene alimentaire", "CACES"]
+    savoirFaire: ["Technique", "Hygiène", "Précision", "Travail manuel"],
+    savoirEtre: ["Rigueur", "Esprit d'équipe", "Endurance"],
+    savoirs: ["Vinification", "Hygiène alimentaire", "CACES"]
   },
   {
-    id: "ouvrier_horticole", nom: "Ouvrier horticole / Maraicher", rome: "A1414", secteur: "Agriculture",
-    activites: ["exterieur", "seul", "collegues", "outils"],
+    id: "ouvrier_horticole", nom: "Ouvrier horticole / Maraîcher", rome: "A1414", secteur: "Agriculture",    activites: ["exterieur", "seul", "collegues", "outils"],
     actions: ["creer", "nettoyer", "organiser"],
     environnement: ["exterieur", "espaces_verts"],
     valeurs: ["exterieur", "proximite"],
     savoirFaire: ["Travail manuel", "Entretien"],
     savoirEtre: ["Endurance", "Rigueur", "Autonomie"],
-    savoirs: ["Vegetaux et cycles de culture", "Techniques de plantation"]
+    savoirs: ["Végétaux et cycles de culture", "Techniques de plantation"]
   },
   {
-    id: "conducteur_engins_agricoles", nom: "Conducteur d'engins agricoles", rome: "A1101", secteur: "Agriculture",
-    activites: ["machines", "exterieur", "seul", "vehicules"],
+    id: "conducteur_engins_agricoles", nom: "Conducteur d'engins agricoles", rome: "A1101", secteur: "Agriculture",    activites: ["machines", "exterieur", "seul", "vehicules"],
     actions: ["transporter", "reparer"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "autonomie"],
     savoirFaire: ["Conduite", "Maintenance", "Travail manuel"],
-    savoirEtre: ["Autonomie", "Rigueur", "Adaptabilite"],
-    savoirs: ["Materiel agricole", "Regles de securite"]
+    savoirEtre: ["Autonomie", "Rigueur", "Adaptabilité"],
+    savoirs: ["Matériel agricole", "Règles de sécurité"]
   },
   {
-    id: "operateur_agroalimentaire", nom: "Operateur de production agroalimentaire", rome: "H2102", secteur: "Agroalimentaire",
-    activites: ["machines", "collegues"],
+    id: "operateur_agroalimentaire", nom: "Opérateur de production agroalimentaire", rome: "H2102", secteur: "Agroalimentaire",    activites: ["machines", "collegues"],
     actions: ["cuisiner", "organiser", "analyser"],
     environnement: ["usine"],
     valeurs: ["stabilite", "horaires_fixes"],
-    savoirFaire: ["Technique", "Hygiene", "Precision"],
-    savoirEtre: ["Rigueur", "Esprit d'equipe", "Respect des normes"],
-    savoirs: ["Hygiene alimentaire (HACCP)", "Procedures qualite"]
+    savoirFaire: ["Technique", "Hygiène", "Précision"],
+    savoirEtre: ["Rigueur", "Esprit d'équipe", "Respect des normes"],
+    savoirs: ["Hygiène alimentaire (HACCP)", "Procédures qualité"]
   },
   {
-    id: "operateur_decoupe", nom: "Operateur en transformation des viandes / conserverie", rome: "H2101", secteur: "Agroalimentaire",
-    activites: ["machines", "collegues"],
+    id: "operateur_decoupe", nom: "Opérateur en transformation des viandes / conserverie", rome: "H2101", secteur: "Agroalimentaire",    activites: ["machines", "collegues"],
     actions: ["cuisiner", "analyser"],
     environnement: ["usine"],
     valeurs: ["stabilite", "salaire"],
-    savoirFaire: ["Precision", "Hygiene", "Travail manuel", "Technique"],
+    savoirFaire: ["Précision", "Hygiène", "Travail manuel", "Technique"],
     savoirEtre: ["Rigueur", "Endurance", "Respect des normes"],
-    savoirs: ["Decoupe", "Chaine du froid", "Tracabilite"]
+    savoirs: ["Découpe", "Chaîne du froid", "Traçabilité"]
   },
   {
-    id: "operateur_chimie", nom: "Operateur de production chimique", rome: "H2301", secteur: "Industrie chimique",
-    activites: ["machines", "collegues"],
+    id: "operateur_chimie", nom: "Opérateur de production chimique", rome: "H2301", secteur: "Industrie chimique",    activites: ["machines", "collegues"],
     actions: ["analyser", "organiser"],
     environnement: ["usine"],
     valeurs: ["salaire", "stabilite", "evolution"],
-    savoirFaire: ["Technique", "Precision", "Analyse de donnees"],
-    savoirEtre: ["Rigueur", "Securite", "Respect des normes"],
-    savoirs: ["Procedes chimiques", "Regles de securite", "CACES"]
+    savoirFaire: ["Technique", "Précision", "Analyse de données"],
+    savoirEtre: ["Rigueur", "Sécurité", "Respect des normes"],
+    savoirs: ["Procédés chimiques", "Règles de sécurité", "CACES"]
   },
   {
-    id: "soudeur", nom: "Soudeur", rome: "H2913", secteur: "Industrie",
-    activites: ["machines", "seul"],
+    id: "soudeur", nom: "Soudeur", rome: "H2913", secteur: "Industrie",    activites: ["machines", "seul"],
     actions: ["construire", "reparer"],
     environnement: ["usine", "exterieur"],
     valeurs: ["salaire", "stabilite"],
-    savoirFaire: ["Technique", "Precision", "Travail manuel", "Lecture de plans"],
+    savoirFaire: ["Technique", "Précision", "Travail manuel", "Lecture de plans"],
     savoirEtre: ["Rigueur", "Autonomie"],
-    savoirs: ["Procedes de soudage", "Lecture de plans", "Regles de securite"]
+    savoirs: ["Procédés de soudage", "Lecture de plans", "Règles de sécurité"]
   },
   {
-    id: "usineur", nom: "Operateur d'usinage (commande numerique)", rome: "H2903", secteur: "Industrie",
-    activites: ["machines", "seul"],
+    id: "usineur", nom: "Opérateur d'usinage (commande numérique)", rome: "H2903", secteur: "Industrie",    activites: ["machines", "seul"],
     actions: ["construire", "analyser"],
     environnement: ["usine"],
     valeurs: ["salaire", "evolution"],
-    savoirFaire: ["Technique", "Precision", "Lecture de plans"],
+    savoirFaire: ["Technique", "Précision", "Lecture de plans"],
     savoirEtre: ["Rigueur", "Autonomie", "Raisonnement logique"],
-    savoirs: ["Machines a commande numerique", "Metrologie"]
+    savoirs: ["Machines à commande numérique", "Métrologie"]
   },
   {
-    id: "ash", nom: "Agent de service hospitalier (ASH)", rome: "J1301", secteur: "Sante",
-    activites: ["personnes_agees", "collegues", "seul"],
+    id: "ash", nom: "Agent de service hospitalier (ASH)", rome: "J1301", secteur: "Santé",    activites: ["personnes_agees", "collegues", "seul"],
     actions: ["nettoyer", "organiser"],
     environnement: ["sante"],
     valeurs: ["stabilite", "contact_humain"],
-    savoirFaire: ["Hygiene", "Entretien"],
-    savoirEtre: ["Rigueur", "Bienveillance", "Esprit d'equipe"],
-    savoirs: ["Hygiene hospitaliere", "Protocoles de bionettoyage"]
+    savoirFaire: ["Hygiène", "Entretien"],
+    savoirEtre: ["Rigueur", "Bienveillance", "Esprit d'équipe"],
+    savoirs: ["Hygiène hospitalière", "Protocoles de bionettoyage"]
   },
   {
-    id: "aes", nom: "Accompagnant educatif et social (AES)", rome: "K1301", secteur: "Medico-social",
-    activites: ["personnes_agees", "collegues"],
+    id: "aes", nom: "Accompagnant éducatif et social (AES)", rome: "K1301", secteur: "Médico-social",    activites: ["personnes_agees", "collegues"],
     actions: ["soigner", "former"],
     environnement: ["sante", "domicile"],
     valeurs: ["contact_humain", "stabilite"],
     savoirFaire: ["Soins", "Transmission"],
-    savoirEtre: ["Empathie", "Aide a la personne", "Patience", "Bienveillance", "Ecoute"],
+    savoirEtre: ["Empathie", "Aide à la personne", "Patience", "Bienveillance", "Écoute"],
     savoirs: ["Connaissance du handicap", "Gestes de premiers secours"]
   },
   {
-    id: "menage_domicile", nom: "Employe de menage a domicile", rome: "K1304", secteur: "Services a la personne",
-    activites: ["seul"],
+    id: "menage_domicile", nom: "Employé de ménage à domicile", rome: "K1304", secteur: "Services à la personne",    activites: ["seul"],
     actions: ["nettoyer", "organiser"],
     environnement: ["domicile"],
     valeurs: ["proximite", "autonomie", "horaires_fixes"],
-    savoirFaire: ["Entretien", "Hygiene", "Cuisine"],
-    savoirEtre: ["Autonomie", "Fiabilite", "Rigueur"],
+    savoirFaire: ["Entretien", "Hygiène", "Cuisine"],
+    savoirEtre: ["Autonomie", "Fiabilité", "Rigueur"],
     savoirs: ["Produits d'entretien", "Repassage"]
   },
   {
-    id: "secretaire_medicale", nom: "Secretaire medicale", rome: "M1609", secteur: "Sante",
-    activites: ["bureau", "clients", "ordinateur", "documents"],
+    id: "secretaire_medicale", nom: "Secrétaire médicale", rome: "M1609", secteur: "Santé",    activites: ["bureau", "clients", "ordinateur", "documents"],
     actions: ["organiser", "conseiller"],
     environnement: ["sante", "bureau"],
     valeurs: ["stabilite", "horaires_fixes"],
-    savoirFaire: ["Bureautique", "Gestion administrative", "Redaction", "Planification"],
-    savoirEtre: ["Accueil", "Communication", "Ecoute", "Organisation"],
-    savoirs: ["Terminologie medicale", "Logiciels de gestion de cabinet"]
+    savoirFaire: ["Bureautique", "Gestion administrative", "Rédaction", "Planification"],
+    savoirEtre: ["Accueil", "Communication", "Écoute", "Organisation"],
+    savoirs: ["Terminologie médicale", "Logiciels de gestion de cabinet"]
   },
   {
-    id: "ambulancier", nom: "Ambulancier / Auxiliaire ambulancier", rome: "J1305", secteur: "Sante",
-    activites: ["deplacement", "personnes_agees", "collegues", "vehicules"],
+    id: "ambulancier", nom: "Ambulancier / Auxiliaire ambulancier", rome: "J1305", secteur: "Santé",    activites: ["deplacement", "personnes_agees", "collegues", "vehicules"],
     actions: ["transporter", "soigner"],
     environnement: ["route", "sante"],
     valeurs: ["contact_humain", "autonomie"],
     savoirFaire: ["Conduite", "Soins"],
-    savoirEtre: ["Empathie", "Securite", "Sens du service"],
-    savoirs: ["Gestes d'urgence", "Code de la route", "Diplome d'Etat d'ambulancier"]
+    savoirEtre: ["Empathie", "Sécurité", "Sens du service"],
+    savoirs: ["Gestes d'urgence", "Code de la route", "Diplôme d'État d'ambulancier"]
   },
   {
-    id: "hote_caisse", nom: "Hote de caisse", rome: "D1505", secteur: "Commerce",
-    activites: ["clients", "magasin", "marchandises"],
+    id: "hote_caisse", nom: "Hôte de caisse", rome: "D1505", secteur: "Commerce",    activites: ["clients", "magasin", "marchandises"],
     actions: ["vendre", "organiser"],
     environnement: ["magasin"],
     valeurs: ["contact_humain", "horaires_fixes", "proximite"],
@@ -533,144 +482,130 @@ const baseMetiers = [
     savoirs: ["Encaissement", "Rendu de monnaie"]
   },
   {
-    id: "vendeur_alimentation", nom: "Vendeur en alimentation", rome: "D1106", secteur: "Commerce alimentaire",
-    activites: ["clients", "magasin", "marchandises"],
+    id: "vendeur_alimentation", nom: "Vendeur en alimentation", rome: "D1106", secteur: "Commerce alimentaire",    activites: ["clients", "magasin", "marchandises"],
     actions: ["vendre", "conseiller"],
     environnement: ["magasin"],
     valeurs: ["contact_humain", "proximite"],
-    savoirFaire: ["Conseil", "Hygiene"],
+    savoirFaire: ["Conseil", "Hygiène"],
     savoirEtre: ["Accueil", "Sens du service", "Communication"],
-    savoirs: ["Hygiene alimentaire", "Encaissement", "Produits du terroir"]
+    savoirs: ["Hygiène alimentaire", "Encaissement", "Produits du terroir"]
   },
   {
-    id: "boulanger", nom: "Boulanger", rome: "D1102", secteur: "Artisanat alimentaire",
-    activites: ["seul", "machines"],
+    id: "boulanger", nom: "Boulanger", rome: "D1102", secteur: "Artisanat alimentaire",    activites: ["seul", "machines"],
     actions: ["cuisiner", "creer"],
     environnement: ["cuisine", "magasin"],
     valeurs: ["autonomie", "proximite"],
-    savoirFaire: ["Cuisine", "Precision", "Travail manuel"],
-    savoirEtre: ["Rigueur", "Creativite", "Endurance"],
-    savoirs: ["Panification", "Hygiene alimentaire", "Fermentation"]
+    savoirFaire: ["Cuisine", "Précision", "Travail manuel"],
+    savoirEtre: ["Rigueur", "Créativité", "Endurance"],
+    savoirs: ["Panification", "Hygiène alimentaire", "Fermentation"]
   },
   {
-    id: "boucher", nom: "Boucher", rome: "D1101", secteur: "Artisanat alimentaire",
-    activites: ["clients", "magasin", "machines"],
+    id: "boucher", nom: "Boucher", rome: "D1101", secteur: "Artisanat alimentaire",    activites: ["clients", "magasin", "machines"],
     actions: ["cuisiner", "vendre", "conseiller"],
     environnement: ["magasin"],
     valeurs: ["proximite", "salaire"],
-    savoirFaire: ["Precision", "Travail manuel", "Hygiene", "Conseil"],
+    savoirFaire: ["Précision", "Travail manuel", "Hygiène", "Conseil"],
     savoirEtre: ["Rigueur", "Relation client", "Sens du service"],
-    savoirs: ["Decoupe des viandes", "Chaine du froid", "Tracabilite"]
+    savoirs: ["Découpe des viandes", "Chaîne du froid", "Traçabilité"]
   },
   {
-    id: "coiffeur", nom: "Coiffeur", rome: "D1202", secteur: "Artisanat / Beaute",
-    activites: ["clients"],
+    id: "coiffeur", nom: "Coiffeur", rome: "D1202", secteur: "Artisanat / Beauté",    activites: ["clients"],
     actions: ["creer", "conseiller", "vendre"],
     environnement: ["magasin"],
     valeurs: ["contact_humain", "proximite"],
-    savoirFaire: ["Precision", "Conseil"],
-    savoirEtre: ["Creativite", "Relation client", "Ecoute", "Communication"],
-    savoirs: ["Techniques de coiffure", "Colorimetrie", "Hygiene"]
+    savoirFaire: ["Précision", "Conseil"],
+    savoirEtre: ["Créativité", "Relation client", "Écoute", "Communication"],
+    savoirs: ["Techniques de coiffure", "Colorimétrie", "Hygiène"]
   },
   {
-    id: "manoeuvre_btp", nom: "Manoeuvre / Aide de chantier", rome: "F1704", secteur: "BTP",
-    activites: ["exterieur", "collegues", "outils"],
+    id: "manoeuvre_btp", nom: "Manœuvre / Aide de chantier", rome: "F1704", secteur: "BTP",    activites: ["exterieur", "collegues", "outils"],
     actions: ["construire", "transporter", "nettoyer"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "salaire"],
-    savoirFaire: ["Travail manuel", "Batiment"],
-    savoirEtre: ["Endurance", "Esprit d'equipe", "Securite"],
-    savoirs: ["Securite sur chantier", "Outillage"]
+    savoirFaire: ["Travail manuel", "Bâtiment"],
+    savoirEtre: ["Endurance", "Esprit d'équipe", "Sécurité"],
+    savoirs: ["Sécurité sur chantier", "Outillage"]
   },
   {
-    id: "menuisier_poseur", nom: "Menuisier poseur", rome: "F1607", secteur: "BTP",
-    activites: ["seul", "deplacement", "clients", "outils"],
+    id: "menuisier_poseur", nom: "Menuisier poseur", rome: "F1607", secteur: "BTP",    activites: ["seul", "deplacement", "clients", "outils"],
     actions: ["construire", "reparer"],
     environnement: ["domicile", "exterieur"],
     valeurs: ["autonomie", "proximite"],
-    savoirFaire: ["Travail manuel", "Precision", "Lecture de plans", "Batiment"],
+    savoirFaire: ["Travail manuel", "Précision", "Lecture de plans", "Bâtiment"],
     savoirEtre: ["Rigueur", "Autonomie", "Sens du service"],
     savoirs: ["Menuiseries et fermetures", "Prise de mesures"]
   },
   {
-    id: "plaquiste", nom: "Plaquiste", rome: "F1604", secteur: "BTP",
-    activites: ["seul", "collegues", "outils"],
+    id: "plaquiste", nom: "Plaquiste", rome: "F1604", secteur: "BTP",    activites: ["seul", "collegues", "outils"],
     actions: ["construire"],
     environnement: ["exterieur", "domicile"],
     valeurs: ["autonomie", "salaire"],
-    savoirFaire: ["Batiment", "Travail manuel", "Precision", "Lecture de plans"],
+    savoirFaire: ["Bâtiment", "Travail manuel", "Précision", "Lecture de plans"],
     savoirEtre: ["Rigueur", "Autonomie"],
-    savoirs: ["Isolation", "Materiaux de construction seche"]
+    savoirs: ["Isolation", "Matériaux de construction sèche"]
   },
   {
-    id: "couvreur", nom: "Couvreur", rome: "F1610", secteur: "BTP",
-    activites: ["exterieur", "collegues", "outils"],
+    id: "couvreur", nom: "Couvreur", rome: "F1610", secteur: "BTP",    activites: ["exterieur", "collegues", "outils"],
     actions: ["construire", "reparer"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "salaire"],
-    savoirFaire: ["Batiment", "Travail manuel", "Lecture de plans"],
-    savoirEtre: ["Endurance", "Securite", "Rigueur"],
-    savoirs: ["Materiaux de couverture", "Travail en hauteur", "Zinguerie"]
+    savoirFaire: ["Bâtiment", "Travail manuel", "Lecture de plans"],
+    savoirEtre: ["Endurance", "Sécurité", "Rigueur"],
+    savoirs: ["Matériaux de couverture", "Travail en hauteur", "Zinguerie"]
   },
   {
-    id: "conducteur_engins_chantier", nom: "Conducteur d'engins de chantier", rome: "F1302", secteur: "BTP",
-    activites: ["machines", "exterieur", "vehicules"],
+    id: "conducteur_engins_chantier", nom: "Conducteur d'engins de chantier", rome: "F1302", secteur: "BTP",    activites: ["machines", "exterieur", "vehicules"],
     actions: ["construire", "transporter"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "salaire"],
-    savoirFaire: ["Conduite", "Technique", "Precision"],
-    savoirEtre: ["Securite", "Rigueur", "Autonomie"],
-    savoirs: ["CACES engins de chantier", "Lecture de plans", "Securite sur chantier"]
+    savoirFaire: ["Conduite", "Technique", "Précision"],
+    savoirEtre: ["Sécurité", "Rigueur", "Autonomie"],
+    savoirs: ["CACES engins de chantier", "Lecture de plans", "Sécurité sur chantier"]
   },
   {
-    id: "agent_maintenance_batiment", nom: "Agent de maintenance des batiments", rome: "I1203", secteur: "Maintenance",
-    activites: ["seul", "deplacement", "machines", "outils"],
+    id: "agent_maintenance_batiment", nom: "Agent de maintenance des bâtiments", rome: "I1203", secteur: "Maintenance",    activites: ["seul", "deplacement", "machines", "outils"],
     actions: ["reparer", "construire", "organiser"],
     environnement: ["bureau", "domicile"],
     valeurs: ["autonomie", "stabilite"],
-    savoirFaire: ["Reparation", "Maintenance", "Diagnostic", "Travail manuel", "Batiment"],
-    savoirEtre: ["Autonomie", "Adaptabilite", "Sens du service"],
-    savoirs: ["Electricite de base", "Plomberie de base", "Regles de securite"]
+    savoirFaire: ["Réparation", "Maintenance", "Diagnostic", "Travail manuel", "Bâtiment"],
+    savoirEtre: ["Autonomie", "Adaptabilité", "Sens du service"],
+    savoirs: ["Électricité de base", "Plomberie de base", "Règles de sécurité"]
   },
   {
-    id: "carrossier", nom: "Carrossier-peintre automobile", rome: "I1606", secteur: "Automobile",
-    activites: ["machines", "seul", "vehicules", "outils"],
+    id: "carrossier", nom: "Carrossier-peintre automobile", rome: "I1606", secteur: "Automobile",    activites: ["machines", "seul", "vehicules", "outils"],
     actions: ["reparer", "creer"],
     environnement: ["usine"],
     valeurs: ["stabilite", "salaire"],
-    savoirFaire: ["Reparation", "Precision", "Travail manuel", "Diagnostic"],
-    savoirEtre: ["Rigueur", "Creativite"],
-    savoirs: ["Peinture automobile", "Materiaux composites"]
+    savoirFaire: ["Réparation", "Précision", "Travail manuel", "Diagnostic"],
+    savoirEtre: ["Rigueur", "Créativité"],
+    savoirs: ["Peinture automobile", "Matériaux composites"]
   },
   {
-    id: "conducteur_bus", nom: "Conducteur de transport en commun", rome: "N4103", secteur: "Transport",
-    activites: ["clients", "deplacement", "seul", "vehicules"],
+    id: "conducteur_bus", nom: "Conducteur de transport en commun", rome: "N4103", secteur: "Transport",    activites: ["clients", "deplacement", "seul", "vehicules"],
     actions: ["transporter"],
     environnement: ["route"],
     valeurs: ["stabilite", "horaires_fixes", "contact_humain"],
     savoirFaire: ["Conduite"],
-    savoirEtre: ["Accueil", "Patience", "Securite", "Fiabilite"],
-    savoirs: ["Permis D", "Reglementation du transport de personnes"]
+    savoirEtre: ["Accueil", "Patience", "Sécurité", "Fiabilité"],
+    savoirs: ["Permis D", "Réglementation du transport de personnes"]
   },
   {
-    id: "manutentionnaire", nom: "Manutentionnaire / Agent de quai", rome: "N1105", secteur: "Logistique",
-    activites: ["collegues", "seul", "marchandises"],
+    id: "manutentionnaire", nom: "Manutentionnaire / Agent de quai", rome: "N1105", secteur: "Logistique",    activites: ["collegues", "seul", "marchandises"],
     actions: ["transporter", "organiser"],
     environnement: ["usine"],
     valeurs: ["salaire", "stabilite"],
     savoirFaire: ["Logistique", "Travail manuel"],
-    savoirEtre: ["Endurance", "Esprit d'equipe", "Rigueur"],
-    savoirs: ["Gestes et postures", "Regles de securite"]
+    savoirEtre: ["Endurance", "Esprit d'équipe", "Rigueur"],
+    savoirs: ["Gestes et postures", "Règles de sécurité"]
   },
   {
-    id: "agent_proprete_urbaine", nom: "Agent de proprete urbaine / Ripeur", rome: "K2303", secteur: "Environnement",
-    activites: ["exterieur", "collegues"],
+    id: "agent_proprete_urbaine", nom: "Agent de propreté urbaine / Ripeur", rome: "K2303", secteur: "Environnement",    activites: ["exterieur", "collegues"],
     actions: ["nettoyer", "transporter"],
     environnement: ["exterieur"],
     valeurs: ["exterieur", "stabilite", "horaires_fixes"],
     savoirFaire: ["Entretien", "Conduite"],
-    savoirEtre: ["Endurance", "Esprit d'equipe", "Fiabilite"],
-    savoirs: ["Tri des dechets", "Securite sur la voie publique"]
+    savoirEtre: ["Endurance", "Esprit d'équipe", "Fiabilité"],
+    savoirs: ["Tri des déchets", "Sécurité sur la voie publique"]
   }
 ];
 
@@ -800,13 +735,13 @@ function libelleActivite(id) {
     clients: "avec des clients",
     machines: "avec des machines",
     enfants: "avec des enfants",
-    personnes_agees: "avec des personnes agees",
-    collegues: "en equipe",
-    seul: "de facon autonome",
-    exterieur: "en exterieur",
+    personnes_agees: "avec des personnes âgées",
+    collegues: "en équipe",
+    seul: "de façon autonome",
+    exterieur: "en extérieur",
     magasin: "en magasin",
     bureau: "en bureau",
-    deplacement: "en deplacement"
+    deplacement: "en déplacement"
   };
   return libelles[id] || normaliserTexte(id);
 }
@@ -872,8 +807,8 @@ function couleurBarre(score) {
 function genererHTMLMetiers(metiers) {
   if (!metiers || metiers.length === 0) {
     return '<div class="alert alert-light border">' +
-      "Aucun metier ne ressort pour le moment. " +
-      "Completez davantage de choix pour affiner les resultats." +
+      "Aucun métier ne ressort pour le moment. " +
+      "Complétez davantage de choix pour affiner les résultats." +
       "</div>";
   }
 
@@ -891,20 +826,20 @@ function genererHTMLMetiers(metiers) {
             '<h5 class="card-title mb-0">' + metier.nom + "</h5>" +
             '<a href="' + lienFicheROME(metier) + '" target="_blank" rel="noopener" ' +
   'class="badge bg-light text-dark border text-decoration-none" ' +
-  'title="Voir la fiche metier sur France Travail">' +
+  'title="Voir la fiche métier sur France Travail">' +
   metier.secteur + " &middot; ROME " + metier.rome + " &#x1F517;" +
 "</a>" +
           "</div>" +
           (metier.sansScore
-            ? '<p class="small text-success mb-2">&#10004; Metier ouvert aux debutants, sans experience exigee.</p>'
+            ? '<p class="small text-success mb-2">&#10004; Métier ouvert aux débutants, sans expérience exigée.</p>'
             : '<div class="progress mb-2" style="height:18px;" role="progressbar" ' +
               'aria-valuenow="' + metier.score + '" aria-valuemin="0" aria-valuemax="100">' +
               '<div class="progress-bar ' + couleurBarre(metier.score) + '" ' +
                 'style="width:' + metier.score + '%;">' +
-                metier.score + " % de coherence" +
+                metier.score + " % de cohérence" +
               "</div></div>") +
           (raisonsHTML
-            ? '<p class="mb-1 fw-semibold small">Pourquoi ce metier ?</p>' +
+            ? '<p class="mb-1 fw-semibold small">Pourquoi ce métier ?</p>' +
               '<ul class="list-unstyled mb-0">' + raisonsHTML + "</ul>"
             : "") +
         "</div>" +
@@ -986,8 +921,8 @@ function ouvrirFenetreCompetence(competence) {
 
   var liste;
   if (metiers.length === 0) {
-    liste = '<p class="text-muted mb-0">Aucun metier de la base ne mentionne ' +
-      'directement cette competence pour le moment.</p>';
+    liste = '<p class="text-muted mb-0">Aucun métier de la base ne mentionne ' +
+      'directement cette compétence pour le moment.</p>';
   } else {
     liste = metiers.map(function (m) {
       return '<a href="' + lienFicheROME(m) + '" target="_blank" rel="noopener" ' +
@@ -998,7 +933,7 @@ function ouvrirFenetreCompetence(competence) {
         '</a>';
     }).join('');
     liste = '<div class="list-group">' + liste + '</div>' +
-      '<p class="small text-muted mt-2 mb-0">Cliquez sur un metier pour ouvrir sa fiche ' +
+      '<p class="small text-muted mt-2 mb-0">Cliquez sur un métier pour ouvrir sa fiche ' +
       'France Travail dans un nouvel onglet.</p>';
   }
 
@@ -1032,35 +967,18 @@ function ouvrirFenetreCompetence(competence) {
   });
 }
 
-// Detection automatique des clics sur les badges de competences,
-// quelle que soit la page (Revelation, Resultats...).
+// TACHE (retour utilisateur : fenetres superposees) : l'ancien detecteur
+// global de clic sur les badges de competence (ouvrirFenetreCompetence) a
+// ete retire -- il reagissait a n'importe quel badge vert/bleu/cyan sur
+// TOUTE la page, y compris ceux deja geres explicitement par le systeme
+// plus recent (app.js, data-competence-nom + ouvrirPanneauChoixMetiersAssocies()/
+// ouvrirDescriptifMetier()), ce qui ouvrait les 2 fenetres en meme temps sur
+// un seul clic. Le systeme app.js couvre deja tous les badges cliquables
+// existants de maniere explicite (attribut dedie, cablage precis) : plus
+// besoin d'une detection automatique globale en parallele. Le style
+// (curseur + survol) reste, ces badges restent visuellement cliquables.
 (function () {
   if (typeof document === 'undefined') { return; }
-
-  document.addEventListener('click', function (e) {
-    var badge = e.target.closest ? e.target.closest('span.badge') : null;
-    if (!badge) { return; }
-    // Seuls les badges de competences sont concernes :
-    // vert = savoir-etre, bleu = savoir-faire, cyan = savoirs.
-    var estCompetence = badge.classList.contains('bg-success') ||
-      badge.classList.contains('bg-primary') ||
-      badge.classList.contains('bg-info');
-    if (!estCompetence) { return; }
-    // Exclusions : suggestions de loisirs et autres badges speciaux
-    if (badge.classList.contains('suggestion-loisir')) { return; }
-    if (badge.closest('#fenetreCompetence')) { return; }
-    var texte = badge.textContent.trim();
-    if (texte.length < 2) { return; }
-    // TACHE (retour utilisateur : badges-compteurs a tort cliquables) :
-    // certains badges de la meme classe CSS (ex. "Competences deja
-    // identifiees [40]", "Ce qui fait votre valeur [3]") n'affichent
-    // QU'un chiffre, a titre purement informatif pour valoriser la
-    // personne -- jamais destines a etre cliques ni a ouvrir ce panneau.
-    // Une vraie competence n'est jamais un nombre pur : exclusion simple
-    // et fiable, sans avoir a marquer individuellement chaque badge-compteur.
-    if (/^\d+$/.test(texte)) { return; }
-    ouvrirFenetreCompetence(texte);
-  });
 
   // Curseur main + effet de survol sur les badges cliquables
   var style = document.createElement('style');
@@ -1119,8 +1037,8 @@ function rechercherMetiersDebutants(nombreMax) {
       for (var cle in metier) { copie[cle] = metier[cle]; }
       copie.sansScore = true;
       copie.raisons = [
-        "Recrute sans experience prealable",
-        "Formation assuree a la prise de poste"
+        "Recrute sans expérience préalable",
+        "Formation assurée à la prise de poste"
       ];
       resultats.push(copie);
     }
@@ -1406,7 +1324,7 @@ function ouvrirAssistantDepotCV(mode, options) {
       '</div>' +
       '<div id="contenuEtapeWizard">' + etape.contenuHTML + '</div>' +
       '<div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #E5E7EB;">' +
-      (numero > 1
+      (numero > 1 || (numero === 1 && typeof contexte.onRetourEtape1 === 'function')
         ? '<button type="button" id="btnRetourWizard" class="btn btn-outline-secondary">&#8592; Retour</button>'
         : '<span></span>') +
       (etape.boutonMilieuHTML || '<span></span>') +
@@ -1417,7 +1335,20 @@ function ouvrirAssistantDepotCV(mode, options) {
 
     document.getElementById('fermerAssistantDepotCVBtn').addEventListener('click', fermerAssistantDepotCV);
     var btnRetour = document.getElementById('btnRetourWizard');
-    if (btnRetour) { btnRetour.addEventListener('click', function () { allerEtapePrecedente(numero); }); }
+    if (btnRetour) {
+      btnRetour.addEventListener('click', function () {
+        // TACHE (retour utilisateur : bouton Retour vers le choix initial) :
+        // depuis l'etape 1, si ce wizard a ete ouvert via "Co-construire ma
+        // lettre" (ouvrirChoixPreparationAccueil), Retour y renvoie plutot
+        // que de fermer la fenetre sans rien faire.
+        if (numero === 1 && typeof contexte.onRetourEtape1 === 'function') {
+          fermerAssistantDepotCV();
+          contexte.onRetourEtape1();
+        } else {
+          allerEtapePrecedente(numero);
+        }
+      });
+    }
     if (!etape.masquerContinuer) {
       document.getElementById('btnContinuerWizard').addEventListener('click', function () {
         if (typeof etape.onContinuer === 'function') { etape.onContinuer(); }
@@ -1511,11 +1442,16 @@ function ouvrirAssistantDepotCV(mode, options) {
         '<button type="button" id="btnCommentFaireMasquage" class="btn btn-sm btn-outline-secondary">Comment faire ?</button>' +
         '<div class="d-flex align-items-center gap-2">' +
         '<button type="button" id="btnMasquageLocalInfo" class="btn btn-sm btn-outline-secondary">&#128274; Masquage local</button>' +
-        '<button type="button" id="btnAgrandirEditeur" title="Agrandir l\'aperçu" ' +
+        '<button type="button" id="btnAgrandirEditeur" title="Agrandir l’aperçu" ' +
         'style="font-weight:700;padding:0.5rem 1.1rem;background:#0d6efd;color:#FFFFFF;border:none;' +
         'border-radius:999px;box-shadow:0 2px 8px rgba(13,110,253,.4);">&#128470;&#65039; Agrandir</button>' +
         '</div>' +
-        '</div>';
+        '</div>' +
+        // TACHE (chantier "Videos d'accompagnement") : geste "masquage-image",
+        // sur sa propre ligne plutot que dans la barre d'outils deja dense
+        // ci-dessus -- reste discret, ne concurrence pas "Comment faire ?"
+        // ni le bouton Agrandir.
+        '<div class="text-center mt-2">' + htmlDeclencheurDemoVideo('masquage-image') + '</div>';
 
       var canvas = document.getElementById('canvasEditeurCV');
       var redessiner = initialiserCanvasEditeur(canvas, img, etat, 560);
@@ -1541,7 +1477,7 @@ function ouvrirAssistantDepotCV(mode, options) {
           'téléphone, photo...). Cliquez sur un rectangle existant pour le supprimer.');
       });
       document.getElementById('btnMasquageLocalInfo').addEventListener('click', function () {
-        ouvrirBulleAide(null, '&#128274; Rien n\'est envoyé nulle part avant votre validation à l\'étape suivante.');
+        ouvrirBulleAide(null, '&#128274; Rien n’est envoyé nulle part avant votre validation à l’étape suivante.');
       });
       document.getElementById('btnAgrandirEditeur').addEventListener('click', function () {
         ouvrirGrandEditeurMasquage(etat, img, function () { redessiner(); });
@@ -1607,12 +1543,16 @@ function ouvrirAssistantDepotCV(mode, options) {
   // ============================================================
 
   // TACHE (retour utilisateur : plus de copie d'image en double) : un seul
-  // parcours desormais -- le document anonymise est deja telecharge a
-  // l'Etape 2 (bouton Enregistrer), il ne reste qu'a le glisser dans la
-  // conversation avec l'assistant IA choisi.
+  // parcours desormais -- le document (masque si vous avez utilise l'outil
+  // prevu a cet effet) est deja telecharge a l'Etape 2 (bouton Enregistrer),
+  // il ne reste qu'a le glisser dans la conversation avec l'assistant IA
+  // choisi.
+  // TACHE (menage confidentialite) : "anonymise" retire du texte -- rien ne
+  // garantit que la personne a reellement dessine un rectangle de masquage,
+  // ce mot affirmait a tort un etat systematiquement atteint.
   var ETAPES_ASSISTANT_IA_IMAGE_SECURISEE_TELECHARGEMENT = [
-    'Le prompt d\'instructions est <strong>automatiquement copié</strong> dans votre presse-papiers.',
-    'Votre document anonymisé a déjà été téléchargé à l\'étape précédente.',
+    'Le prompt d’instructions est <strong>automatiquement copié</strong> dans votre presse-papiers.',
+    'Votre document a déjà été téléchargé à l’étape précédente.',
     'Une fois sur le site de {ASSISTANT}, cliquez dans la zone de conversation et faites <strong>Ctrl + V</strong> ' +
     'pour coller le prompt.',
     'Glissez ensuite le document téléchargé dans la conversation, puis appuyez sur <strong>Entrée</strong>.',
@@ -1670,10 +1610,31 @@ function ouvrirAssistantDepotCV(mode, options) {
         return '<li>' + etape.replace(/\{ASSISTANT\}/g, etat.assistantChoisi.nom) + '</li>';
       }).join('');
 
+      // TACHE (chantier "Videos d'accompagnement") : geste "import-reponse-ia"
+      // ou "export-ia-image" selon le mode -- ce dernier n'a pas encore de
+      // video fournie (voir DEMOS_VIDEO_ERIP, app.js) : htmlDeclencheurDemoVideo()
+      // ne genere alors rien, aucune condition supplementaire necessaire ici.
+      // TACHE (retour utilisateur : "la vidéo n'est pas la bonne, il faut
+      // mettre importer_IA.mp4") : cette etape couvre tout l'aller-retour
+      // (envoi ET recuperation de la reponse), et c'est bien importer_IA.mp4
+      // (deja utilisee ailleurs sous la cle 'import-reponse-ia') qui montre
+      // ce parcours complet -- pas 'export-ia-texte' (Exp_imp_ai.mp4), qui
+      // ne montre que l'envoi seul et a trouve sa place ailleurs (voir
+      // accordeonChoixIA, app.js).
+      var idDemoExport = etat.modeEditeur === 'image' ? 'export-ia-image' : 'import-reponse-ia';
+
       zoneExplication.innerHTML =
         '<p class="small">Vous allez être redirigé(e) vers le site externe de <strong>' + etat.assistantChoisi.nom +
         '</strong>. Voici exactement ce qui va se passer.</p>' +
-        '<ol class="small ps-3 mb-3">' + etapesHTML + '</ol>';
+        '<ol class="small ps-3 mb-3">' + etapesHTML + '</ol>' +
+        '<div class="text-center mb-2">' + htmlDeclencheurDemoVideo(idDemoExport) + '</div>' +
+        // TACHE (retour utilisateur : "il me manque une vidéo, l'astuce
+        // Astuce_img.mp4", parcours avec image/photo/scan non modifiable) :
+        // 3e appelant de htmlBlocAstuceImageRefusee() (les 2 autres sont a
+        // l'etape suivante, "Importer la reponse") -- manquait ici, a
+        // l'etape d'ENVOI, qui est pourtant le moment le plus utile pour
+        // prevenir d'un refus d'image cote assistant.
+        (etat.modeEditeur === 'image' ? htmlBlocAstuceImageRefusee() : '');
     }
 
     rendreChoixAssistant();
@@ -1730,7 +1691,9 @@ function ouvrirAssistantDepotCV(mode, options) {
       idBoutonEffacerRecoller: 'btnEffacerRecoller',
       idBoutonImporter: 'btnImporterWizard',
       onErreur: function (message) { messageImport.style.color = '#b91c1c'; messageImport.textContent = '⚠️ ' + message; },
-      onEffacer: function () { messageImport.textContent = ''; }
+      onEffacer: function () { messageImport.textContent = ''; },
+      onSucces: function () { messageImport.style.color = '#157347'; messageImport.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire. Vérifiez l’aperçu ci-dessous, puis cliquez sur "Importer".'; },
+      onCollerManuel: function () { messageImport.textContent = ''; }
     });
 
     document.getElementById('btnImporterWizard').addEventListener('click', function () {
@@ -1767,7 +1730,7 @@ function ouvrirAssistantDepotCV(mode, options) {
         contenuHTML:
           '<p class="text-muted small">' + ((contexte && contexte.intro) ||
           'Formats acceptés : PDF, Word (.docx), texte (.txt), ou une photo/scan de ' +
-          'votre CV (.jpg, .png...). Votre document est lu directement dans votre navigateur, il n\'est envoyé nulle part.') + '</p>' +
+          'votre CV (.jpg, .png...). Votre document est lu directement dans votre navigateur, il n’est envoyé nulle part.') + '</p>' +
           '<input type="file" id="fichierWizardCV" class="form-control mb-3" ' +
           'accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp,.heic">' +
           '<div id="zoneAnalyseEtape1"></div>' +
@@ -1790,15 +1753,19 @@ function ouvrirAssistantDepotCV(mode, options) {
           titre: 'Étape 2 · Vérifier le texte',
           contenuHTML:
             '<p class="text-muted small">Corrigez le texte si besoin, et masquez les informations personnelles ' +
-            'que vous ne souhaitez pas envoyer à l\'assistant IA.</p>' +
+            'que vous ne souhaitez pas envoyer à l’assistant IA.</p>' +
             // TACHE (retour utilisateur : message uniforme sur tous les
             // ecrans de verification/import de document) : meme message,
             // meme icone, que sur "Vérifier vos documents" (Preparer un
             // entretien depuis l'accueil).
             '<p class="small mb-2" style="color:#B45309;">&#128274; Il est fortement recommandé de masquer les ' +
-            'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l\'envoi ' +
-            'à l\'assistant IA.</p>' +
-            '<textarea class="form-control" id="texteEditeurCV" rows="16" style="font-size:0.85rem;"></textarea>',
+            'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l’envoi ' +
+            'à l’assistant IA.</p>' +
+            '<textarea class="form-control" id="texteEditeurCV" rows="16" style="font-size:0.85rem;"></textarea>' +
+            // TACHE (chantier "Videos d'accompagnement") : geste
+            // "masquage-texte" -- htmlDeclencheurDemoVideo() (app.js) ne
+            // genere rien si la video n'est pas disponible dans la table.
+            '<div class="text-center mt-2">' + htmlDeclencheurDemoVideo('masquage-texte') + '</div>',
           peutContinuer: true,
           libelleContinuer: 'Enregistrer',
           onContinuer: function () {
@@ -1827,8 +1794,8 @@ function ouvrirAssistantDepotCV(mode, options) {
           // meme icone, que sur "Vérifier vos documents" (Preparer un
           // entretien depuis l'accueil).
           '<p class="small mb-2" style="color:#B45309;">&#128274; Il est fortement recommandé de masquer les ' +
-          'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l\'envoi ' +
-          'à l\'assistant IA.</p>' +
+          'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l’envoi ' +
+          'à l’assistant IA.</p>' +
           '<button type="button" id="btnInfoEtape2" title="Informations" ' +
           'style="width:28px;height:28px;border-radius:50%;background:#0d6efd;color:#fff;border:none;' +
           'font-weight:700;font-style:italic;font-family:Georgia,serif;margin-bottom:0.75rem;">i</button>' +
@@ -1837,8 +1804,8 @@ function ouvrirAssistantDepotCV(mode, options) {
           // produire ici, pas juste faire avancer le wizard) : message
           // d'incitation, mis a jour dynamiquement une fois enregistre.
           '<p class="text-center small mt-3 mb-0" id="messageEnregistrerEtape2" style="color:#B45309;">' +
-          '&#128161; Pensez à enregistrer votre document anonymisé : c\'est indispensable pour l\'envoyer à ' +
-          'l\'assistant IA à l\'étape suivante.</p>',
+          '&#128161; Pensez à enregistrer votre document (après avoir masqué les informations sensibles si besoin) : ' +
+          'c’est indispensable pour l’envoyer à l’assistant IA à l’étape suivante.</p>',
         // TACHE : Continuer reste bloque tant que le document n'a pas ete
         // reellement enregistre (etat.imageEditee sert de temoin, deja
         // present si on revient sur cette etape apres un aller-retour).
@@ -1882,7 +1849,7 @@ function ouvrirAssistantDepotCV(mode, options) {
             }).catch(function () {
               btnMilieu.disabled = false;
               btnMilieu.textContent = '&#128190; Enregistrer';
-              alert('Une erreur est survenue lors de l\'enregistrement du document. Réessayez.');
+              alert('Une erreur est survenue lors de l’enregistrement du document. Réessayez.');
             });
           });
         },
@@ -1890,7 +1857,7 @@ function ouvrirAssistantDepotCV(mode, options) {
           cablerEtape2();
           document.getElementById('btnInfoEtape2').addEventListener('click', function () {
             ouvrirBulleAide(null, 'Faites pivoter le document si besoin, et masquez les informations ' +
-              'personnelles que vous ne souhaitez pas envoyer à l\'assistant IA.');
+              'personnelles que vous ne souhaitez pas envoyer à l’assistant IA.');
           });
         }
       };
@@ -1908,7 +1875,7 @@ function ouvrirAssistantDepotCV(mode, options) {
         // directement -- sans redeclencher la copie du prompt ni
         // rouvrir un nouvel onglet vers l'assistant.
         boutonMilieuHTML: etat.etape4DejaVisitee
-          ? '<button type="button" id="btnDejaVuAssistant" class="btn btn-outline-primary">J\'ai déjà ma réponse &#8594;</button>'
+          ? '<button type="button" id="btnDejaVuAssistant" class="btn btn-outline-primary">J’ai déjà ma réponse &#8594;</button>'
           : '',
         onCablerBoutonMilieu: function () {
           var btn = document.getElementById('btnDejaVuAssistant');
@@ -1920,7 +1887,7 @@ function ouvrirAssistantDepotCV(mode, options) {
     return {
       titre: 'Étape 4 · Importer la réponse',
       contenuHTML:
-        '<p class="small text-muted">Retournez sur la conversation avec l\'assistant IA, cliquez sur son bouton ' +
+        '<p class="small text-muted">Retournez sur la conversation avec l’assistant IA, cliquez sur son bouton ' +
         '<strong>"Copier"</strong> juste sous sa réponse, puis revenez ici.</p>' +
         // TACHE (retour utilisateur : coller en un clic, generalise) :
         // reutilise le composant partage (app.js), voir son commentaire
@@ -1931,7 +1898,11 @@ function ouvrirAssistantDepotCV(mode, options) {
           '<button type="button" class="btn btn-primary btn-sm" id="btnImporterWizard">Importer</button>' +
           '<button type="button" class="btn btn-outline-secondary btn-sm" id="btnEffacerRecoller">Effacer et recoller</button>' +
           '</div>') +
-        '<div id="messageImportWizard" class="mt-2 small"></div>',
+        '<div id="messageImportWizard" class="mt-2 small"></div>' +
+        // TACHE (chantier "Videos d'accompagnement") : bloc Astuce, affiche
+        // uniquement si le document depose etait une image/PDF -- sans
+        // objet en mode texte.
+        (etat.modeEditeur === 'image' ? htmlBlocAstuceImageRefusee() : ''),
       masquerContinuer: true,
       onAfficher: function () {
         // TACHE (retour utilisateur : eviter de rouvrir l'assistant pour
@@ -2134,22 +2105,21 @@ function initialiserCanvasEditeur(canvas, img, etatPartage, largeurMax, onRectan
 // TACHE (retour utilisateur : bulles d'aide) : composant generique reutilise
 // pour les 3 textes d'aide de l'etape 2 -- meme principe de fermeture que
 // la fenetre wizard elle-meme (clic sur le fond OU sur la croix).
+// TACHE (migration Design System - Phase 2, chantier "metiers.js", 1ere
+// migration) : devient une recette qui appelle la primitive
+// ouvrirFenetreERIP() (definie dans app.js, chargee et executee bien avant
+// tout clic utilisateur qui pourrait invoquer cette fonction -- aucun
+// probleme d'ordre de chargement entre les deux fichiers). Ne construit
+// plus son propre overlay, sa propre croix, ni sa propre logique de clic
+// exterieur. Contrat public STRICTEMENT inchange : meme signature
+// (titre, texteHTML), aucune valeur de retour avant comme apres.
+// Le titre optionnel (peut etre null) est normalise en chaine vide avant
+// d'etre transmis a la primitive, pour ne jamais afficher le mot "null".
 function ouvrirBulleAide(titre, texteHTML) {
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2200;padding:1rem;';
-  overlay.innerHTML =
-    '<div style="background:white;border-radius:1rem;max-width:420px;width:100%;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-    (titre ? '<h6 class="mb-0">' + titre + '</h6>' : '<span></span>') +
-    '<button type="button" class="btn btn-sm btn-outline-secondary" style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="mb-0" style="font-size:1.1rem;line-height:1.5;">' + texteHTML + '</p>' +
-    '</div>';
-  document.body.appendChild(overlay);
-  function fermer() { overlay.remove(); }
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermer(); } });
-  overlay.querySelector('button').addEventListener('click', fermer);
+  ouvrirFenetreERIP({
+    titre: titre || '',
+    contenuHTML: '<p class="mb-0" style="font-size:1.1rem;line-height:1.5;">' + texteHTML + '</p>'
+  });
 }
 
 // TACHE (retour utilisateur : bouton "agrandir") : grande vue de l'editeur,
@@ -2261,18 +2231,30 @@ function enregistrerDocumentsVerification(documents, callback) {
   documentsImage.forEach(function (doc, i) {
     var canvasFinal = construireCanvasDocumentSecurise(doc.imageChargee, doc.rotationDegres, doc.rectangles, doc.echelleAffichageEditeur);
     canvasFinal.toBlob(function (blob) {
-      if (blob) { telechargerDocumentSecurise(blob, (doc.cle || 'document') + '-anonymise.png'); }
+      if (blob) { telechargerDocumentSecurise(blob, (doc.cle || 'document') + '-verifie.png'); }
       if (i === documentsImage.length - 1 && typeof callback === 'function') { callback(); }
     }, 'image/png');
   });
   if (documentsImage.length === 0 && typeof callback === 'function') { callback(); }
 }
 
-function fermerVerificationEntretien() {
-  var f = document.getElementById('verificationEntretien');
-  if (f) { f.remove(); }
-}
-
+// TACHE (migration Design System, chantier "metiers.js", 8e et derniere
+// migration) : devient une recette qui appelle la primitive
+// ouvrirFenetreERIP() au premier affichage, puis
+// mettreAJourContenuFenetreERIP() a chaque navigation entre documents --
+// meme fenetre, contenu reecrit, exactement le motif qui a justifie cette
+// 3e fonction de la primitive (validee independamment au prealable, 48
+// verifications). fermerVerificationEntretien() est retiree (aucun
+// appelant externe, verifie avant suppression) : fermerFenetreERIP() migre
+// desormais ce role. Largeur 680px -> taille "large" (700px), harmonisation
+// habituelle.
+//
+// Simplification permise par la nouvelle capacite : la croix de fermeture
+// et le clic exterieur ne sont plus reconstruits ni recables a chaque
+// affichage (comme c'etait le cas avant) -- ils appartiennent a l'en-tete
+// et a l'overlay de la primitive, jamais touches par une mise a jour de
+// contenu (regle 6 du contrat de mettreAJourContenuFenetreERIP()).
+//
 // TACHE (Preparer un entretien, Etape 2) : verification/masquage pour 1 OU
 // 2 documents (CV + Lettre, selon ce qui a ete depose a l'Etape 1).
 // Reutilise integralement les briques deja hissees au niveau global
@@ -2280,7 +2262,6 @@ function fermerVerificationEntretien() {
 // aucune logique de masquage/rotation dupliquee, seulement la navigation
 // entre documents et l'assemblage final.
 function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
-  fermerVerificationEntretien();
 
   function construireListeDocuments() {
     var liste = [];
@@ -2312,13 +2293,7 @@ function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
   // fenetre grise vide, sans jamais reconstruire son contenu.
   var documents = Array.isArray(etatDocuments) ? etatDocuments : construireListeDocuments();
   var indexActif = 0;
-
-  var fenetre = document.createElement('div');
-  fenetre.id = 'verificationEntretien';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerVerificationEntretien(); } });
+  var premierAffichage = true;
 
   function tousVus() { return documents.every(function (d) { return d.vu; }); }
 
@@ -2371,32 +2346,31 @@ function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
         '</div>'
       : '<p class="fw-bold small mb-2">' + doc.titre + '</p>';
 
+    // TACHE (chantier "Videos d'accompagnement") : memes gestes
+    // "masquage-texte"/"masquage-image" que dans le wizard CV (cablerEtape2()) --
+    // ecran distinct, mais meme table DEMOS_VIDEO_ERIP, aucune duplication
+    // de video.
     var corpsHTML = (doc.mode === 'texte')
       ? '<textarea id="texteVerifDoc" class="form-control" rows="14" style="font-size:0.95rem;">' +
-        echapperAttribut(doc.texteEdite) + '</textarea>'
+        echapperAttribut(doc.texteEdite) + '</textarea>' +
+        '<div class="text-center mt-2">' + htmlDeclencheurDemoVideo('masquage-texte') + '</div>'
       : '<div class="d-flex justify-content-center flex-wrap gap-2 mb-2">' +
         '<button type="button" id="btnRotGaucheVerif" class="btn btn-sm btn-outline-secondary">&#8634; Pivoter à gauche</button>' +
         '<button type="button" id="btnRotDroiteVerif" class="btn btn-sm btn-outline-secondary">&#8635; Pivoter à droite</button>' +
-        '<button type="button" id="btnAgrandirVerif" title="Agrandir l\'aperçu" ' +
+        '<button type="button" id="btnAgrandirVerif" title="Agrandir l’aperçu" ' +
         'style="font-weight:700;padding:0.4rem 1rem;background:#0d6efd;color:#FFFFFF;border:none;' +
         'border-radius:999px;box-shadow:0 2px 8px rgba(13,110,253,.4);">&#128470;&#65039; Agrandir</button>' +
         '</div>' +
         '<canvas id="canvasVerifDoc" style="max-width:100%;border:1px solid #E5E7EB;border-radius:8px;cursor:crosshair;"></canvas>' +
-        '<p class="text-muted small mt-2 mb-0">Cliquez-glissez pour masquer une information. Cliquez sur un rectangle existant pour le supprimer.</p>';
+        '<p class="text-muted small mt-2 mb-0">Cliquez-glissez pour masquer une information. Cliquez sur un rectangle existant pour le supprimer.</p>' +
+        '<div class="text-center mt-2">' + htmlDeclencheurDemoVideo('masquage-image') + '</div>';
 
-    fenetre.innerHTML =
-      '<div style="background:white;border-radius:1.5rem;max-width:680px;width:100%;max-height:90vh;' +
-      'overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-      '<div class="d-flex justify-content-between align-items-center mb-3">' +
-      '<h5 class="mb-0">Vérifier vos documents</h5>' +
-      '<button type="button" id="fermerVerifEntretienBtn" class="btn btn-sm btn-outline-secondary" ' +
-      'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-      '</div>' +
+    var contenuComplet =
       // TACHE (retour utilisateur : inciter au masquage des donnees
       // sensibles) : message discret mais visible, icone cadenas.
       '<p class="small mb-3" style="color:#B45309;">&#128274; Il est fortement recommandé de masquer les ' +
-      'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l\'envoi à ' +
-      'l\'assistant IA.</p>' +
+      'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l’envoi à ' +
+      'l’assistant IA.</p>' +
       navigation +
       '<div id="corpsVerifDoc">' + corpsHTML + '</div>' +
       (documents.length > 1 && !tousVus()
@@ -2407,13 +2381,19 @@ function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
         ? '<button type="button" id="btnRetourVerif" class="btn btn-outline-secondary">&#8592; Retour</button>'
         : '<span></span>') +
       '<button type="button" id="btnEnregistrerVerif" class="btn btn-primary"' + (tousVus() ? '' : ' disabled') + '>Enregistrer</button>' +
-      '</div></div>';
+      '</div>';
 
-    document.getElementById('fermerVerifEntretienBtn').addEventListener('click', fermerVerificationEntretien);
+    if (premierAffichage) {
+      ouvrirFenetreERIP({ titre: 'Vérifier vos documents', taille: 'large', contenuHTML: contenuComplet });
+      premierAffichage = false;
+    } else {
+      mettreAJourContenuFenetreERIP({ titre: 'Vérifier vos documents', contenuHTML: contenuComplet });
+    }
+
     var btnRetour = document.getElementById('btnRetourVerif');
     if (btnRetour) {
       btnRetour.addEventListener('click', function () {
-        fermerVerificationEntretien();
+        fermerFenetreERIP();
         onRetour();
       });
     }
@@ -2438,7 +2418,7 @@ function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
       btn.disabled = true;
       btn.textContent = 'Enregistrement...';
       enregistrerDocumentsVerification(documents, function () {
-        fermerVerificationEntretien();
+        fermerFenetreERIP();
         if (typeof onTerminer === 'function') { onTerminer(documents); }
       });
     });
@@ -2447,49 +2427,46 @@ function ouvrirVerificationEntretien(etatDocuments, onTerminer, onRetour) {
   afficher();
 }
 
-function fermerChoixIAEntretien() {
-  var f = document.getElementById('choixIAEntretien');
-  if (f) { f.remove(); }
-}
-
-// TACHE (Preparer un entretien, Etape 4) : choix de l'assistant IA.
-// Reutilise ASSISTANTS_IA, stylePastilleInline(), texteProfil()/promptCache()
-// -- deja les MEMES fonctions que "Choisissez votre assistant IA" dans la
-// page Action (aucune logique de prompt dupliquee, le contenu du prompt
-// entretien reste identique quel que soit le chemin emprunte).
+// TACHE (migration Design System, chantier "metiers.js", 5e migration) :
+// devient une recette qui appelle la primitive ouvrirFenetreERIP() -- ecran
+// unique, aucun cycle, meme principe que la 1ere et la 2e migration (aller
+// simple, pas de second etat). fermerChoixIAEntretien() est retiree (aucun
+// appelant externe, verifie avant suppression) : fermerFenetreERIP() migre
+// desormais ce role. Largeur (520px), rayon et z-index deja identiques a
+// la primitive avant migration -- aucune harmonisation necessaire ici,
+// contrairement a la 4e migration.
+//
+// TACHE (Preparer un entretien, Etape 4) : choix de l'assistant IA. Cette
+// fonction ne reutilise, EN PROPRE, que ASSISTANTS_IA et stylePastilleInline()
+// (toutes deux app.js) -- texteProfil()/promptCache() interviennent plus
+// loin dans le parcours (demarrerEnvoiIAEntretien(), hors perimetre de
+// cette migration), pas ici : commentaire corrige a cette occasion, aucun
+// changement de comportement.
 function ouvrirChoixIAEntretien(onAssistantChoisi) {
-  fermerChoixIAEntretien();
-  var fenetre = document.createElement('div');
-  fenetre.id = 'choixIAEntretien';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerChoixIAEntretien(); } });
+  ouvrirFenetreERIP({
+    titre: '&#129302; Choisissez votre assistant IA',
+    contenuHTML:
+      '<p class="text-muted small">Le clic prépare et copie automatiquement votre demande, puis ouvre l’assistant ' +
+      'choisi dans un nouvel onglet. Vous n’aurez qu’à faire Ctrl+V, puis glisser le fichier téléchargé à l’étape ' +
+      'précédente dans la conversation.</p>' +
+      '<div class="d-flex flex-wrap gap-2 justify-content-center mt-2">' +
+      ASSISTANTS_IA.map(function (a) {
+        return '<button type="button" class="pastille-selection" data-assistant-id="' + a.id + '" style="' +
+          stylePastilleInline(false) + '">' + a.nom + '</button>';
+      }).join('') +
+      '</div>' +
+      // TACHE (chantier "Videos d'accompagnement") : geste "export-ia-texte" --
+      // ce raccourci (entretien-accueil) transmet toujours du texte, jamais
+      // d'image, voir demarrerEnvoiIAEntretien(). Preserve telle quelle par
+      // la migration.
+      '<div class="text-center mt-3">' + htmlDeclencheurDemoVideo('export-ia-texte') + '</div>'
+  });
 
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:520px;width:100%;padding:1.5rem;' +
-    'box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-    '<h5 class="mb-0">&#129302; Choisissez votre assistant IA</h5>' +
-    '<button type="button" id="fermerChoixIAEntretienBtn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="text-muted small">Le clic prépare et copie automatiquement votre demande, puis ouvre l\'assistant ' +
-    'choisi dans un nouvel onglet. Vous n\'aurez qu\'à faire Ctrl+V, puis glisser le fichier téléchargé à l\'étape ' +
-    'précédente dans la conversation.</p>' +
-    '<div class="d-flex flex-wrap gap-2 justify-content-center mt-2">' +
-    ASSISTANTS_IA.map(function (a) {
-      return '<button type="button" class="pastille-selection" data-assistant-id="' + a.id + '" style="' +
-        stylePastilleInline(false) + '">' + a.nom + '</button>';
-    }).join('') +
-    '</div></div>';
-
-  document.getElementById('fermerChoixIAEntretienBtn').addEventListener('click', fermerChoixIAEntretien);
-  fenetre.querySelectorAll('[data-assistant-id]').forEach(function (bouton) {
+  document.querySelectorAll('#fenetreERIP [data-assistant-id]').forEach(function (bouton) {
     bouton.addEventListener('click', function () {
       var assistant = ASSISTANTS_IA.filter(function (a) { return a.id === bouton.dataset.assistantId; })[0];
       if (!assistant) { return; }
-      fermerChoixIAEntretien();
+      fermerFenetreERIP();
       if (typeof onAssistantChoisi === 'function') { onAssistantChoisi(assistant); }
     });
   });
@@ -2513,13 +2490,19 @@ function ouvrirDepotLettreV1() {
   ouvrirAssistantDepotCV('pret', {
     onDocumentPrepare: function (documentPrepare) {
       ouvrirChoixAssistantLettreV1(documentPrepare);
-    }
+    },
+    onRetourEtape1: ouvrirChoixPreparationAccueil
   });
 }
 
+// TACHE (migration Design System - Phase 2, chantier "metiers.js", 2e
+// migration) : devient une recette qui appelle la primitive
+// ouvrirFenetreERIP(). Le selecteur des tuiles, auparavant scope par l'id
+// de la fenetre elle-meme (#choixPreparationAccueil, qui disparait avec la
+// migration), est desormais scope a l'element racine retourne par la
+// primitive -- meme principe que toutes les recettes deja migrees.
 function fermerChoixPreparationAccueil() {
-  var f = document.getElementById('choixPreparationAccueil');
-  if (f) { f.remove(); }
+  fermerFenetreERIP();
 }
 
 // TACHE (retour utilisateur : icone mallette unique, accueil) : remplace la
@@ -2530,14 +2513,6 @@ function fermerChoixPreparationAccueil() {
 // pouvoir les colorer en bleu). Ne duplique aucune logique : chaque option
 // appelle directement la fonction de parcours deja existante.
 function ouvrirChoixPreparationAccueil() {
-  fermerChoixPreparationAccueil();
-  var fenetre = document.createElement('div');
-  fenetre.id = 'choixPreparationAccueil';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerChoixPreparationAccueil(); } });
-
   function tuile(id, icone, label) {
     return '<button type="button" id="' + id + '" style="flex:1 1 150px;max-width:180px;' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;' +
@@ -2546,98 +2521,97 @@ function ouvrirChoixPreparationAccueil() {
       '<i class="bi ' + icone + '" style="font-size:2rem;"></i>' + label + '</button>';
   }
 
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:420px;width:100%;padding:1.5rem;' +
-    'box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-3">' +
-    '<h5 class="mb-0">Préparer ma candidature</h5>' +
-    '<button type="button" id="fermerChoixPreparationAccueilBtn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<div class="d-flex gap-3 justify-content-center flex-wrap">' +
-    tuile('btnChoixEntretienAccueil', 'bi-mic', 'Préparer un entretien') +
-    tuile('btnChoixLettreAccueil', 'bi-pen', 'Co-construire ma lettre') +
-    '</div></div>';
+  var overlay = ouvrirFenetreERIP({
+    titre: 'Préparer ma candidature',
+    contenuHTML:
+      '<div class="d-flex gap-3 justify-content-center flex-wrap">' +
+      tuile('btnChoixEntretienAccueil', 'bi-mic', 'Préparer un entretien') +
+      tuile('btnChoixLettreAccueil', 'bi-pen', 'Co-construire ma lettre') +
+      '</div>'
+  });
 
-  document.getElementById('fermerChoixPreparationAccueilBtn').addEventListener('click', fermerChoixPreparationAccueil);
-  document.querySelectorAll('#choixPreparationAccueil button[id^="btnChoix"]').forEach(function (bouton) {
+  overlay.querySelectorAll('button[id^="btnChoix"]').forEach(function (bouton) {
     bouton.addEventListener('mouseenter', function () { this.style.background = '#0d6efd'; this.style.color = '#fff'; });
     bouton.addEventListener('mouseleave', function () { this.style.background = '#eaf2ff'; this.style.color = '#0d6efd'; });
   });
   document.getElementById('btnChoixEntretienAccueil').addEventListener('click', function () {
-    fermerChoixPreparationAccueil();
+    fermerFenetreERIP();
     ouvrirParcoursEntretien();
   });
   document.getElementById('btnChoixLettreAccueil').addEventListener('click', function () {
-    fermerChoixPreparationAccueil();
+    fermerFenetreERIP();
     if (typeof ouvrirDepotLettreV1 === 'function') { ouvrirDepotLettreV1(); }
   });
 }
 
-function fermerChoixAssistantLettreV1() {
-  var f = document.getElementById('choixAssistantLettreV1');
-  if (f) { f.remove(); }
-}
-
+// TACHE (migration Design System, chantier "metiers.js", 7e migration) :
+// devient une recette qui appelle la primitive ouvrirFenetreERIP(), taille
+// "standard" (520px). fermerChoixAssistantLettreV1() est retiree (aucun
+// appelant externe, verifie avant suppression) : fermerFenetreERIP() migre
+// desormais ce role.
+//
+// DECISION D'ARCHITECTURE prise en amont, hors perimetre de cette seule
+// migration (point d'architecture dedie) : la largeur d'origine (560px) ne
+// correspond a aucun palier de la primitive (standard/520, large/700).
+// Plutot que d'ajouter une largeur personnalisee au contrat public de la
+// primitive pour un cas unique, un recensement empirique de TOUTES les
+// largeurs de fenetre ayant existe dans app.js et metiers.js a montre que
+// 560px est un cas isole (5 des 6 largeurs historiques se regroupent
+// naturellement autour de 480-520 ou 680-700 -- aucun besoin recurrent
+// d'une troisieme famille de largeur). Choix retenu : "standard" (520px,
+// ecart de 40px), qui rattache cette fenetre a son groupe naturel plutot
+// que de creer une exception. Rendu visuel (lisibilite, disposition des
+// elements sur cette largeur legerement reduite) NON suppose ici -- fait
+// partie du protocole de validation comportementale fourni a part.
 function ouvrirChoixAssistantLettreV1(documentPrepare) {
-  fermerChoixAssistantLettreV1();
-  var fenetre = document.createElement('div');
-  fenetre.id = 'choixAssistantLettreV1';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerChoixAssistantLettreV1(); } });
-
   var estTexte = documentPrepare && documentPrepare.type === 'texte';
   var estImage = documentPrepare && documentPrepare.type === 'image';
 
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;' +
-    'max-height:90vh;overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-    '<h5 class="mb-0">&#9997;&#65039; Co-construire votre lettre de motivation</h5>' +
-    '<button type="button" id="fermerChoixAssistantLettreV1Btn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="text-muted small">Cliquez sur un assistant ci-dessous : l\'application prépare et copie le prompt ' +
-    'pour vous, puis ouvre l\'assistant. Vous n\'avez rien à taper.</p>' +
-    (estTexte
-      ? '<div class="mb-3">' +
-        '<button type="button" id="btnTelechargerCvLettreV1" class="btn btn-outline-primary btn-sm">' +
-        '&#128229; Télécharger mon CV</button>' +
-        '<p class="small text-muted mt-1 mb-0">L\'assistant vous demandera votre CV pendant l\'échange : glissez ' +
-        'ce fichier téléchargé directement dans la conversation à ce moment-là.</p></div>'
-      : estImage
-        ? '<div class="mb-3 small" style="background:#F0F9FF;border-radius:8px;padding:0.6rem 0.8rem;">' +
-          '&#128206; Votre CV protégé a été téléchargé sur votre poste. L\'assistant vous le demandera pendant ' +
-          'l\'échange : glissez ce fichier directement dans la conversation à ce moment-là.</div>'
-        : '') +
-    '<div class="d-flex flex-wrap gap-2">' +
-    ASSISTANTS_IA.map(function (a) {
-      return '<button type="button" class="btn btn-primary" data-assistant-lettre-v1="' + a.id + '">' + a.nom + '</button>';
-    }).join('') +
-    '</div></div>';
+  ouvrirFenetreERIP({
+    titre: '&#9997;&#65039; Co-construire votre lettre de motivation',
+    contenuHTML:
+      '<p class="text-muted small">Cliquez sur un assistant ci-dessous : l’application prépare et copie le prompt ' +
+      'pour vous, puis ouvre l’assistant. Vous n’avez rien à taper.</p>' +
+      (estTexte
+        ? '<div class="mb-3">' +
+          '<button type="button" id="btnTelechargerCvLettreV1" class="btn btn-outline-primary btn-sm">' +
+          '&#128229; Télécharger mon CV</button>' +
+          '<p class="small text-muted mt-1 mb-0">L’assistant vous demandera votre CV pendant l’échange : glissez ' +
+          'ce fichier téléchargé directement dans la conversation à ce moment-là.</p></div>'
+        : estImage
+          ? '<div class="mb-3 small" style="background:#F0F9FF;border-radius:8px;padding:0.6rem 0.8rem;">' +
+            '&#128206; Votre CV protégé a été téléchargé sur votre poste. L’assistant vous le demandera pendant ' +
+            'l’échange : glissez ce fichier directement dans la conversation à ce moment-là.</div>'
+          : '') +
+      '<div class="d-flex flex-wrap gap-2">' +
+      ASSISTANTS_IA.map(function (a) {
+        return '<button type="button" class="btn btn-primary" data-assistant-lettre-v1="' + a.id + '">' + a.nom + '</button>';
+      }).join('') +
+      '</div>' +
+      // TACHE (chantier "Videos d'accompagnement") : point d'attention
+      // preserve tel quel -- ICI, les deux branches (texte ET image)
+      // utilisent le MEME geste reel : telecharger puis glisser un fichier
+      // dans la conversation. Le geste pertinent est donc "export-ia-image"
+      // (qui represente en realite "glisser un fichier telecharge", pas
+      // strictement une image) dans LES DEUX cas.
+      (estTexte || estImage
+        ? '<div class="text-center mt-3">' + htmlDeclencheurDemoVideo('export-ia-image') + '</div>'
+        : '')
+  });
 
-  document.getElementById('fermerChoixAssistantLettreV1Btn').addEventListener('click', fermerChoixAssistantLettreV1);
-
-  // TACHE (retour utilisateur : eviter les limites de longueur des
-  // assistants gratuits) : retour a un fichier telecharge + glisse, EXACTEMENT
-  // comme le mode image (meme fonction telechargerDocumentSecurise(), aucune
-  // logique dupliquee) -- plus de collage automatique du CV dans le prompt,
-  // qui pouvait faire depasser la limite de certains assistants gratuits.
   var btnTelechargerCv = document.getElementById('btnTelechargerCvLettreV1');
   if (btnTelechargerCv) {
     btnTelechargerCv.addEventListener('click', function () {
       var btn = this;
       var texteOriginal = btn.textContent;
       var blob = new Blob([(documentPrepare && documentPrepare.valeur) || ''], { type: 'text/plain;charset=utf-8' });
-      telechargerDocumentSecurise(blob, 'cv-anonymise.txt');
+      telechargerDocumentSecurise(blob, 'cv-verifie.txt');
       btn.textContent = '✅ Téléchargé';
       setTimeout(function () { btn.textContent = texteOriginal; }, 2000);
     });
   }
 
-  document.querySelectorAll('[data-assistant-lettre-v1]').forEach(function (bouton) {
+  document.querySelectorAll('#fenetreERIP [data-assistant-lettre-v1]').forEach(function (bouton) {
     bouton.addEventListener('click', function () {
       var assistant = ASSISTANTS_IA.filter(function (a) { return a.id === bouton.dataset.assistantLettreV1; })[0];
       if (!assistant) { return; }
@@ -2645,15 +2619,16 @@ function ouvrirChoixAssistantLettreV1(documentPrepare) {
         (typeof promptParDefaut === 'function' ? promptParDefaut('lettre-v1') : '');
       navigator.clipboard.writeText(promptTexte).catch(function () {});
       window.open(assistant.url, '_blank');
-      fermerChoixAssistantLettreV1();
-      ouvrirRecuperationLettreV1();
+      ouvrirRecuperationLettreV1(estImage);
     });
   });
 }
 
+// TACHE (migration Design System - Phase 2, chantier "metiers.js", 3e
+// migration) : devient une recette qui appelle la primitive
+// ouvrirFenetreERIP(). Contrat public strictement inchange.
 function fermerRecuperationLettreV1() {
-  var f = document.getElementById('recuperationLettreV1');
-  if (f) { f.remove(); }
+  fermerFenetreERIP();
 }
 
 // TACHE (retour utilisateur : impression a la fin, comme pour l'entretien) :
@@ -2662,37 +2637,30 @@ function fermerRecuperationLettreV1() {
 // arguments/lettre{objet,texte}, voir prompts/lettre-v1.md elargi), puis
 // generation du VRAI document Word natif (genererDocxNatifLettre, deja
 // existante -- reutilisee telle quelle, aucune logique dupliquee).
-function ouvrirRecuperationLettreV1() {
-  fermerRecuperationLettreV1();
-  var fenetre = document.createElement('div');
-  fenetre.id = 'recuperationLettreV1';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerRecuperationLettreV1(); } });
+// TACHE (chantier "Videos d'accompagnement") : parametre estImage ajoute
+// (facultatif, false par defaut) -- seul changement de signature necessaire
+// pour piloter l'affichage du bloc Astuce, sans quoi cette fonction n'avait
+// aucun moyen de savoir si le document depose etait une image/PDF (voir
+// ouvrirChoixAssistantLettreV1(), seul appelant, mis a jour en consequence).
+function ouvrirRecuperationLettreV1(estImage) {
+  var overlay = ouvrirFenetreERIP({
+    titre: '&#9997;&#65039; En attente de votre lettre de motivation',
+    contenuHTML:
+      '<p class="text-muted small">Une fois votre lettre finalisée avec l’assistant IA, copiez sa toute dernière ' +
+      'réponse (celle qui contient la lettre complète), puis revenez ici.</p>' +
+      htmlCollageInstantane('LettreV1',
+        '<div class="d-flex gap-2 mb-2 mt-2">' +
+        '<button type="button" id="btnExportDocxLettreV1" class="btn btn-primary">&#128196; Enregistrer en DOCX</button>' +
+        '<button type="button" id="btnEffacerRecollerLettreV1" class="btn btn-outline-secondary">Effacer et recoller</button>' +
+        '</div>') +
+      '<div id="messageRecuperationLettreV1" class="small mb-2"></div>' +
+      (estImage ? htmlBlocAstuceImageRefusee() : '') +
+      '<div class="d-flex justify-content-end mt-2">' +
+      '<button type="button" id="btnTermineLettreV1" class="btn btn-success" disabled>&#9989; Terminé, merci !</button>' +
+      '</div>'
+  });
 
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:520px;width:100%;max-height:90vh;' +
-    'overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-    '<h5 class="mb-0">&#9997;&#65039; En attente de votre lettre de motivation</h5>' +
-    '<button type="button" id="fermerRecuperationLettreV1Btn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="text-muted small">Une fois votre lettre finalisée avec l\'assistant IA, copiez sa toute dernière ' +
-    'réponse (celle qui contient la lettre complète), puis revenez ici.</p>' +
-    htmlCollageInstantane('LettreV1',
-      '<div class="d-flex gap-2 mb-2 mt-2">' +
-      '<button type="button" id="btnExportDocxLettreV1" class="btn btn-primary">&#128196; Enregistrer en DOCX</button>' +
-      '<button type="button" id="btnEffacerRecollerLettreV1" class="btn btn-outline-secondary">Effacer et recoller</button>' +
-      '</div>') +
-    '<div id="messageRecuperationLettreV1" class="small mb-2"></div>' +
-    '<div class="d-flex justify-content-end mt-2">' +
-    '<button type="button" id="btnTermineLettreV1" class="btn btn-success" disabled>&#9989; Terminé, merci !</button>' +
-    '</div></div>';
-
-  document.getElementById('fermerRecuperationLettreV1Btn').addEventListener('click', fermerRecuperationLettreV1);
-  document.getElementById('btnTermineLettreV1').addEventListener('click', fermerRecuperationLettreV1);
+  document.getElementById('btnTermineLettreV1').addEventListener('click', fermerFenetreERIP);
   var message = document.getElementById('messageRecuperationLettreV1');
 
   activerCollageInstantane({
@@ -2701,19 +2669,21 @@ function ouvrirRecuperationLettreV1() {
     idBoutonCollerManuel: 'btnCollerManuelLettreV1', idBoutonEffacerRecoller: 'btnEffacerRecollerLettreV1',
     idBoutonImporter: 'btnExportDocxLettreV1',
     onErreur: function (msg) { message.style.color = '#b91c1c'; message.textContent = '⚠️ ' + msg; },
-    onEffacer: function () { message.textContent = ''; }
+    onEffacer: function () { message.textContent = ''; },
+    onSucces: function () { message.style.color = '#157347'; message.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire.'; },
+    onCollerManuel: function () { message.textContent = ''; }
   });
 
   document.getElementById('btnExportDocxLettreV1').addEventListener('click', function () {
     var texte = document.getElementById('texteCollageLettreV1').value;
     if (!texte.trim()) {
       message.style.color = '#b91c1c';
-      message.textContent = '⚠️ Collez d\'abord la réponse de l\'assistant IA dans la zone ci-dessus.';
+      message.textContent = '⚠️ Collez d’abord la réponse de l’assistant IA dans la zone ci-dessus.';
       return;
     }
     var resultat = (typeof analyserReponseIALettre === 'function')
       ? analyserReponseIALettre(texte)
-      : { succes: false, erreur: 'Fonction d\'analyse indisponible pour le moment.' };
+      : { succes: false, erreur: 'Fonction d’analyse indisponible pour le moment.' };
     if (!resultat.succes) {
       message.style.color = '#b91c1c';
       message.textContent = '⚠️ ' + resultat.erreur;
@@ -2765,9 +2735,13 @@ function ouvrirRecuperationLettreV1() {
   });
 }
 
+// TACHE (migration Design System - Phase 2, chantier "metiers.js", 3e
+// migration) : devient une recette qui appelle la primitive
+// ouvrirFenetreERIP(). Contrat public strictement inchange -- appelee
+// depuis demarrerEnvoiIAEntretien() apres une operation asynchrone
+// (copie presse-papiers), sans aucune incidence sur la primitive.
 function fermerRecuperationEntretien() {
-  var f = document.getElementById('recuperationEntretien');
-  if (f) { f.remove(); }
+  fermerFenetreERIP();
 }
 
 // TACHE (Preparer un entretien, Etape 5) : fenetre "en attente de votre
@@ -2784,43 +2758,23 @@ function fermerRecuperationEntretien() {
 // meme mise en forme pistes/amorce que partout ailleurs dans l'appli,
 // aucune logique dupliquee).
 function ouvrirRecuperationEntretien() {
-  fermerRecuperationEntretien();
+  var overlay = ouvrirFenetreERIP({
+    titre: '&#128302; En attente de votre préparation d’entretien',
+    contenuHTML:
+      '<p class="text-muted small">Une fois la réponse de l’assistant IA affichée, copiez-la (bouton "Copier" de ' +
+      'l’assistant), puis revenez ici.</p>' +
+      htmlCollageInstantane('Entretien',
+        '<div class="d-flex gap-2 mb-2 mt-2">' +
+        '<button type="button" id="btnExportDocxEntretien" class="btn btn-primary">&#128196; Enregistrer en DOCX</button>' +
+        '<button type="button" id="btnEffacerRecollerEntretien" class="btn btn-outline-secondary">Effacer et recoller</button>' +
+        '</div>') +
+      '<div id="messageRecuperationEntretien" class="small mb-2"></div>' +
+      '<div class="d-flex justify-content-end mt-2">' +
+      '<button type="button" id="btnTermineEntretien" class="btn btn-success" disabled>&#9989; Terminé, merci !</button>' +
+      '</div>'
+  });
 
-  var fenetre = document.createElement('div');
-  fenetre.id = 'recuperationEntretien';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerRecuperationEntretien(); } });
-
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:520px;width:100%;max-height:90vh;' +
-    'overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-    '<h5 class="mb-0">&#128302; En attente de votre préparation d\'entretien</h5>' +
-    '<button type="button" id="fermerRecuperationBtn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="text-muted small">Une fois la réponse de l\'assistant IA affichée, copiez-la (bouton "Copier" de ' +
-    'l\'assistant), puis revenez ici.</p>' +
-    // TACHE (retour utilisateur : coller en un clic, generalise) :
-    // reutilise le composant partage (app.js).
-    htmlCollageInstantane('Entretien',
-      '<div class="d-flex gap-2 mb-2 mt-2">' +
-      '<button type="button" id="btnExportDocxEntretien" class="btn btn-primary">&#128196; Enregistrer en DOCX</button>' +
-      '<button type="button" id="btnEffacerRecollerEntretien" class="btn btn-outline-secondary">Effacer et recoller</button>' +
-      '</div>') +
-    '<div id="messageRecuperationEntretien" class="small mb-2"></div>' +
-    // TACHE (retour utilisateur : bouton de cloture) : n'apparait
-    // actif qu'une fois le DOCX reellement genere avec succes -- evite de
-    // clore la fenetre avant d'avoir recupere son document.
-    '<div class="d-flex justify-content-end mt-2">' +
-    '<button type="button" id="btnTermineEntretien" class="btn btn-success" disabled>&#9989; Terminé, merci !</button>' +
-    '</div>' +
-    '</div>';
-
-  document.getElementById('fermerRecuperationBtn').addEventListener('click', fermerRecuperationEntretien);
-  document.getElementById('btnTermineEntretien').addEventListener('click', fermerRecuperationEntretien);
+  document.getElementById('btnTermineEntretien').addEventListener('click', fermerFenetreERIP);
   var message = document.getElementById('messageRecuperationEntretien');
   activerCollageInstantane({
     idZoneAuto: 'zoneCollageAutoEntretien',
@@ -2831,14 +2785,16 @@ function ouvrirRecuperationEntretien() {
     idBoutonEffacerRecoller: 'btnEffacerRecollerEntretien',
     idBoutonImporter: 'btnExportDocxEntretien',
     onErreur: function (msg) { message.style.color = '#b91c1c'; message.textContent = '⚠️ ' + msg; },
-    onEffacer: function () { message.textContent = ''; }
+    onEffacer: function () { message.textContent = ''; },
+    onSucces: function () { message.style.color = '#157347'; message.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire.'; },
+    onCollerManuel: function () { message.textContent = ''; }
   });
 
   document.getElementById('btnExportDocxEntretien').addEventListener('click', function () {
     var texte = document.getElementById('texteCollageEntretien').value;
     if (!texte.trim()) {
       message.style.color = '#b91c1c';
-      message.textContent = '⚠️ Collez d\'abord la réponse de l\'assistant IA dans la zone ci-dessus.';
+      message.textContent = '⚠️ Collez d’abord la réponse de l’assistant IA dans la zone ci-dessus.';
       return;
     }
     var resultat = analyserReponseIAEntretien(texte);
@@ -2892,7 +2848,12 @@ function demarrerEnvoiIAEntretien(assistant) {
   // le profil transmis (texteProfil) reste identique, seul le texte
   // d'instructions change. L'ancien prompt 'entretien' (coaching approfondi)
   // reste utilise partout ailleurs (voir ouvrirAideIA, page Action).
-  var texteACopier = promptCache('entretien-accueil', texteProfil('entretien'));
+  // TACHE (retour utilisateur : verification transmission IA) : utilise
+  // desormais texteProfilEffectif() (comme la page Action) au lieu de
+  // texteProfil() directement -- respecte une eventuelle correction
+  // manuelle faite via "Verifier les informations" ailleurs dans la
+  // session, au lieu de l'ignorer silencieusement sur ce chemin precis.
+  var texteACopier = promptCache('entretien-accueil', texteProfilEffectif('entretien'));
   navigator.clipboard.writeText(texteACopier).catch(function () {}).then(function () {
     window.open(assistant.url, '_blank');
     ouvrirRecuperationEntretien();
@@ -2917,13 +2878,26 @@ function obtenirEntrepriseEtPosteExistants() {
   return { structure: '', poste: '' };
 }
 
-// N affiche un mini formulaire que pour les champs REELLEMENT manquants.
-// Si les deux sont deja connus, callback() est appele immediatement, sans
-// aucune interface -- jamais une information redemandee inutilement.
-function fermerFenetreEntrepriseposte() {
-  var f = document.getElementById('fenetreEntrepriseposte');
-  if (f) { f.remove(); }
-}
+// TACHE (migration Design System, chantier "metiers.js", 4e migration) :
+// devient une recette qui appelle la primitive ouvrirFenetreERIP() -- DEUX
+// FOIS, l'une apres l'autre (formulaire, puis incitation), exactement le
+// meme choix architectural que la 7e et derniere migration d'app.js
+// (ouvrirEcranValidationImport) : chaque ecran garde sa propre identite
+// (titre, contenu, boutons), pas un second etat d'une meme fenetre. La
+// regle "une seule fenetre ERIP a la fois" et le correctif du minuteur de
+// fermeture (3e migration) s'appliquent ici sans aucune modification. Le
+// cycle formulaire -> incitation -> formulaire (potentiellement plusieurs
+// fois) n'est qu'une repetition de ce meme mecanisme deja eprouve, pas un
+// cas nouveau pour la primitive -- voir le protocole de test dedie fourni
+// a part, qui couvre explicitement ce cas.
+//
+// Largeur harmonisee : 480px (ancien) -> taille "standard" de la primitive
+// (520px), comme toutes les fenetres deja migrees.
+//
+// fermerFenetreEntrepriseposte() est retiree (aucun appelant externe,
+// verifie avant suppression) : fermerFenetreERIP() migre desormais ce role,
+// y compris le clic sur la croix (fermeture silencieuse, sans callback ni
+// onRetour -- comportement identique a l'ancienne croix custom).
 function verifierOuDemanderEntrepriseEtPoste(callback, onRetour) {
   var existant = obtenirEntrepriseEtPosteExistants();
   if (existant.structure && existant.poste) {
@@ -2932,54 +2906,39 @@ function verifierOuDemanderEntrepriseEtPoste(callback, onRetour) {
     return;
   }
 
-  var fenetre = document.createElement('div');
-  fenetre.id = 'fenetreEntrepriseposte';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-
-  // TACHE (retour utilisateur : coincee sans issue) : croix (haut droit,
-  // ferme tout le parcours) + bouton Retour (bas gauche, uniquement si
-  // onRetour fourni -- reouvre l'ecran de verification precedent) --
-  // jusqu'ici, rien ne permettait de sortir de cette fenetre sans remplir
-  // les champs.
+  // TACHE (retour utilisateur : champ Poste visé toujours visible) :
+  // meme si un poste est deja connu (ex. metier issu de la Revelation),
+  // le champ reste affiche et editable -- ce n'est pas forcement le poste
+  // precis vise pour CET entretien, la personne doit pouvoir le corriger.
   function rendreFormulaire() {
-    fenetre.innerHTML =
-      '<div style="background:white;border-radius:1.5rem;max-width:480px;width:100%;padding:1.5rem;">' +
-      '<div class="d-flex justify-content-between align-items-center mb-2">' +
-      '<h5 class="mb-0">Entreprise et poste visé</h5>' +
-      '<button type="button" id="fermerEntrepriseposteBtn" class="btn btn-sm btn-outline-secondary" ' +
-      'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-      '</div>' +
-      '<div id="zoneChampsEntrepriseposte">' +
-      // TACHE (retour utilisateur : champ Poste visé toujours visible) :
-      // meme si un poste est deja connu (ex. metier issu de la Revelation),
-      // le champ reste affiche et editable -- ce n'est pas forcement le poste
-      // precis vise pour CET entretien, la personne doit pouvoir le corriger.
-      '<label class="form-label small fw-bold">Poste visé</label>' +
-      '<input type="text" id="champPosteEntretien" class="form-control mb-2" placeholder="Poste visé" value="' +
-      echapperAttribut(existant.poste || '') + '">' +
-      (existant.structure
-        ? ''
-        : '<label class="form-label small fw-bold">Entreprise</label>' +
-          '<input type="text" id="champEntrepriseEntretien" class="form-control mb-2" ' +
-          'placeholder="Nom de l\'entreprise ou lien de l\'offre">') +
-      '</div>' +
-      '<div class="d-flex justify-content-between align-items-center mt-2">' +
-      (typeof onRetour === 'function'
-        ? '<button type="button" id="btnRetourEntrepriseposte" class="btn btn-outline-secondary">&#8592; Retour</button>'
-        : '<span></span>') +
-      // TACHE (retour utilisateur : sans poste visé, pas de validation) :
-      // desactive tant que "Poste vise" n'est pas rempli.
-      '<button type="button" id="btnValiderEntrepriseposte" class="btn btn-primary"' +
-      (existant.poste ? '' : ' disabled') + '>Continuer</button>' +
-      '</div></div>';
+    ouvrirFenetreERIP({
+      titre: 'Entreprise et poste visé',
+      contenuHTML:
+        '<div id="zoneChampsEntrepriseposte">' +
+        '<label class="form-label small fw-bold">Poste visé</label>' +
+        '<input type="text" id="champPosteEntretien" class="form-control mb-2" placeholder="Poste visé" value="' +
+        echapperAttribut(existant.poste || '') + '">' +
+        (existant.structure
+          ? ''
+          : '<label class="form-label small fw-bold">Entreprise</label>' +
+            '<input type="text" id="champEntrepriseEntretien" class="form-control mb-2" ' +
+            'placeholder="Nom de l’entreprise ou lien de l’offre">') +
+        '</div>' +
+        '<div class="d-flex justify-content-between align-items-center mt-2">' +
+        (typeof onRetour === 'function'
+          ? '<button type="button" id="btnRetourEntrepriseposte" class="btn btn-outline-secondary">&#8592; Retour</button>'
+          : '<span></span>') +
+        // TACHE (retour utilisateur : sans poste visé, pas de validation) :
+        // desactive tant que "Poste vise" n'est pas rempli.
+        '<button type="button" id="btnValiderEntrepriseposte" class="btn btn-primary"' +
+        (existant.poste ? '' : ' disabled') + '>Continuer</button>' +
+        '</div>'
+    });
 
-    document.getElementById('fermerEntrepriseposteBtn').addEventListener('click', fermerFenetreEntrepriseposte);
     var btnRetour = document.getElementById('btnRetourEntrepriseposte');
     if (btnRetour) {
       btnRetour.addEventListener('click', function () {
-        fermerFenetreEntrepriseposte();
+        fermerFenetreERIP();
         onRetour();
       });
     }
@@ -3021,18 +2980,25 @@ function verifierOuDemanderEntrepriseEtPoste(callback, onRetour) {
   }
 
   // TACHE (retour utilisateur : phrase élégante) : rappelle pourquoi
-  // l'information est utile, sans bloquer -- deux issues claires.
+  // l'information est utile, sans bloquer -- deux issues claires. Seconde
+  // fenetre (remplace la premiere via la regle "une seule fenetre a la
+  // fois"), pas un second etat de rendreFormulaire().
   function rendreIncitation(posteValeur) {
-    fenetre.innerHTML =
-      '<div style="background:white;border-radius:1.5rem;max-width:480px;width:100%;padding:1.5rem;">' +
-      '<h5 class="mb-2">&#128161; Une precision utile</h5>' +
-      '<p class="text-muted small">Indiquer l\'entreprise ou le lien de l\'offre permet à l\'assistant d\'adapter ' +
-      'précisément votre préparation aux attentes du recruteur. Sans cette information, la préparation restera ' +
-      'plus générale.</p>' +
-      '<div class="d-flex justify-content-between mt-3">' +
-      '<button type="button" id="btnContinuerSansPreciser" class="btn btn-outline-secondary">Continuer sans préciser</button>' +
-      '<button type="button" id="btnCompleterMaintenant" class="btn btn-primary">Compléter maintenant</button>' +
-      '</div></div>';
+    ouvrirFenetreERIP({
+      titre: '&#128161; Une précision utile',
+      contenuHTML:
+        '<p class="text-muted small">Indiquer l’entreprise ou le lien de l’offre permet à l’assistant d’adapter ' +
+        'précisément votre préparation aux attentes du recruteur. Sans cette information, la préparation restera ' +
+        'plus générale.</p>' +
+        '<div class="d-flex justify-content-between mt-3">' +
+        '<button type="button" id="btnContinuerSansPreciser" class="btn btn-outline-secondary">Continuer sans préciser</button>' +
+        '<button type="button" id="btnCompleterMaintenant" class="btn btn-primary">Compléter maintenant</button>' +
+        '</div>'
+    });
+    // TACHE (cycle formulaire <-> incitation) : rendreFormulaire() rouvre
+    // une TROISIEME fenetre (au sens de la primitive), qui remplace
+    // celle-ci -- meme mecanisme que n'importe quel aller simple, juste
+    // invoque plusieurs fois de suite si necessaire.
     document.getElementById('btnCompleterMaintenant').addEventListener('click', rendreFormulaire);
     document.getElementById('btnContinuerSansPreciser').addEventListener('click', function () {
       validerDefinitivement(posteValeur, '');
@@ -3041,7 +3007,7 @@ function verifierOuDemanderEntrepriseEtPoste(callback, onRetour) {
 
   function validerDefinitivement(posteValeur, entrepriseValeur) {
     dossier.entretienDirect = { poste: posteValeur || existant.poste || '', structure: entrepriseValeur };
-    fermerFenetreEntrepriseposte();
+    fermerFenetreERIP();
     callback();
   }
 
@@ -3055,28 +3021,28 @@ function verifierOuDemanderEntrepriseEtPoste(callback, onRetour) {
 // deja existante -- aucune logique de lecture/detection de fichier
 // dupliquee, seulement une nouvelle mise en page (2 zones au lieu d'1) et
 // un etat qui suit les 2 documents en parallele.
-function fermerDepotEntretien() {
-  var f = document.getElementById('depotEntretien');
-  if (f) { f.remove(); }
-}
-
+// TACHE (migration Design System, chantier "metiers.js", 6e migration) :
+// devient une recette qui appelle la primitive ouvrirFenetreERIP() -- ecran
+// unique, aller simple. fermerDepotEntretien() est retiree (aucun appelant
+// externe, verifie avant suppression) : fermerFenetreERIP() migre desormais
+// ce role. Largeur 680px -> taille "large" de la primitive (700px),
+// harmonisation habituelle.
+//
+// POINT DE VIGILANCE explicitement tranche avant implementation (pas une
+// decision ergonomique prise en silence pendant la migration) : le bouton
+// "i" (astuce ChatGPT vocal) reste a sa place actuelle -- dans l'en-tete, a
+// cote du titre -- en l'inserant directement dans la chaine config.titre,
+// qui accepte du HTML libre (deja le cas pour toutes les icones de titre
+// existantes, jamais echappee par la primitive). Aucune evolution
+// necessaire de ouvrirFenetreERIP(). Rendu visuel exact (alignement,
+// espacement) NON verifie ici, faute de style.css a jour dans cette
+// session -- fait partie integrante du protocole de validation
+// comportementale fourni a part, pas suppose ici.
 function ouvrirDepotEntretien(onTerminer) {
-  fermerDepotEntretien();
   var etat = {
     cv: { fichier: null, analyse: null },
     lettre: { fichier: null, analyse: null }
   };
-
-  var fenetre = document.createElement('div');
-  fenetre.id = 'depotEntretien';
-  fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
-    'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
-  document.body.appendChild(fenetre);
-  // TACHE (retour utilisateur : rester sur l'accueil, fenetre pas popup) :
-  // meme principe que toutes les fenetres deja construites sur ce modele --
-  // overlay en page (jamais un window.open), fermeture sans navigation :
-  // on reste exactement sur la page d'ou la fenetre a ete ouverte.
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerDepotEntretien(); } });
 
   function zoneDocument(cle, titre, obligatoire, conseil) {
     return '<div class="mb-3">' +
@@ -3089,29 +3055,31 @@ function ouvrirDepotEntretien(onTerminer) {
       '</div>';
   }
 
-  fenetre.innerHTML =
-    '<div style="background:white;border-radius:1.5rem;max-width:680px;width:100%;' +
-    'max-height:90vh;overflow-y:auto;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-    '<div class="d-flex justify-content-between align-items-center mb-3">' +
-    '<div class="d-flex align-items-center gap-2">' +
-    '<h5 class="mb-0">&#127908; Préparer un entretien — vos documents</h5>' +
-    '<button type="button" id="btnInfoDepotEntretien" title="Astuce" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:26px;height:26px;padding:0;font-weight:700;">i</button>' +
-    '</div>' +
-    '<button type="button" id="fermerDepotEntretienBtn" class="btn btn-sm btn-outline-secondary" ' +
-    'style="border-radius:50%;width:32px;height:32px;padding:0;">&#10005;</button>' +
-    '</div>' +
-    '<p class="text-muted small">Sans CV, difficile de préparer un entretien : c\'est indispensable. La lettre de ' +
-    'motivation, elle, est facultative mais fortement conseillée pour personnaliser la préparation.</p>' +
-    zoneDocument('CV', '&#128196; Votre CV', true, null) +
-    zoneDocument('Lettre', '&#9993; Votre lettre de motivation', false, 'pour personnaliser l\'entretien') +
-    '<div class="d-flex justify-content-end mt-3 pt-3" style="border-top:1px solid #E5E7EB;">' +
-    '<button type="button" id="btnContinuerDepotEntretien" class="btn btn-primary" disabled>Continuer &#8594;</button>' +
-    '</div></div>';
+  ouvrirFenetreERIP({
+    titre: '&#127908; Préparer un entretien — vos documents ' +
+      '<button type="button" id="btnInfoDepotEntretien" title="Astuce" class="btn btn-sm btn-outline-secondary" ' +
+      'style="border-radius:50%;width:26px;height:26px;padding:0;font-weight:700;">i</button>',
+    taille: 'large',
+    contenuHTML:
+      '<p class="text-muted small">Sans CV, difficile de préparer un entretien : c’est indispensable. La lettre de ' +
+      'motivation, elle, est facultative mais fortement conseillée pour personnaliser la préparation.</p>' +
+      zoneDocument('CV', '&#128196; Votre CV', true, null) +
+      zoneDocument('Lettre', '&#9993; Votre lettre de motivation', false, 'pour personnaliser l’entretien') +
+      '<div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #E5E7EB;">' +
+      '<button type="button" id="btnRetourDepotEntretien" class="btn btn-outline-secondary">&#8592; Retour</button>' +
+      '<button type="button" id="btnContinuerDepotEntretien" class="btn btn-primary" disabled>Continuer &#8594;</button>' +
+      '</div>'
+  });
 
-  document.getElementById('fermerDepotEntretienBtn').addEventListener('click', fermerDepotEntretien);
+  // TACHE (retour utilisateur : bouton Retour vers le choix initial) : cet
+  // ecran n'est jamais atteint que depuis "Préparer ma candidature"
+  // (ouvrirChoixPreparationAccueil) -- Retour y renvoie donc toujours.
+  document.getElementById('btnRetourDepotEntretien').addEventListener('click', function () {
+    fermerFenetreERIP();
+    if (typeof ouvrirChoixPreparationAccueil === 'function') { ouvrirChoixPreparationAccueil(); }
+  });
   document.getElementById('btnInfoDepotEntretien').addEventListener('click', function () {
-    ouvrirBulleAide(null, 'Vous avez un compte ChatGPT ? Vous pouvez faire cette préparation d\'entretien à la ' +
+    ouvrirBulleAide(null, 'Vous avez un compte ChatGPT ? Vous pouvez faire cette préparation d’entretien à la ' +
       'voix, en utilisant la commande vocale de ChatGPT au lieu de taper vos réponses.');
   });
 
@@ -3152,7 +3120,7 @@ function ouvrirDepotEntretien(onTerminer) {
 
   document.getElementById('btnContinuerDepotEntretien').addEventListener('click', function () {
     if (!etat.cv.analyse) { return; }
-    fermerDepotEntretien();
+    fermerFenetreERIP();
     if (typeof onTerminer === 'function') { onTerminer(etat); }
   });
 }
@@ -3214,9 +3182,7 @@ function ouvrirParcoursEntretien() {
 
 /* ------------------------------------------------------------
    AIGUILLAGE AUTOMATIQUE
-   1. "J'ai deja un CV" ouvre la fenetre de depot.
-   2. Apres un CV analyse, le choix de l'objectif mene
-      directement a la page Revelation.
+   "J'ai deja un CV" / "Mettre a jour" ouvre la fenetre de depot.
    ------------------------------------------------------------ */
 
 (function () {
@@ -3228,15 +3194,6 @@ function ouvrirParcoursEntretien() {
       e.stopPropagation();
       e.preventDefault();
       ouvrirAssistantDepotCV(carte.dataset.value);
-    }
-  }, true);
-
-  document.addEventListener('click', function (e) {
-    var carte = e.target.closest ? e.target.closest('[data-action="objectif"]') : null;
-    if (carte && typeof dossier !== 'undefined' && dossier && dossier.cvAnalyse) {
-      e.stopPropagation();
-      dossier.objectif = carte.dataset.value;
-      naviguerVers('revelation');
     }
   }, true);
 })();

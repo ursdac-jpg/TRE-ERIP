@@ -53,10 +53,29 @@ var CAPACITES_A5_CV = {
 
 // ---- Capacites fixes pour "A4 Essentiel" -- allegees mais moins
 // serrees que le Mini CV (page A4 normale, plus de place disponible) ----
+// TACHE (retour utilisateur : "encore trop proche, réduire plus -- une
+// expérience, lieu, date et 1 ligne pour la mission") : plafond
+// d'experiences RELEVE (8, au lieu de 3) plutot qu'abaisse -- voir
+// construireObjetCVPourExportEssentiel() plus bas pour l'explication
+// complete (l'objectif est des experiences plus COURTES, pas moins
+// nombreuses).
 var CAPACITES_A4_ESSENTIEL_CV = {
-  experiences: 3, formations: 2, langues: 4, certifications: 2,
-  loisirs: 2, engagements: 1, competences: 6
+  experiences: 8, formations: 3, langues: 4, certifications: 3,
+  loisirs: 3, engagements: 2, competences: 6
 };
+
+// TACHE (retour utilisateur : "le contenu doit être identique pour tous
+// les modèles, juste la forme qui change") : jeu de capacites UNIQUE pour
+// "A4 Détaillé", partage par tous les modeles -- avant cette tache,
+// chaque modele lisait ses PROPRES capacites depuis son JSON (valeurs qui
+// avaient fini par diverger au fil des ajouts : de 3 a 5 experiences
+// selon le modele, certains sans aucune limite). Valeurs reprises du jeu
+// le plus courant parmi les modeles existants (aquarelle, geometrique,
+// moderne-green, ruban). Voir construireObjetCVPourExport (app.js), qui
+// utilise desormais CETTE constante plutot que meta.capacites -- le champ
+// "capacites" reste present (inoffensif) dans le JSON de chaque modele,
+// mais n'est plus lu pour A4 Détaillé.
+var CAPACITES_A4_DETAILLE_CV = { experiences: 4, formations: 3, competences: 6, langues: 4, certifications: 3, loisirs: 3, engagements: 2 };
 
 // ---- Rubriques totalement retirees en A5 (jamais montrees, meme vides) ----
 var RUBRIQUES_MASQUEES_A5 = ['certifications', 'loisirs', 'engagements'];
@@ -178,14 +197,27 @@ function construireObjetCVPourExportA5(modeleId) {
 }
 
 // ---- "A4 Essentiel" : contenu allege, page A4 normale -- pas de
-// rubrique totalement masquee, pas de troncature de texte (plus de place
-// disponible qu'en A5, une page A4 entiere) ----
+// rubrique totalement masquee, mais texte resserre (profil + missions),
+// pour qu'une vraie difference visuelle existe avec "A4 Détaillé" meme
+// quand le contenu reel est modeste (peu d'experiences/rubriques) : sans
+// troncature, les 2 plafonds de capacites ne suffisent pas a eux seuls a
+// creer une difference visible des que la personne a peu de contenu.
+// TACHE (retour utilisateur : "encore trop proche, réduire plus -- une
+// expérience, lieu, date et 1 ligne pour la mission") : plafond
+// d'experiences RELEVE (8, au lieu de 3) plutot qu'abaisse -- l'objectif
+// n'est pas de montrer MOINS d'experiences mais de les montrer plus
+// COURTES (une ligne chacune, voir le rendu compact dans
+// exportDocxNatifCV.js), utile a une personne qui a beaucoup d'experiences
+// variees et veut toutes les lister sans faire deborder la page.
+// tronquerMissions resserre en consequence (90 = une ligne courte, pas un
+// paragraphe) -- valeurs moins agressives que le Mini CV (A5, une demi-page)
+// pour le profil, une page A4 entiere reste disponible ici.
 function construireObjetCVPourExportEssentiel(modeleId) {
   return _dnConstruireObjetCVRecadre({
     capacites: CAPACITES_A4_ESSENTIEL_CV,
     rubriquesMasquees: [],
-    tronquerProfil: 0,
-    tronquerMissions: 0
+    tronquerProfil: 320,
+    tronquerMissions: 90
   }, modeleId);
 }
 

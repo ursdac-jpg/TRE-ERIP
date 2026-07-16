@@ -1,7 +1,7 @@
 {
   "id": "institutionnel",
   "nom": "Institutionnel",
-  "description": "CV sobre et structure, adapte aux candidatures France Travail et collectivites.",
+  "description": "CV sobre et structuré, adapté aux candidatures France Travail et collectivités.",
   "layout": {
     "type": "single-column"
   },

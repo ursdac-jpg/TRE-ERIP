@@ -289,6 +289,12 @@ function _reconstruireContenuPanneau(type, modeleActif, couleurActive, formatPag
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       boutonRef.textContent = texteOriginal;
       boutonRef.disabled = false;
+      // TACHE (bouton "Merci bien, j'ai fini") : ce panneau (ouvert depuis
+      // "Aperçu" dans la section Exporter) declenche lui aussi un vrai
+      // telechargement -- meme regle que le bouton "Telecharger le Word"
+      // de la section Exporter elle-meme (marquerDocumentEnregistre defini
+      // dans app.js, scripts classiques partageant le meme scope global).
+      if (typeof marquerDocumentEnregistre === 'function') { marquerDocumentEnregistre(_typeApercuDocxActif); }
     }).catch(function () {
       boutonRef.textContent = texteOriginal;
       boutonRef.disabled = false;

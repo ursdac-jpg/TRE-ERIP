@@ -1,7 +1,7 @@
 {
   "id": "dispo",
   "nom": "Dispo",
-  "description": "Une colonne compacte, bandeau de disponibilite en tete (saisonnier, hotellerie, grande distribution).",
+  "description": "Une colonne compacte, bandeau de disponibilité en tête (saisonnier, hôtellerie, grande distribution).",
   "colors": {
     "primary": "#C2410C",
     "secondary": "#C2410C",

@@ -81,10 +81,28 @@ function _dneConstruireClair(docx, objetEntretien, opts) {
   }
 
   // ---- Questions anticipées ----
-  var questions = (objetEntretien.questionsAnticipees || []).filter(Boolean);
+  // TACHE (retour utilisateur : puces vides dans "Questions anticipées") :
+  // le format a change (objet {question, pistes, amorce}, voir
+  // normaliserDonneesEntretien.js) mais ce generateur essayait encore
+  // d'afficher l'objet entier comme un simple texte de puce -- d'ou les
+  // puces vides constatees. Affiche desormais la question, puis, quand
+  // elles existent, l'amorce (italique) et chaque piste de reponse en
+  // retrait, comme deja prevu par le modele de donnees mais jamais rendu
+  // nulle part jusqu'ici.
+  var questions = (objetEntretien.questionsAnticipees || []).filter(function (q) { return q && q.question; });
   if (questions.length) {
     enfants.push(titreSection('Questions anticipées'));
-    questions.forEach(function (q) { enfants.push(puce(q)); });
+    questions.forEach(function (q) {
+      enfants.push(puce(q.question));
+      if (q.amorce) {
+        enfants.push(new Paragraph({ indent: { left: 420 }, spacing: { after: 60 },
+          children: [ new TextRun({ text: 'Amorce : ' + q.amorce, italics: true, size: 19, color: TEXTE_MUTED, font: 'Calibri' }) ] }));
+      }
+      (q.pistes || []).filter(Boolean).forEach(function (piste) {
+        enfants.push(new Paragraph({ indent: { left: 420 }, spacing: { after: 60 },
+          children: [ new TextRun({ text: '— ' + piste, size: 19, color: TEXTE_MUTED, font: 'Calibri' }) ] }));
+      });
+    });
   }
 
   // ---- Questions à poser au recruteur (bloc mis en valeur, meme choix

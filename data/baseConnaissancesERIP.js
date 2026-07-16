@@ -92,9 +92,28 @@ function rechercherBaseConnaissances(texte) {
   var envTravailTrouves = aplatirCatalogue(BASE_CONNAISSANCES_ERIP.environnementsTravail).filter(function (a) { return correspond(a.label); });
   if (envTravailTrouves.length) { resultats.push({ categorie: 'Environnements de travail', icone: '🏢', resultats: envTravailTrouves, type: 'item' }); }
 
-  // Valeurs professionnelles
-  var valeursTrouvees = aplatirCatalogue(BASE_CONNAISSANCES_ERIP.valeursProfessionnelles).filter(function (a) { return correspond(a.label); });
-  if (valeursTrouvees.length) { resultats.push({ categorie: 'Valeurs professionnelles', icone: '❤️', resultats: valeursTrouvees, type: 'item' }); }
+  // TACHE (retour utilisateur : recherche allegee) : "Valeurs professionnelles"
+  // retiree de la recherche -- chapitre juge trop leger pour etre propose
+  // comme categorie de recherche a part entiere (reste utilisable ailleurs,
+  // ex. l'etape "Attentes" du parcours guide, via CATALOGUE_VALEURS_PROFESSIONNELLES
+  // directement, sans passer par cette fonction).
+
+  // TACHE (retour utilisateur : "domaine d'activite" dans la recherche) :
+  // memes valeurs que la banniere "Domaine cible" (secteursDisponibles(),
+  // app.js) -- derivees directement de baseMetiers.secteur, aucune
+  // nomenclature dupliquee. Regroupe les noms de secteur distincts qui
+  // correspondent au texte tape.
+  var domainesSet = {};
+  var domainesTrouves = [];
+  (BASE_CONNAISSANCES_ERIP.metiers || []).forEach(function (m) {
+    if (m.secteur && correspond(m.secteur) && !domainesSet[m.secteur]) {
+      domainesSet[m.secteur] = true;
+      domainesTrouves.push(m.secteur);
+    }
+  });
+  if (domainesTrouves.length) {
+    resultats.push({ categorie: 'Domaines d\'activité', icone: '🏭', resultats: domainesTrouves, type: 'domaine' });
+  }
 
   // TACHE (recherche assistant) : certifications, egalement mentionnees dans
   // la demande d'evolution de la recherche.
@@ -130,5 +149,16 @@ function trouverMetiersParChampId(champ, id, max) {
   max = max || 5;
   return (BASE_CONNAISSANCES_ERIP.metiers || []).filter(function (m) {
     return Array.isArray(m[champ]) && m[champ].indexOf(id) !== -1;
+  }).slice(0, max);
+}
+
+// TACHE (amelioration recherche) : meme principe, mais pour le domaine
+// d'activite (baseMetiers.secteur) -- un champ TEXTE simple sur chaque
+// metier, pas un tableau d'ids de catalogue, d'ou une comparaison directe
+// plutot qu'un indexOf() dans un tableau.
+function trouverMetiersParSecteur(secteurNom, max) {
+  max = max || 5;
+  return (BASE_CONNAISSANCES_ERIP.metiers || []).filter(function (m) {
+    return m.secteur === secteurNom;
   }).slice(0, max);
 }

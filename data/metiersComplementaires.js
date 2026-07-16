@@ -26,7 +26,7 @@
         - nom         : nom affiche (ex. "Gendarme")
         - rome        : code ROME UNIQUEMENT si vous en etes certain,
                         sinon laisser null (jamais invente)
-        - secteur     : libre (ex. "Securite publique")
+        - secteur     : libre (ex. "Sécurité publique")
         - activites   : IDENTIFIANTS EXACTS pris dans
                         data/personnesMaterielsLieux.js (ex. "clients",
                         "vehicules", "documents", "collegues", "bureau",
@@ -63,7 +63,7 @@
 
 var METIERS_COMPLEMENTAIRES = [
   {
-    id: 'gendarme', nom: 'Gendarme', famille: 'Securite et defense', secteur: 'Securite publique',
+    id: 'gendarme', nom: 'Gendarme', famille: 'Sécurité et défense', secteur: 'Sécurité publique',
     rome: 'K1706', fap: null,
     // TACHE (ajout manuel, verifie) : identifiants reels, confirmes dans
     // les 4 catalogues existants -- pas de mots inventes.
@@ -71,12 +71,12 @@ var METIERS_COMPLEMENTAIRES = [
     actions: ['controler', 'aider', 'conduire', 'rediger'],
     environnement: ['administration', 'exterieur'],
     valeurs: ['metier_sens', 'responsabilites', 'stabilite', 'travail_equipe'],
-    savoirFaire: ['Intervention', 'Redaction de procedures', 'Secourisme'],
-    savoirEtre: ['Rigueur', 'Sang-froid', 'Sens du devoir', 'Esprit d\'equipe', 'Discretion'],
-    savoirs: ['Droit penal', 'Procedure judiciaire', 'Securite publique'],
-    argumentsCV: ['proteger et assister le public au quotidien, avec rigueur et sang-froid'],
-    argumentsLettre: ['contribuer a la securite et a la protection des citoyens, dans le respect strict de la loi'],
-    pistesEntretien: ['Decrire une situation geree avec calme malgre un contexte tendu ou impose.'],
+    savoirFaire: ['Intervention', 'Rédaction de procédures', 'Secourisme'],
+    savoirEtre: ['Rigueur', 'Sang-froid', 'Sens du devoir', 'Esprit d\'équipe', 'Discrétion'],
+    savoirs: ['Droit pénal', 'Procédure judiciaire', 'Sécurité publique'],
+    argumentsCV: ['protéger et assister le public au quotidien, avec rigueur et sang-froid'],
+    argumentsLettre: ['contribuer à la sécurité et à la protection des citoyens, dans le respect strict de la loi'],
+    pistesEntretien: ['Décrire une situation gérée avec calme malgré un contexte tendu ou imposé.'],
     synonymes: ['gendarme adjoint', 'sous-officier de gendarmerie', 'militaire de la gendarmerie'],
     motsCles: [], conceptsAssocies: [],
     niveauPertinence: null

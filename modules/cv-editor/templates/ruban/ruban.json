@@ -1,7 +1,7 @@
 {
   "id": "ruban",
   "nom": "Ruban",
-  "description": "CV deux colonnes, fond blanc, ruban decoratif en separation et decor calligraphique en en-tete.",
+  "description": "CV deux colonnes, fond blanc, ruban décoratif en séparation et décor calligraphique en en-tête.",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "40%",

@@ -1,7 +1,7 @@
 {
   "id": "chic",
   "nom": "Chic",
-  "description": "Sidebar beige clair avec photo, bloc sombre avec monogramme et nom, bandes sombres pour les titres de rubrique.",
+  "description": "Bandeau latéral beige clair avec photo, bloc sombre avec monogramme et nom, bandes sombres pour les titres de rubrique.",
   "colors": {
     "primary": "#3F3F3F",
     "secondary": "#EDE4D6",

@@ -1,7 +1,7 @@
 {
   "id": "geometrique",
   "nom": "Géométrique",
-  "description": "CV deux colonnes, bandeau lateral bleu et decor de triangles en en-tete.",
+  "description": "CV deux colonnes, bandeau latéral bleu et décor de triangles en en-tête.",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "36%",

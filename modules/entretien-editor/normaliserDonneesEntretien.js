@@ -43,7 +43,13 @@ function normaliserDonneesEntretien(dossierSource) {
       prenom: id.prenom || ''
     },
     metierVise: d.metierCible || d.secteurCible || of.poste || '',
-    entreprise: of.structure || '',
+    // TACHE (pont retour utilisateur : bloc Candidature <-> generation) :
+    // priorite au nouveau parcours (d.rechercheCandidature.entreprise, bloc
+    // Candidature, Etape 1), repli sur l'ancien circuit (of.structure) --
+    // meme priorite que entrepriseCibleActuelle() dans app.js, mais repliquee
+    // ici en local (fonction du seul parametre recu, jamais de reference a
+    // la variable globale "dossier", comme le reste de ce fichier).
+    entreprise: (d.rechercheCandidature && d.rechercheCandidature.entreprise) || of.structure || '',
     presentation: ent.presentation || '',
     pointsAPreparer: ent.pointsAPreparer || [],
     questionsAnticipees: questionsAnticipees,

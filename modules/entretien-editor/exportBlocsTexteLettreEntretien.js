@@ -40,17 +40,16 @@ function genererBlocsTexteEntretien(objetEntretien) {
   var points = (objetEntretien.pointsAPreparer || []).filter(Boolean);
   if (points.length) { titre('Points à préparer'); points.forEach(puce); }
 
-  // TACHE (retour utilisateur : réponses courtes + conseils par question) :
-  // chaque question anticipee est desormais {question, pistes, amorce} au
-  // lieu d'une simple chaine -- rendu en texte : la question en puce,
-  // pistes et amorce en retrait juste en dessous, uniquement si presentes.
+  // TACHE (retour utilisateur : puces vides dans "Questions anticipées") :
+  // meme correction que exportDocxNatifEntretien.js -- q est un objet
+  // {question, pistes, amorce}, plus une simple chaine.
   var questions = (objetEntretien.questionsAnticipees || []).filter(function (q) { return q && q.question; });
   if (questions.length) {
     titre('Questions anticipées');
     questions.forEach(function (q) {
       puce(q.question);
-      if (q.pistes && q.pistes.length) { lignes.push('   Pistes : ' + q.pistes.join(' · ')); }
-      if (q.amorce) { lignes.push('   Amorce : « ' + q.amorce + ' »'); }
+      if (q.amorce) { lignes.push('  Amorce : ' + q.amorce); }
+      (q.pistes || []).filter(Boolean).forEach(function (piste) { lignes.push('  — ' + piste); });
     });
   }
 

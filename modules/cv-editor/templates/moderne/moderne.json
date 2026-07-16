@@ -1,7 +1,7 @@
 {
   "id": "moderne",
   "nom": "Moderne",
-  "description": "CV contemporain avec bandeau lateral.",
+  "description": "CV contemporain avec bandeau latéral.",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "30%",

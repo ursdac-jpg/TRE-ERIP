@@ -1,7 +1,7 @@
 {
   "id": "moderne-green",
   "nom": "Moderne Vert",
-  "description": "CV deux colonnes avec bandeau lateral vert et decor organique en en-tete.",
+  "description": "CV deux colonnes avec bandeau latéral vert et décor organique en en-tête.",
   "layout": {
     "type": "sidebar-left",
     "sidebarWidth": "34%",

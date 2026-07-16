@@ -1,7 +1,7 @@
 {
   "id": "classique",
   "nom": "Classique",
-  "description": "CV sobre, une colonne, adapte a tous les secteurs.",
+  "description": "CV sobre, une colonne, adapté à tous les secteurs.",
   "layout": {
     "type": "single-column"
   },
