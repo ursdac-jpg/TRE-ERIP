@@ -130,12 +130,41 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
   // (titreSidebar/titrePrincipal non concernes, voir _dnEchelleTexteCourant).
   var echelleTexte = _dnEchelleTexteCourant(objetCV);
 
+  // TACHE (retour utilisateur : moteur de mise en page centralisé,
+  // conversion 4/5 -- Chic) : "styleTitreSection: 'bandeau-sombre'" --
+  // titre de section en bandeau plein largeur colore (fond sombre, texte
+  // blanc) au lieu d'un simple soulignement -- seule vraie particularite
+  // structurelle de Chic pour ses titres, desormais une option
+  // reutilisable du moteur (titreSidebar ET titrePrincipal partagent la
+  // meme presentation dans Chic, contrairement au style "simple" ou ils
+  // different legerement).
+  function bandeauSombreTitre(texte) {
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: { top: AUCUNE_BORDURE, bottom: AUCUNE_BORDURE, left: AUCUNE_BORDURE, right: AUCUNE_BORDURE, insideHorizontal: AUCUNE_BORDURE, insideVertical: AUCUNE_BORDURE },
+      rows: [ new TableRow({ children: [ new TableCell({
+        shading: { type: ShadingType.CLEAR, color: 'auto', fill: PRIMAIRE },
+        margins: { top: 90, bottom: 90, left: 150, right: 150 },
+        children: [ new Paragraph({ children: [ new TextRun({ text: texte.toUpperCase(), bold: true, color: 'FFFFFF', size: 17, font: opts.police || 'Calibri', characterSpacing: 15 }) ] }) ]
+      }) ] }) ],
+      margin: { top: 60, bottom: 100 }
+    });
+  }
   function titreSidebar(texte) {
+    if (opts.styleTitreSection === 'bandeau-sombre') { return bandeauSombreTitre(texte); }
     var props = { spacing: { before: 260, after: 100 }, children: [ new TextRun({ text: texte.toUpperCase(), bold: true, color: TEXTE_SIDEBAR, size: 17, font: opts.police || 'Calibri' }) ] };
-    props.border = { bottom: { color: opts.styleBandeau === 'plein' ? 'FFFFFF' : PRIMAIRE, space: 2, style: BorderStyle.SINGLE, size: 8 } };
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion Impact) : accentSidebar est un ROLE DE COULEUR distinct
+    // de "primaire" -- absent (undefined) partout ailleurs, donc aucun
+    // changement pour les 11 modeles deja generiques ; seul Impact le
+    // renseigne (son soulignement de titre de sidebar suit la couleur
+    // choisie par la personne, independamment de son "primaire" fixe
+    // graphite -- voir _dnOptionsBaseParModele()).
+    props.border = { bottom: { color: opts.styleBandeau === 'plein' ? 'FFFFFF' : (opts.accentSidebar || PRIMAIRE), space: 2, style: BorderStyle.SINGLE, size: 8 } };
     return new Paragraph(props);
   }
   function titrePrincipal(texte) {
+    if (opts.styleTitreSection === 'bandeau-sombre') { return bandeauSombreTitre(texte); }
     return new Paragraph({ spacing: { before: 260, after: 120 }, children: [ new TextRun({ text: texte.toUpperCase(), bold: true, color: PRIMAIRE, size: 20, font: opts.police || 'Calibri' }) ] });
   }
   function texteSimple(texte, o) {
@@ -240,6 +269,30 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
         var ligne = e.poste + (infosLigne ? ' — ' + infosLigne : '') + (e.missions ? ' : ' + e.missions : '');
         contenuPrincipal.push(puce(ligne, refPucesPrincipal, PRIMAIRE, 18));
       });
+    } else if (opts.styleExperiences === 'frise') {
+      // TACHE (retour utilisateur : moteur de mise en page centralisé,
+      // conversion 5/5 -- Trajectoire) : chaque experience en tableau 2
+      // colonnes (date a gauche, poste/entreprise + mission a droite) --
+      // seule vraie particularite structurelle de Trajectoire, desormais
+      // une option reutilisable (n'entre jamais en jeu en A4 Essentiel,
+      // qui garde sa propre presentation compacte, prioritaire ci-dessus).
+      experiences.forEach(function (e) {
+        var dateTexte = [e.dateDebut, e.dateFin || 'aujourd’hui'].filter(Boolean).join(' - ');
+        var contenuDroite = [ new Paragraph({ shading: { type: ShadingType.CLEAR, color: 'auto', fill: PRIMAIRE }, spacing: { after: 60 },
+          children: [ new TextRun({ text: e.poste + (e.entreprise ? ' — ' + e.entreprise : ''), bold: true, color: 'FFFFFF', size: 18, font: 'Calibri' }) ] }) ];
+        if (e.lieu) { contenuDroite.push(new Paragraph({ spacing: { after: 60 }, children: [ new TextRun({ text: e.lieu, italics: true, color: TEXTE_PRINCIPAL, size: 16, font: 'Calibri' }) ] })); }
+        if (e.missions) { contenuDroite.push(new Paragraph({ numbering: { reference: refPucesPrincipal, level: 0 }, spacing: { after: 60 }, children: [ new TextRun({ text: e.missions, size: 16, color: TEXTE_PRINCIPAL, font: 'Calibri' }) ] })); }
+        contenuPrincipal.push(new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [1400, 8600],
+          borders: { top: AUCUNE_BORDURE, bottom: AUCUNE_BORDURE, left: AUCUNE_BORDURE, right: AUCUNE_BORDURE, insideHorizontal: AUCUNE_BORDURE, insideVertical: AUCUNE_BORDURE },
+          rows: [ new TableRow({ children: [
+            new TableCell({ width: { size: 1400, type: WidthType.DXA }, margins: { top: 60, right: 100 }, verticalAlign: VerticalAlign.TOP,
+              children: [ new Paragraph({ children: [ new TextRun({ text: dateTexte, bold: true, color: PRIMAIRE, size: 15, font: 'Calibri' }) ] }) ] }),
+            new TableCell({ width: { size: 8600, type: WidthType.DXA }, margins: { bottom: 120 }, verticalAlign: VerticalAlign.TOP, children: contenuDroite })
+          ] }) ]
+        }));
+        contenuPrincipal.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      });
     } else {
       experiences.forEach(function (e) {
         contenuPrincipal.push(texteSimple(e.poste, { bold: true, size: 19, after: 20 }));
@@ -261,6 +314,46 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
   if (certifications.length) {
     contenuPrincipal.push(titrePrincipal('Certifications'));
     certifications.forEach(function (c) { contenuPrincipal.push(puce(c, refPucesPrincipal, PRIMAIRE, 18)); });
+  }
+
+  // TACHE (retour utilisateur : moteur de mise en page centralisé,
+  // conversion 4/5 -- Chic) : "styleEnTete: 'bloc-colonne'" -- pas d'en-tete
+  // pleine largeur (contrairement a 'simple' et 'banniere') : un bloc sombre
+  // (nom + monogramme + metier vise) est insere en PREMIER dans la colonne
+  // principale uniquement, la colonne laterale demarrant elle independamment
+  // en haut de page (photo/coordonnees). Monogramme (initiales dans un
+  // cadre) : particularite visuelle propre a Chic, incluse ici sans
+  // nouveau reglage dedie -- seul ce style d'en-tete l'utilise pour
+  // l'instant.
+  if (opts.styleEnTete === 'bloc-colonne') {
+    var texteClairSurSombre = opts.texteClairSurSombre || 'F5F1E8';
+    var nomCompletBlocColonne = ((identite.prenom || '') + ' ' + (identite.nom || '')).trim();
+    var initialesBlocColonne = ((identite.prenom || '').charAt(0) + (identite.nom || '').charAt(0)).toUpperCase();
+    var contenuBlocNomColonne = [];
+    if (initialesBlocColonne) {
+      contenuBlocNomColonne.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
+        border: { top: { color: texteClairSurSombre, size: 6, style: BorderStyle.SINGLE, space: 8 }, bottom: { color: texteClairSurSombre, size: 6, style: BorderStyle.SINGLE, space: 8 }, left: { color: texteClairSurSombre, size: 6, style: BorderStyle.SINGLE, space: 8 }, right: { color: texteClairSurSombre, size: 6, style: BorderStyle.SINGLE, space: 8 } },
+        children: [ new TextRun({ text: '  ' + initialesBlocColonne + '  ', color: texteClairSurSombre, size: 24, font: opts.police || 'Calibri', characterSpacing: 20 }) ] }));
+    }
+    if (nomCompletBlocColonne) {
+      contenuBlocNomColonne.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 },
+        children: [ new TextRun({ text: nomCompletBlocColonne, bold: true, color: 'FFFFFF', size: 34, font: opts.police || 'Calibri', characterSpacing: 10 }) ] }));
+    }
+    if (objetCV.objectifProfessionnel) {
+      contenuBlocNomColonne.push(new Paragraph({ alignment: AlignmentType.CENTER,
+        children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), color: texteClairSurSombre, size: 17, font: 'Calibri', characterSpacing: 20 }) ] }));
+    }
+    if (!contenuBlocNomColonne.length) { contenuBlocNomColonne.push(new Paragraph({ children: [] })); }
+    contenuPrincipal.unshift(new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: { top: AUCUNE_BORDURE, bottom: AUCUNE_BORDURE, left: AUCUNE_BORDURE, right: AUCUNE_BORDURE, insideHorizontal: AUCUNE_BORDURE, insideVertical: AUCUNE_BORDURE },
+      rows: [ new TableRow({ children: [ new TableCell({
+        shading: { type: ShadingType.CLEAR, color: 'auto', fill: PRIMAIRE },
+        margins: { top: 260, bottom: 260, left: 200, right: 200 },
+        children: contenuBlocNomColonne
+      }) ] }) ],
+      margin: { bottom: 200 }
+    }));
   }
 
   // TACHE (correction bug : fonds de couleur perdus) : docx construit le
@@ -290,18 +383,46 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
     ] },
     sections: [ {
       properties: { page: { margin: _dnMargePage({ top: 560, bottom: 560, left: 560, right: 560 }, opts.formatPage), size: opts.formatPage === 'A5' ? _dnTaillePageA5() : undefined } },
-      children: [
-        // TACHE (retour utilisateur : "le nom reste sur la gauche en haut,
-        // juste le métier visé qui est en haut au centre") : nom repasse a
-        // gauche (alignement par defaut), seul le metier vise reste centre
-        // et agrandi.
-        new Paragraph({ spacing: { after: 40 }, children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 30, color: opts.couleurNom || PRIMAIRE, font: opts.police || 'Calibri' }) ] }),
-      ].concat(objetCV.objectifProfessionnel ? [ new Paragraph({
-        alignment: AlignmentType.CENTER,
-        border: { bottom: { color: opts.styleBandeau === 'bordure' ? (opts.secondaire || PRIMAIRE) : PRIMAIRE, space: 4, style: BorderStyle.SINGLE, size: 12 } },
-        spacing: { after: 200 },
-        children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), bold: true, color: opts.styleBandeau === 'plein' ? '1B2340' : TEXTE_PRINCIPAL, size: 36, font: 'Calibri', characterSpacing: 20 }) ]
-      }) ] : []).concat([
+      children: (
+        // TACHE (retour utilisateur : moteur de mise en page centralisé,
+        // conversion 3/5 -- Creatif) : "styleEnTete: 'banniere'" -- bandeau
+        // pleine largeur colore, nom en blanc, metier vise en dessous dans
+        // une teinte plus claire (opts.texteBandeauSecondaire) -- seule
+        // vraie particularite structurelle de Creatif, desormais une
+        // option reutilisable. En-tete "simple" (par defaut) inchangee
+        // pour les 11 modeles existants.
+        opts.styleEnTete === 'banniere'
+          ? [ new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: { top: AUCUNE_BORDURE, bottom: AUCUNE_BORDURE, left: AUCUNE_BORDURE, right: AUCUNE_BORDURE, insideHorizontal: AUCUNE_BORDURE, insideVertical: AUCUNE_BORDURE },
+              rows: [ new TableRow({ children: [ new TableCell({
+                shading: { type: ShadingType.CLEAR, color: 'auto', fill: PRIMAIRE },
+                margins: { top: 260, bottom: 260, left: 300, right: 300 },
+                children: [
+                  new Paragraph({ spacing: { after: 30 }, children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 44, color: 'FFFFFF', font: opts.police || 'Calibri' }) ] })
+                ].concat(objetCV.objectifProfessionnel ? [ new Paragraph({ children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), bold: true, color: opts.texteBandeauSecondaire || 'E9D5FF', size: 36, font: 'Calibri', characterSpacing: 15 }) ] }) ] : [])
+              }) ] }) ]
+            }), new Paragraph({ spacing: { after: 0 }, children: [] }) ]
+          // TACHE (retour utilisateur : moteur de mise en page centralisé,
+          // conversion 4/5 -- Chic) : "styleEnTete: 'bloc-colonne'" -- pas
+          // d'en-tete pleine largeur du tout : le bloc nom/monogramme est
+          // deja prepend a contenuPrincipal plus haut (voir juste avant
+          // la section Certifications), donc rien a ajouter ici.
+          : opts.styleEnTete === 'bloc-colonne'
+          ? []
+          : [
+              // TACHE (retour utilisateur : "le nom reste sur la gauche en
+              // haut, juste le métier visé qui est en haut au centre") :
+              // nom repasse a gauche (alignement par defaut), seul le
+              // metier vise reste centre et agrandi.
+              new Paragraph({ spacing: { after: 40 }, children: [ new TextRun({ text: (identite.prenom || '') + ' ' + (identite.nom || ''), bold: true, size: 30, color: opts.couleurNom || PRIMAIRE, font: opts.police || 'Calibri' }) ] })
+            ].concat(objetCV.objectifProfessionnel ? [ new Paragraph({
+              alignment: AlignmentType.CENTER,
+              border: { bottom: { color: opts.styleBandeau === 'bordure' ? (opts.secondaire || PRIMAIRE) : PRIMAIRE, space: 4, style: BorderStyle.SINGLE, size: 12 } },
+              spacing: { after: 200 },
+              children: [ new TextRun({ text: objetCV.objectifProfessionnel.toUpperCase(), bold: true, color: opts.styleBandeau === 'plein' ? '1B2340' : TEXTE_PRINCIPAL, size: 36, font: 'Calibri', characterSpacing: 20 }) ]
+            }) ] : [])
+      ).concat([
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           columnWidths: [3400, 6600],
@@ -516,12 +637,30 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
     enfants.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
       children: [ new TextRun({ text: objetCV.objectifProfessionnel, bold: true, italics: !!opts.objectifItalique, color: SECONDAIRE, size: 36, font: 'Calibri' }) ] }));
   }
-  var ligneCoordonnees = [identite.telephone, identite.email, [identite.adresse, identite.ville].filter(Boolean).join(' ')].filter(Boolean);
-  if (permis.possede) { ligneCoordonnees.push('Permis ' + _dnTexteJoint(permis.categories) + (permis.vehicule ? ' — véhicule personnel' : '')); }
-  if (ligneCoordonnees.length) {
-    enfants.push(new Paragraph({ alignment: opts.centrerEntete ? AlignmentType.CENTER : undefined,
-      border: opts.soulignerTitres ? undefined : { bottom: { color: SECONDAIRE, space: 6, style: BorderStyle.SINGLE, size: 6 } },
-      spacing: { after: 240 }, children: [ new TextRun({ text: ligneCoordonnees.join(' · '), size: 18, color: SECONDAIRE, font: 'Calibri' }) ] }));
+  // TACHE (retour utilisateur : moteur de mise en page centralisé,
+  // conversion 2/5 -- Dispo) : "bandeau résumé" -- variante de la ligne de
+  // coordonnées, en pastilles plutot qu'en simple ligne de texte, pensee
+  // pour un CV ou l'essentiel (disponibilite/permis/langues/contact) doit
+  // se lire en un coup d'oeil (saisonnier, hotellerie, grande distribution
+  // -- usage d'origine de Dispo). Remplace ENTIEREMENT ligneCoordonnees
+  // quand actif (jamais les deux a la fois, ce serait redondant).
+  if (opts.bandeauResume) {
+    var badgesResume = [];
+    if (permis.possede) { badgesResume.push('Permis ' + _dnTexteJoint(permis.categories) + (permis.vehicule ? ' + véhicule' : '')); }
+    var languesResume = _dnListe(objetCV.langues);
+    if (languesResume.length) { badgesResume.push(languesResume.map(function (l) { return l.langue; }).join(', ')); }
+    if (identite.telephone) { badgesResume.push(identite.telephone); }
+    if (identite.email) { badgesResume.push(identite.email); }
+    if (badgesResume.length) { enfants.push(_dnPastilles(docx, badgesResume, PRIMAIRE, 'FFFFFF')); }
+    enfants.push(new Paragraph({ border: { bottom: { color: PRIMAIRE, space: 4, style: BorderStyle.SINGLE, size: 10 } }, spacing: { after: 160 }, children: [] }));
+  } else {
+    var ligneCoordonnees = [identite.telephone, identite.email, [identite.adresse, identite.ville].filter(Boolean).join(' ')].filter(Boolean);
+    if (permis.possede) { ligneCoordonnees.push('Permis ' + _dnTexteJoint(permis.categories) + (permis.vehicule ? ' — véhicule personnel' : '')); }
+    if (ligneCoordonnees.length) {
+      enfants.push(new Paragraph({ alignment: opts.centrerEntete ? AlignmentType.CENTER : undefined,
+        border: opts.soulignerTitres ? undefined : { bottom: { color: SECONDAIRE, space: 6, style: BorderStyle.SINGLE, size: 6 } },
+        spacing: { after: 240 }, children: [ new TextRun({ text: ligneCoordonnees.join(' · '), size: 18, color: SECONDAIRE, font: 'Calibri' }) ] }));
+    }
   }
 
   // ---- Rubriques disponibles ----
@@ -626,7 +765,7 @@ var GENERATEURS_DOCX_NATIFS_CV = {
     return _dnConstruireDeuxColonnes(docx, objetCV, { primaire: 'E2006E', secondaire: 'F7A8C4', styleBandeau: 'bordure', texteSidebar: '1F2937' });
   },
   'trajectoire': function (docx, objetCV) {
-    return _dnConstruireTrajectoire(docx, objetCV);
+    return _dnConstruireDeuxColonnes(docx, objetCV, { primaire: '14213D', accentSidebar: '14213D', styleTitreSection: 'bandeau-sombre', styleExperiences: 'frise' });
   },
   // ---- Modeles deux colonnes supplementaires (constructeur partage) ----
   'moderne': function (docx, objetCV) {

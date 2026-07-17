@@ -137,6 +137,13 @@ var dossier = {
   // aucune logique ne l'alimente ou ne le lit encore a ce stade.
   logiciels: [],
   langues: [],           // { langue, niveau }
+  // TACHE (retour utilisateur : bouton "je ne parle que le français") :
+  // certaines personnes n'ont aucune langue etrangere a declarer -- sans ce
+  // flag, dossier.langues restait vide indefiniment et la pyramide "Langues"
+  // ne pouvait jamais se marquer complete (voir complet() de la sous-section
+  // 'langues'). true = la personne a indique explicitement n'avoir aucune
+  // langue etrangere a mentionner (distinct de "pas encore renseigne").
+  languesFrancaisUniquement: false,
   permis: { possede: null, categories: [], vehicule: null },
   contrat: [],           // CDD, CDI, Remplacements, Interim
   tempsTravail: [],       // Temps plein, Temps partiel
@@ -233,7 +240,7 @@ var dossier = {
   // redondant, a ete retire ; voir metierCible/secteurCible plus bas).
   modeRecherche: null,       // 'metier' | 'domaine' | null (pas encore choisi)
   typeRecherche: null,       // 'simple' | 'offre' | null -- uniquement si modeRecherche === 'metier'
-  rechercheCandidature: { entreprise: '', lienOffre: '' }, // uniquement si typeRecherche === 'offre'
+  rechercheCandidature: { entreprise: '', site: '', lienOffre: '' }, // uniquement si typeRecherche === 'offre'
   // champs remplis par l'analyse CV (voir metiers.js) :
   // competencesCV, savoirsCV, cvAnalyse
 };
@@ -1047,11 +1054,32 @@ function activerCollageInstantane(config) {
   if (!zoneAuto || !zoneApercu || !texteArea || !btnColler) { return; }
   var btnCollerManuel = config.idBoutonCollerManuel && document.getElementById(config.idBoutonCollerManuel);
   var btnEffacer = config.idBoutonEffacerRecoller && document.getElementById(config.idBoutonEffacerRecoller);
+  // TACHE (retour utilisateur : bouton "Coller" initial disparu apres le
+  // 1er collage, impossible de "recliquer" comme annonce) : ce bouton
+  // dedie vit DANS la zone d'apercu (toujours visible une fois qu'on y
+  // est, contrairement a btnColler) -- meme lecture du presse-papiers,
+  // toujours en mode AJOUT (jamais un remplacement, on est deja passe le
+  // 1er collage).
+  var btnAjouterMorceau = document.getElementById('btnAjouterMorceau' + (config.idZoneApercu || '').replace('zoneApercuCollage', ''));
 
   _configCollageActif = config;
 
-  function afficherApercu(texte) {
-    texteArea.value = texte;
+  function afficherApercu(texte, estAjout) {
+    // TACHE (retour utilisateur : "la réponse de l'IA dépasse la limite,
+    // j'ai 2-3 morceaux, le bouton Importer n'en prend qu'un") : chaque
+    // clic sur "Coller" ACCUMULE desormais a la suite du texte deja
+    // present (separateur clair), au lieu de l'ecraser -- la personne
+    // peut donc copier le 1er morceau de la reponse IA, cliquer "Coller",
+    // repasser sur le site de l'IA, copier le morceau suivant, cliquer a
+    // nouveau "Coller" (le 2e morceau s'ajoute a la suite du 1er, jamais a
+    // la place), et ainsi de suite jusqu'au dernier morceau (qui contient
+    // le bloc JSON final) avant de cliquer "Importer" UNE seule fois sur
+    // le tout. "Effacer et recoller" reste le moyen de repartir de zero.
+    if (estAjout && texteArea.value.trim()) {
+      texteArea.value = texteArea.value.replace(/\s+$/, '') + '\n\n' + texte;
+    } else {
+      texteArea.value = texte;
+    }
     zoneAuto.style.display = 'none';
     zoneApercu.style.display = 'block';
   }
@@ -1065,8 +1093,15 @@ function activerCollageInstantane(config) {
     texteArea.focus();
   }
 
-  btnColler.addEventListener('click', function () {
+  // TACHE (retour utilisateur : bouton "Coller" initial disparu, message
+  // "recliquez ce meme bouton" sans bouton a recliquer) : logique extraite
+  // en fonction partagee -- reutilisee par btnColler (1er collage, ou
+  // ajout si l'on est deja en phase d'apercu) ET par le nouveau
+  // btnAjouterMorceau (toujours en phase d'apercu, donc TOUJOURS en mode
+  // ajout, jamais un remplacement).
+  function tenterCollerDepuisPressePapiers(forcerAjout) {
     if (!(navigator.clipboard && navigator.clipboard.readText)) { activerCollageManuel(); return; }
+    var estAjout = forcerAjout || (zoneApercu.style.display === 'block' && !!texteArea.value.trim());
     navigator.clipboard.readText().then(function (texte) {
       if (!texte || !texte.trim()) {
         if (typeof config.onErreur === 'function') {
@@ -1074,7 +1109,7 @@ function activerCollageInstantane(config) {
         }
         return;
       }
-      afficherApercu(texte);
+      afficherApercu(texte, estAjout);
       // TACHE (retour utilisateur : "j'ai perdu la fonction" -- message de
       // confirmation disparu) : perdu lors de la generalisation de ce
       // composant a 4 ecrans (voir commentaire plus haut) -- ce callback
@@ -1083,9 +1118,12 @@ function activerCollageInstantane(config) {
       // reste du parcours (apercu en lecture seule, bouton "Importer",
       // ecran de verification ensuite : tout ca reste identique, y
       // compris pour le filet de secours "Coller manuellement").
-      if (typeof config.onSucces === 'function') { config.onSucces(texte); }
+      if (typeof config.onSucces === 'function') { config.onSucces(texte, estAjout); }
     }).catch(activerCollageManuel);
-  });
+  }
+
+  btnColler.addEventListener('click', function () { tenterCollerDepuisPressePapiers(false); });
+  if (btnAjouterMorceau) { btnAjouterMorceau.addEventListener('click', function () { tenterCollerDepuisPressePapiers(true); }); }
   if (btnCollerManuel) { btnCollerManuel.addEventListener('click', activerCollageManuel); }
   if (btnEffacer) {
     btnEffacer.addEventListener('click', function () {
@@ -1135,6 +1173,15 @@ function htmlCollageInstantane(suffixe, boutonsApercuHTML) {
     '<div id="zoneApercuCollage' + suffixe + '" style="display:none;">' +
     '<textarea class="form-control form-control-sm mb-2" id="texteCollage' + suffixe + '" rows="8" readonly ' +
     'style="background:#F9FAFB;" placeholder="Collez ici la réponse complète de l\'assistant IA..."></textarea>' +
+    // TACHE (retour utilisateur : "je ne vois pas de bouton" -- le bouton
+    // "Coller" initial disparait des le 1er collage reussi, remplace par
+    // cette zone d'apercu -- le message qui invitait a "recliquer ce meme
+    // bouton" pour un morceau suivant n'avait donc plus rien a recliquer)
+    // : bouton DEDIE, toujours visible une fois dans cette zone, qui
+    // reprend EXACTEMENT le meme geste (lire le presse-papiers, ajouter a
+    // la suite -- jamais remplacer).
+    '<div class="text-center mb-2"><button type="button" id="btnAjouterMorceau' + suffixe + '" class="btn btn-outline-primary btn-sm">' +
+    '&#128203; Coller un morceau supplémentaire</button></div>' +
     (boutonsApercuHTML || '') +
     '</div>' +
     '<div class="text-center mt-2">' + htmlDeclencheurDemoVideo('import-reponse-ia') + '</div>';
@@ -1802,8 +1849,20 @@ function barreNavigation(precedent, suivant, labelSuivant, options) {
     // a re-rendre toute la page.
     var jsOnclickSuivant = options.onclickSuivant || ("naviguerVers('" + suivant + "')");
     if (options.suivantDesactive) {
+      // TACHE (retour utilisateur : le clignotement etait mal place -- il
+      // visait toute la barre de navigation au lieu du bloc reellement
+      // obligatoire manquant) : quand l'appelant precise options.blocCibleId
+      // (id DOM du bloc ERIP concerne, ex. "blocERIP-candidature"), seul CE
+      // bloc clignote legerement au survol -- pas toute la ligne de boutons.
+      // Sans blocCibleId (autres appelants historiques), on retombe sur
+      // l'ancien comportement (toute la barre) pour ne rien changer ailleurs.
+      var cibleClignote = options.blocCibleId
+        ? "document.getElementById('" + options.blocCibleId + "')"
+        : "this.closest('.barre-navigation')";
       html += '<button class="btn btn-primary btn-lg" id="btnSuivantNavigation" onclick="' + jsOnclickSuivant + '" disabled title="' +
-        (options.suivantDesactiveMessage || 'Selectionnez au moins un element pour continuer.') + '">' +
+        (options.suivantDesactiveMessage || 'Selectionnez au moins un element pour continuer.') + '" ' +
+        'onmouseenter="var c=' + cibleClignote + '; if(c){c.classList.add(\'bloc-erip-clignote-leger\');}" ' +
+        'onmouseleave="var c=' + cibleClignote + '; if(c){c.classList.remove(\'bloc-erip-clignote-leger\');}">' +
         (labelSuivant || 'Continuer &#8594;') + '</button>';
     } else {
       // TACHE (avertissement metier cible) : options.onclickSuivant permet a un
@@ -2253,7 +2312,7 @@ function pageObjectif() {
       if (nouvelObjectif === 'stage' || nouvelObjectif === 'alternance' || nouvelObjectif === 'pmsmp') {
         dossier.modeRecherche = null;
         dossier.typeRecherche = null;
-        dossier.rechercheCandidature = { entreprise: '', lienOffre: '' };
+        dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
       }
       dossier.objectif = nouvelObjectif;
       // TACHE (retour utilisateur : "mettre a jour mon CV" ne doit plus
@@ -2345,8 +2404,14 @@ function pageActivites() {
     titre: '&#128101; Avec qui ou avec quoi travailliez-vous principalement ?',
     sousTitre: 'Choisissez ce qui correspond le mieux à vos expériences.',
     catalogue: CATALOGUE_PERSONNES_MATERIELS_LIEUX, limite: 9,
-    titreSelection: 'Vos principaux environnements', iconeSelection: '&#11088;',
-    placeholderRecherche: '&#128269; Rechercher une personne, un matériel ou un lieu...',
+    // TACHE (retour utilisateur : "Vos principaux environnements" n'est
+    // pas fidèle -- ici on ne choisit pas un environnement mais AVEC QUI
+    // et AVEC QUOI on travaille) : renommé "Votre entourage de travail",
+    // validé avec la personne. Ne touche PAS pageEnvironnement() plus
+    // bas, qui reutilise le meme libelle mais a bon droit (elle, c'est
+    // vraiment un environnement).
+    titreSelection: 'Votre entourage de travail', iconeSelection: '&#11088;',
+    placeholderRecherche: '&#128269; Rechercher une personne, un matériel ou un animal...',
     precedent: 'objectif', suivant: 'actions', labelSuivant: null
   });
 }
@@ -2446,7 +2511,12 @@ function pageSelectionCatalogue(config) {
   var html = afficherProgression(config.etape) +
     '<div class="text-center"><h1>' + config.titre + '</h1><p class="sousTitre">' + config.sousTitre + '</p></div>' +
     afficherCompetencesDetectees(config.etape) +
-    zoneSelection +
+    // TACHE (retour utilisateur : "inversion entre le bandeau de
+    // sélection et le catalogue -- le catalogue passe à la place de
+    // celui-ci") : le Catalogue (l'action a faire) vient desormais
+    // AVANT le recapitulatif de ce qui est deja choisi -- coherent pour
+    // les 4 pages qui partagent ce meme composant (Experience, Ce que
+    // vous faisiez, Environnement, Attentes).
     '<div class="cv-section cv-section-compact mt-3"><h4>&#128218; Catalogue</h4>' +
     '<div class="recherche-actions"><input type="text" class="form-control" id="rechercheCatalogueInput" ' +
     'placeholder="' + config.placeholderRecherche + '" value="' + echapperAttribut(etat.recherche) + '"></div>' +
@@ -2454,6 +2524,7 @@ function pageSelectionCatalogue(config) {
     messageLimite +
     grilleCatalogue +
     '</div>' +
+    zoneSelection +
     (selectedIds.length === 0
       ? '<p class="text-end text-danger small fw-semibold mt-3 mb-0">Un choix suffit pour continuer.</p>'
       : '') +
@@ -2875,7 +2946,7 @@ function wireModeRecherche(rerender) {
       // effacees pour ne pas laisser une information perimee associee au
       // metier, potentiellement transmise a l'IA a tort.
       if (nouveauType !== 'offre') {
-        dossier.rechercheCandidature = { entreprise: '', lienOffre: '' };
+        dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
       }
       etatAfficherChoixModeRecherche = false;
       rerender();
@@ -3182,8 +3253,34 @@ function wireIdentite(rerender) {
   var champs = { identiteNom: 'nom', identitePrenom: 'prenom', identiteAdresse: 'adresse', identiteCodePostal: 'codePostal', identiteTelephone: 'telephone', identiteEmail: 'email', identiteVille: 'ville' };
   Object.keys(champs).forEach(function (idChamp) {
     var el = document.getElementById(idChamp);
-    if (el) { el.addEventListener('input', function () { dossier.identite[champs[idChamp]] = this.value; }); }
+    if (!el) { return; }
+    el.addEventListener('input', function () {
+      // TACHE (retour utilisateur : "dans le telephone, je dois pouvoir
+      // mettre que des chiffres") : filtrage direct dans le champ, pas
+      // seulement a l'enregistrement -- la personne voit immediatement que
+      // les caracteres non numeriques ne s'affichent pas.
+      if (idChamp === 'identiteTelephone') {
+        var nettoye = this.value.replace(/[^0-9]/g, '');
+        if (nettoye !== this.value) { this.value = nettoye; }
+      }
+      dossier.identite[champs[idChamp]] = this.value;
+    });
   });
+  // TACHE (retour utilisateur : "j'ai perdu la fonction Tab/Entree") : un
+  // rerender au blur DE CHAQUE CHAMP (version precedente) redessinait toute
+  // la page au milieu meme du saut Entree -> champ suivant (activerChampsStandardises
+  // appelle suivant.focus(), ce qui declenche blur() sur le champ courant
+  // AVANT que le focus n'atteigne le suivant) -- le DOM etait reconstruit en
+  // plein saut, annulant la navigation. Corrige avec un SEUL ecouteur
+  // 'focusout' sur le conteneur entier : ne redessine que si le focus quitte
+  // reellement la zone (event.relatedTarget hors de #zoneIdentiteChamps),
+  // jamais lors d'un saut interne Tab/Entree -- resout aussi la latence de
+  // validation (retour utilisateur precedent) sans casser la navigation.
+  if (zoneIdentite) {
+    zoneIdentite.addEventListener('focusout', function (e) {
+      if (!zoneIdentite.contains(e.relatedTarget)) { rerender(); }
+    });
+  }
 
   // TACHE (photo optionnelle) : upload -> redimensionnement cote client
   // (evite un base64 demesure, ralentirait l'app et alourdirait le .docx
@@ -3378,6 +3475,16 @@ function wireLangues(rerender) {
         langue: langue,
         niveau: document.getElementById('langueNiveau').value
       });
+      // TACHE (retour utilisateur : bouton "aucune langue etrangere") : une
+      // vraie langue vient d'etre ajoutee, le drapeau n'a plus lieu d'etre.
+      dossier.languesFrancaisUniquement = false;
+      rerender();
+    });
+  }
+  var btnFrancaisUniquement = document.getElementById('btnLanguesFrancaisUniquement');
+  if (btnFrancaisUniquement) {
+    btnFrancaisUniquement.addEventListener('click', function () {
+      dossier.languesFrancaisUniquement = !dossier.languesFrancaisUniquement;
       rerender();
     });
   }
@@ -3452,6 +3559,16 @@ function pageProjet() {
   // objectif/metier vise, candidature). Les rubriques a l'interieur de ces
   // 3 blocs restent inchangees.
   var modeAllege = (dossier.modeCreation === 'pret');
+  // TACHE (retour utilisateur : "quand j'ai fini un bandeau, je veux que le
+  // bandeau le plus proche s'ouvre avec toutes les pyramides") : appelee
+  // AVANT la generation du HTML pour que l'ouverture automatique soit
+  // visible des ce meme rendu (pas au rendu suivant).
+  verifierTransitionsCompletionBlocs(
+    modeAllege
+      ? [CONFIG_BLOC_VOUS, CONFIG_BLOC_PROJET, CONFIG_BLOC_CANDIDATURE]
+      : [CONFIG_BLOC_VOUS, CONFIG_BLOC_PARCOURS, CONFIG_BLOC_EXPERIENCES_PERSO, CONFIG_BLOC_PROJET, CONFIG_BLOC_COMPLEMENTS, CONFIG_BLOC_CANDIDATURE],
+    modeAllege
+  );
   var html = afficherProgression('projet') +
     '<div class="text-center"><h1>&#128203; Mon projet</h1>' +
     '<p class="sousTitre">Les informations qui personnaliseront votre candidature.</p></div>' +
@@ -3477,7 +3594,12 @@ function pageProjet() {
     // options.suivantDesactive/suivantDesactiveMessage, deja gere par
     // barreNavigation() (meme mecanisme que Potentiel -> Action).
     '<div class="barre-navigation-fixe">' + barreNavigation('valeurs', 'revelation', '&#128302; Révéler mon potentiel',
-      { suivantDesactive: !etatAccesRevelation().accessible, suivantDesactiveMessage: etatAccesRevelation().message }) + '</div>';
+      { suivantDesactive: !etatAccesRevelation().accessible, suivantDesactiveMessage: etatAccesRevelation().message,
+        // TACHE (retour utilisateur) : seul le bloc "Candidature" est
+        // obligatoire pour acceder a Potentiel (voir etatAccesRevelation()
+        // ci-dessous, tous ses cas de blocage pointent vers ce bloc) -- id
+        // DOM genere par blocERIP() : "blocERIP-" + config.id.
+        blocCibleId: 'blocERIP-candidature' }) + '</div>';
   app.innerHTML = html;
 
   wireBlocERIP(CONFIG_BLOC_VOUS, pageProjet);
@@ -3676,7 +3798,7 @@ function confirmerRemplacementMetierCible(nouveauNom, estHorsRepertoire, rerende
     'Les informations de candidature associées à l\'ancien métier seront effacées.<br>Souhaitez-vous continuer ?',
     'Continuer', 'btn-primary',
     function () {
-      dossier.rechercheCandidature = { entreprise: '', lienOffre: '' };
+      dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
       finaliserMetierCible(nouveauNom, estHorsRepertoire, rerender);
     }
   );
@@ -3859,7 +3981,7 @@ function ouvrirDemandeCoordonneesEntreprise(onTermine) {
     // TACHE (coherence) : sans entreprise connue, il ne s'agit plus d'une
     // reponse a une offre precise -- reclasse en recherche simple.
     dossier.typeRecherche = 'simple';
-    dossier.rechercheCandidature = { entreprise: '', lienOffre: '' };
+    dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
     dossier.typeCV = typeCVDepuisTypeRecherche();
     onTermine();
   });
@@ -3876,14 +3998,25 @@ function ouvrirFormulaireCoordonneesEntreprise(onTermine) {
   var panneau = ouvrirPanneauGuide('&#127970; Coordonnées de l’entreprise',
     '<div class="mb-2"><label class="form-label small">Nom de l’entreprise</label>' +
     '<input type="text" class="form-control form-control-sm" id="coordEntrepriseNom" placeholder="Nom de l’entreprise"></div>' +
-    '<div class="mb-3"><label class="form-label small">Lien du site / de l’offre (facultatif)</label>' +
-    '<input type="url" class="form-control form-control-sm" id="coordEntrepriseLien" placeholder="https://..."></div>' +
+    '<div class="mb-3"><label class="form-label small">Site de l’entreprise (facultatif)</label>' +
+    '<input type="url" class="form-control form-control-sm" id="coordEntrepriseSite" placeholder="https://..."></div>' +
+    // TACHE (retour utilisateur : "hyper important" meme si facultatif) :
+    // champ distinct du site -- le lien ou le texte de l'OFFRE elle-meme
+    // (pas le site general de l'entreprise) est ce qui permet a l'IA de
+    // repondre precisement aux criteres demandes (voir cv.md/lettre.md,
+    // instruction "renseigne-toi sur cette entreprise... pour repondre le
+    // plus precisement possible aux criteres, conditions et competences
+    // demandees"). Zone de texte plutot qu'un champ url : accepte aussi
+    // bien un lien qu'un texte d'offre colle directement.
+    '<div class="mb-3"><label class="form-label small">Lien ou texte de l’offre (facultatif, mais très utile pour une lettre/un CV précis)</label>' +
+    '<textarea class="form-control form-control-sm" id="coordEntrepriseOffre" rows="3" placeholder="Collez ici le lien de l’annonce, ou son texte si vous ne l’avez pas sous forme de lien"></textarea></div>' +
     '<div class="d-flex justify-content-between">' +
     '<button type="button" class="btn btn-outline-secondary" id="btnRetourCoordEntreprise">&#8592; Retour</button>' +
     '<button type="button" class="btn btn-primary" id="btnValiderCoordEntreprise" disabled>Valider</button>' +
     '</div>');
   var champNom = panneau.querySelector('#coordEntrepriseNom');
-  var champLien = panneau.querySelector('#coordEntrepriseLien');
+  var champSite = panneau.querySelector('#coordEntrepriseSite');
+  var champOffre = panneau.querySelector('#coordEntrepriseOffre');
   var btnValider = panneau.querySelector('#btnValiderCoordEntreprise');
   function actualiser() {
     var ok = champNom.value.trim().length > 0;
@@ -3900,7 +4033,7 @@ function ouvrirFormulaireCoordonneesEntreprise(onTermine) {
     if (btnValider.disabled) { return; }
     // TACHE (coherence) : nom obligatoire pour valider, lien reellement
     // facultatif.
-    dossier.rechercheCandidature = { entreprise: champNom.value.trim(), lienOffre: champLien.value.trim() };
+    dossier.rechercheCandidature = { entreprise: champNom.value.trim(), site: champSite.value.trim(), lienOffre: champOffre.value.trim() };
     dossier.typeRecherche = 'offre';
     dossier.typeCV = typeCVDepuisTypeRecherche();
     fermerPanneauGuide();
@@ -4493,7 +4626,7 @@ function resumeOnSuppressionMetiers(idx) {
   }
 }
 var CONFIG_BLOC_METIERS = {
-  id: 'metiers', icone: '&#11088;', titre: 'Métiers recommandés',
+  id: 'metiers', icone: '&#11088;', titre: 'Métiers recommandés', classe: 'bloc-titre-discret',
   masquerReset: true, // TACHE (complement) : ancienne configuration, plus necessaire
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
   compteurTexte: function () { return metiersRecommandes().length + ' métiers'; },
@@ -4677,7 +4810,7 @@ function resumeProfil() {
   return se.concat(sf).concat(sv);
 }
 var CONFIG_BLOC_PROFIL = {
-  id: 'profil', icone: '&#128202;', titre: 'Analyse de votre profil',
+  id: 'profil', icone: '&#128202;', titre: 'Analyse de votre profil', classe: 'bloc-titre-discret',
   masquerReset: true,
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
   compteurTexte: function () { return resumeProfil().length + ' compétences'; },
@@ -4850,7 +4983,7 @@ function resumeOnSuppressionPistes(idx) {
   }
 }
 var CONFIG_BLOC_PISTES = {
-  id: 'pistes', icone: '&#129517;', titre: 'Autres pistes',
+  id: 'pistes', icone: '&#129517;', titre: 'Autres pistes', classe: 'bloc-titre-discret',
   masquerReset: true, // l'exclusion est partagee avec "Metiers recommandes" : pas de reset isole pertinent ici
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
   compteurTexte: function () { return pistesRecommandees().length + ' métiers'; },
@@ -4966,7 +5099,7 @@ function resumePointsFortsHTML() {
   }).join('');
 }
 var CONFIG_BLOC_CORRESPONDANCE = {
-  id: 'correspondance', icone: '&#128161;', titre: 'Ce qui vous correspond',
+  id: 'correspondance', icone: '&#128161;', titre: 'Ce qui vous correspond', classe: 'bloc-titre-discret',
   masquerReset: true, // synthese derivee automatiquement, rien a "effacer" ici
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
   // TACHE (retour utilisateur : "0 points forts" pour un profil importe) :
@@ -5073,6 +5206,12 @@ function pageRevelation(conserverTirage) {
 function contenuLangues() {
   var options = LANGUES_COURANTES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
   var niveaux = NIVEAUX_LANGUE.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
+  // TACHE (retour utilisateur : bouton pour les personnes ne parlant que
+  // francais) : formulation volontairement neutre et factuelle ("rien a
+  // ajouter"), plutot qu'une formulation qui ferait porter a la personne
+  // l'aveu de ne connaitre aucune langue etrangere -- evite tout ton de
+  // jugement. Pastille au meme style que les autres choix Oui/Non de
+  // l'application (mobilite, permis...).
   return '<p class="mb-2">Indiquer une langue est un vrai atout, surtout dans le commerce, ' +
     'le tourisme et les services. Niveaux du cadre européen : A1 débutant à C2 langue maternelle.</p>' +
     '<div class="row g-2 mt-2 align-items-center">' +
@@ -5080,6 +5219,9 @@ function contenuLangues() {
     '<div class="col-md-3"><input type="text" class="form-control form-control-sm d-none" id="langueAutre" placeholder="Préciser la langue"></div>' +
     '<div class="col-md-2"><select class="form-select form-select-sm" id="langueNiveau">' + niveaux + '</select></div>' +
     '<div class="col-md-2"><button class="btn btn-primary btn-sm" id="ajouterLangueBtn">+ Ajouter</button></div>' +
+    '</div>' +
+    '<div class="mt-2">' +
+    '<span class="pastille' + (dossier.languesFrancaisUniquement ? ' actif' : '') + '" id="btnLanguesFrancaisUniquement">Aucune langue étrangère à mentionner</span>' +
     '</div>';
 }
 
@@ -5147,7 +5289,7 @@ function contenuIdentite() {
     '<div class="row g-2">' +
     '<div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm" id="identiteNom" placeholder="Nom" value="' + echapperAttribut(id.nom) + '"></div>' +
     '<div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm" id="identitePrenom" placeholder="Prénom" value="' + echapperAttribut(id.prenom) + '"></div>' +
-    '<div class="col-6 col-md-3"><input type="tel" class="form-control form-control-sm" id="identiteTelephone" placeholder="Téléphone" value="' + echapperAttribut(id.telephone) + '"></div>' +
+    '<div class="col-6 col-md-3"><input type="tel" inputmode="numeric" class="form-control form-control-sm" id="identiteTelephone" placeholder="Téléphone" value="' + echapperAttribut(id.telephone) + '"></div>' +
     '<div class="col-6 col-md-3"><input type="email" class="form-control form-control-sm" id="identiteEmail" placeholder="E-mail" value="' + echapperAttribut(id.email) + '"></div>' +
     '</div>' +
     '<div class="row g-2 mt-1">' +
@@ -5494,9 +5636,25 @@ function activerChampsStandardises(racine) {
 // contenuHTML : contenu affiche uniquement lorsque le bloc est ouvert.
 function blocAccordeon(id, titre, texteIntro, contenuHTML) {
   var ouvert = !!etatAccordeon[id];
-  return '<div class="accordeon' + (ouvert ? ' ouvert' : '') + '">' +
+  // TACHE (retour utilisateur : "un grand V vert bien visible + la
+  // pyramide refermée un peu transparente/grise, pour ne pas inciter à y
+  // revenir") : une etape explicitement refermee (jamais "jamais
+  // ouverte", voir etatAccordeon[id] === false plutot que undefined) a
+  // forcement deja ete visitee -- soit manuellement, soit automatiquement
+  // en ouvrant l'etape suivante (voir wireAccordeon). "ressources" est
+  // volontairement exclue : ce n'est pas une etape a "terminer".
+  var dejaVisitee = (id !== 'ressources' && etatAccordeon[id] === false);
+  // TACHE (retour utilisateur : "petit v peu visible" -- remplace par un
+  // message clair indiquant l'etat ET la possibilite de revenir modifier).
+  // Regroupe avec le titre (plutot qu'un 3e enfant flex direct) pour ne pas
+  // perturber le justify-content:space-between existant entre titre et
+  // fleche (voir .accordeon-entete dans style.css).
+  var badgeValide = dejaVisitee
+    ? '<span class="accordeon-badge-valide">&#9989; Déjà validé &middot; cliquez pour modifier</span>'
+    : '';
+  return '<div class="accordeon' + (ouvert ? ' ouvert' : '') + (dejaVisitee ? ' accordeon-deja-visitee' : '') + '">' +
     '<button type="button" class="accordeon-entete" data-accordeon="' + id + '">' +
-    '<strong>' + titre + '</strong>' +
+    '<span class="accordeon-titre-groupe"><strong>' + titre + '</strong>' + badgeValide + '</span>' +
     '<span class="accordeon-fleche">' + (ouvert ? '&#9650;' : '&#9660;') + '</span>' +
     '</button>' +
     (texteIntro ? '<p class="text-muted small accordeon-intro">' + texteIntro + '</p>' : '') +
@@ -5535,13 +5693,69 @@ function wireAccordeon(rerender) {
    BLOC), necessaire pour le tableau de bord "Mon projet", construit a
    part pour ne prendre aucun risque sur l'existant.
    ------------------------------------------------------------ */
-var etatAccordeonGroupe = {};   // { [blocId]: sousSectionIdOuverte | null }
+// TACHE (retour utilisateur : "toutes les pyramides ouvertes par défaut,
+// les gens sont perdus") : etatAccordeonGroupe ne memorise plus UN SEUL id
+// ouvert par bloc, mais un objet de SURCHARGES MANUELLES par sous-section
+// -- { [blocId]: { [sousId]: true|false } }. Tant qu'aucun clic manuel
+// n'a ete enregistre pour une sous-section donnee, son ouverture par
+// defaut est calculee (voir etatOuvertureSousSection ci-dessous) : ouverte
+// si incomplete (pour qu'on la remarque sans avoir a cliquer), fermee si
+// deja complete (rien a y faire) -- exactement le comportement demande,
+// y compris la fermeture automatique a la completion (une sous-section
+// qui devient complete sans avoir ete touchee manuellement se referme
+// seule au rendu suivant, puisque son defaut recalcule vers "fermee").
+var etatAccordeonGroupe = {};
+function etatOuvertureSousSection(blocId, sousId, complet) {
+  var overrides = etatAccordeonGroupe[blocId] || {};
+  if (Object.prototype.hasOwnProperty.call(overrides, sousId)) { return overrides[sousId]; }
+  return !complet;
+}
 // TACHE (point 5, refonte Mon projet) : un seul des 5 blocs est developpe a
 // la fois (comme un accordeon, mais au niveau des cartes elles-memes). "Vous"
 // ouvert par defaut au premier chargement, pour ne pas arriver sur une page
 // entierement repliee.
 var etatBlocERIPOuvert = 'vous';
 var etatConfirmationReset = {}; // { [blocId]: true } tant que la confirmation est affichee
+// TACHE (retour utilisateur : "quand j'ai fini un bandeau, je veux que le
+// bandeau le plus proche s'ouvre avec toutes les pyramides") : memorise
+// l'etat complet/incomplet de chaque bandeau au dernier rendu, pour ne
+// declencher l'ouverture automatique du suivant qu'au moment precis de la
+// transition (pas a chaque rerender tant que le bandeau reste complet --
+// sinon la reouverture forcee empecherait de refermer le bandeau suivant).
+var etatBlocDejaComplet = {};
+// Ordre de lecture des bandeaux sur "Mon projet", utilise pour determiner
+// le bandeau "le plus proche" a ouvrir automatiquement -- doit rester
+// coherent avec l'ordre d'affichage reel dans pageProjet() (grille 2
+// colonnes lue ligne par ligne : gauche puis droite, rangee par rangee).
+var ORDRE_BLOCS_MON_PROJET = ['vous', 'parcours', 'experiences-perso', 'projet', 'complements', 'candidature'];
+var ORDRE_BLOCS_MON_PROJET_ALLEGE = ['vous', 'projet', 'candidature'];
+function blocSuivantDansOrdre(blocId, modeAllege) {
+  var ordre = modeAllege ? ORDRE_BLOCS_MON_PROJET_ALLEGE : ORDRE_BLOCS_MON_PROJET;
+  var idx = ordre.indexOf(blocId);
+  if (idx === -1 || idx === ordre.length - 1) { return null; }
+  return ordre[idx + 1];
+}
+// Detecte, pour chaque bandeau fourni, la transition incomplet -> complet
+// depuis le dernier rendu, et ouvre alors automatiquement le bandeau suivant
+// (toutes ses pyramides y compris, via la remise a zero de ses surcharges
+// d'ouverture -- etatOuvertureSousSection retombe alors sur son defaut :
+// ouvert si incomplet). Appelee en tout debut de pageProjet(), avant la
+// generation du HTML, pour que le bandeau suivant s'ouvre des ce meme rendu.
+function verifierTransitionsCompletionBlocs(configs, modeAllege) {
+  configs.forEach(function (config) {
+    var compteur = compteurBlocERIP(config);
+    var estComplet = compteur.total > 0 && compteur.complet === compteur.total;
+    var etaitComplet = !!etatBlocDejaComplet[config.id];
+    if (estComplet && !etaitComplet) {
+      var suivant = blocSuivantDansOrdre(config.id, modeAllege);
+      if (suivant) {
+        etatBlocERIPOuvert = suivant;
+        etatAccordeonGroupe[suivant] = {};
+      }
+    }
+    etatBlocDejaComplet[config.id] = estComplet;
+  });
+}
 
 // Plafond commun aux catalogues "resume" (Langues, Formations, Certifications,
 // Loisirs, Engagements, Experiences perso) : au-dela, on invite a retirer un
@@ -5623,20 +5837,23 @@ function blocERIP(config) {
 
   // TACHE (complement) : indicateur "bloc entierement complete" (ex. 3/3),
   // visible que le bloc soit ouvert ou replie.
-  // TACHE (refonte Potentiel, Etape A) : un bloc peut fournir un compteur
-  // personnalise (ex. "8 metiers") plutot que le X/Y habituel -- utile
-  // quand la notion de "complet" n'a pas de sens (une liste de metiers
-  // recommandes n'est jamais "terminee"). N'affecte aucun bloc existant
-  // de Mon projet (aucun d'eux ne definit compteurTexte).
-  var texteCompteur = config.compteurTexte ? config.compteurTexte() : (compteur.complet + ' / ' + compteur.total);
   // TACHE (complement) : indicateur "bloc entierement complete" (ex. 3/3),
   // visible que le bloc soit ouvert ou replie. N'a pas de sens pour un
   // compteur personnalise (pas de notion de "total a atteindre").
   var blocComplet = !config.compteurTexte && compteur.total > 0 && compteur.complet === compteur.total;
+  // TACHE (retour utilisateur : "je veux les chiffres plus gros et
+  // visibles, 1/4 par exemple, le 1 en jaune tant que c'est pas complet,
+  // le 4 en bleu, et le tout en vert et gros quand c'est 4/4") : compteur
+  // desormais colore et agrandi -- HTML au lieu d'un simple texte plat.
+  var texteCompteur = config.compteurTexte
+    ? config.compteurTexte()
+    : (blocComplet
+        ? '<span class="bloc-erip-compteur-complet">' + compteur.complet + ' / ' + compteur.total + '</span>'
+        : '<span class="bloc-erip-compteur-cours">' + compteur.complet + '</span> / <span class="bloc-erip-compteur-cible">' + compteur.total + '</span>');
   var indicateurComplet = blocComplet ? ' <span class="bloc-erip-complet" title="Ce bloc est complet">&#9989;</span>' : '';
 
   if (!blocOuvert) {
-    return '<div class="cv-section bloc-erip bloc-erip-ferme' + (config.classe ? ' ' + config.classe : '') + '" id="blocERIP-' + config.id + '">' +
+    return '<div class="cv-section bloc-erip bloc-erip-ferme' + (config.classe ? ' ' + config.classe : '') + (blocComplet ? ' bloc-erip-complet-fond' : '') + '" id="blocERIP-' + config.id + '">' +
       '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
       (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
       '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
@@ -5644,6 +5861,12 @@ function blocERIP(config) {
       indicateurComplet +
       '<span class="bloc-erip-fleche">&#9660;</span>' +
       '</div>' +
+      // TACHE (retour utilisateur : "un message grand et visible sur
+      // chaque bandeau quand ils ont fini, qui invite à compléter les
+      // autres") : visible aussi replie -- une personne peut tomber sur
+      // ce bloc deja complet sans jamais l'ouvrir, le message doit rester
+      // lisible dans ce cas aussi.
+      (blocComplet ? '<p class="bloc-erip-message-complet">&#9989; Ce bloc est complet, merci ! Pensez à compléter les autres si ce n\'est pas déjà fait.</p>' : '') +
       // TACHE (complement) : les boutons speciaux d'un bloc (facultatif,
       // via config.boutonsSpeciaux) restent visibles meme replie, pour
       // pouvoir changer d'avis a tout moment sans avoir a ouvrir le bloc.
@@ -5656,20 +5879,15 @@ function blocERIP(config) {
       (config.masquerResumeSiFerme ? '' : htmlResumeCalc) +
       '</div>';
   }
-  var sousSectionOuverte = etatAccordeonGroupe[config.id] || null;
-  // TACHE (refonte Mon projet) : si une sous-section doit etre mise en
-  // evidence (signal venu de l'ecran Potentiel) et qu'aucune autre n'est
-  // deja ouverte manuellement, on l'ouvre automatiquement — sinon
-  // l'utilisateur ne verrait jamais le signal derriere un accordeon ferme.
-  if (!sousSectionOuverte) {
-    var aSurligner = sousSections.filter(function (s) { return s.enEvidence && s.enEvidence(); })[0];
-    if (aSurligner) { sousSectionOuverte = aSurligner.id; }
-  }
+  // TACHE (retour utilisateur : "toutes les pyramides ouvertes par
+  // défaut") : plus de "sousSectionOuverte" unique -- chaque sous-section
+  // calcule desormais sa propre ouverture (etatOuvertureSousSection), avec
+  // le signal "enEvidence" (venu de l'ecran Potentiel) qui force
+  // l'ouverture par-dessus, comme avant.
   var confirmationEnCours = !!etatConfirmationReset[config.id];
   var htmlResume = htmlResumeCalc;
 
   var htmlSousSections = sousSections.map(function (s) {
-    var ouvert = (sousSectionOuverte === s.id);
     var enEvidence = !!(s.enEvidence && s.enEvidence());
     var icone = s.icone ? s.icone() : '';
     var infoBulle = s.infoBulle ? s.infoBulle() : '';
@@ -5682,6 +5900,7 @@ function blocERIP(config) {
     // peu importe l'origine) ; gris = encore a completer, pour inciter au
     // clic sans donner l'impression d'un probleme (pas rouge).
     var estComplet = !!s.complet();
+    var ouvert = enEvidence || etatOuvertureSousSection(config.id, s.id, estComplet);
     var indicateurSousSection = '<span class="accordeon-erip-check' + (estComplet ? ' complet' : '') + '" ' +
       'title="' + (estComplet ? 'Renseigné' : 'À compléter') + '">&#10003;</span>';
     return '<div class="accordeon-erip' + (ouvert ? ' ouvert' : '') + (enEvidence ? ' a-completer' : '') + '" id="' + idCorps + '">' +
@@ -5702,7 +5921,7 @@ function blocERIP(config) {
       '<button type="button" class="btn btn-sm btn-outline-secondary" data-bloc-reset-annuler="' + config.id + '">Annuler</button></div>'
     : '';
 
-  return '<div class="cv-section bloc-erip' + (config.classe ? ' ' + config.classe : '') + '" id="blocERIP-' + config.id + '">' +
+  return '<div class="cv-section bloc-erip' + (config.classe ? ' ' + config.classe : '') + (blocComplet ? ' bloc-erip-complet-fond' : '') + '" id="blocERIP-' + config.id + '">' +
     '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
     (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
     '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
@@ -5710,6 +5929,7 @@ function blocERIP(config) {
     indicateurComplet +
     '<span class="bloc-erip-fleche">&#9650;</span>' +
     '</div>' +
+    (blocComplet ? '<p class="bloc-erip-message-complet">&#9989; Ce bloc est complet, merci ! Pensez à compléter les autres si ce n\'est pas déjà fait.</p>' : '') +
     (config.boutonsSpeciaux ? config.boutonsSpeciaux() : '') +
     htmlConfirmation +
     htmlResume +
@@ -5733,7 +5953,15 @@ function wireBlocERIP(config, rerender) {
   document.querySelectorAll('[data-bloc-accordeon="' + config.id + '"]').forEach(function (el) {
     el.addEventListener('click', function () {
       var sid = this.dataset.sousSection;
-      etatAccordeonGroupe[config.id] = (etatAccordeonGroupe[config.id] === sid) ? null : sid;
+      // TACHE (retour utilisateur : "toutes les pyramides ouvertes par
+      // défaut") : bascule desormais l'etat EFFECTIF actuel (par defaut
+      // ou deja surcharge), plutot que de comparer a un seul id ouvert.
+      var sousSections = resoudreSousSections(config);
+      var sousSection = sousSections.filter(function (s) { return s.id === sid; })[0];
+      var estComplet = sousSection ? !!sousSection.complet() : false;
+      var ouvertActuel = etatOuvertureSousSection(config.id, sid, estComplet);
+      if (!etatAccordeonGroupe[config.id]) { etatAccordeonGroupe[config.id] = {}; }
+      etatAccordeonGroupe[config.id][sid] = !ouvertActuel;
       rerender();
     });
   });
@@ -5767,7 +5995,7 @@ function wireBlocERIP(config, rerender) {
     btnConfirmer.addEventListener('click', function () {
       if (config.onResetTout) { config.onResetTout(); }
       etatConfirmationReset[config.id] = false;
-      etatAccordeonGroupe[config.id] = null;
+      etatAccordeonGroupe[config.id] = {};
       rerender();
     });
   }
@@ -5775,13 +6003,20 @@ function wireBlocERIP(config, rerender) {
   if (btnAnnuler) {
     btnAnnuler.addEventListener('click', function () { etatConfirmationReset[config.id] = false; rerender(); });
   }
-  // Cablage du contenu de la sous-section actuellement ouverte, delegue a la config.
+  // Cablage du contenu de chaque sous-section actuellement ouverte, delegue
+  // a la config. TACHE (correction : boutons inactifs apres passage au
+  // modele multi-ouverture) : etatAccordeonGroupe[config.id] est desormais
+  // un objet de surcharges par sous-section ({sousId: true|false}), plus un
+  // id unique -- on reutilise donc la meme regle d'ouverture que le rendu
+  // (etatOuvertureSousSection + enEvidence, voir blocERIP()) pour cabler
+  // TOUTES les sous-sections effectivement ouvertes, pas une seule.
   var sousSectionsResolues = resoudreSousSections(config);
-  var sousSectionOuverte = etatAccordeonGroupe[config.id] || null;
-  if (sousSectionOuverte) {
-    var sous = sousSectionsResolues.filter(function (s) { return s.id === sousSectionOuverte; })[0];
-    if (sous && sous.wire) { sous.wire(rerender); }
-  }
+  sousSectionsResolues.forEach(function (s) {
+    var enEvidence = !!(s.enEvidence && s.enEvidence());
+    var estComplet = !!s.complet();
+    var ouvert = enEvidence || etatOuvertureSousSection(config.id, s.id, estComplet);
+    if (ouvert && s.wire) { s.wire(rerender); }
+  });
   // TACHE (refonte Mon projet) : reutilise wireEvidence() telle quelle (non
   // modifiee) pour chaque sous-section concernee par une mise en evidence.
   sousSectionsResolues.forEach(function (s) {
@@ -5806,8 +6041,13 @@ function resumeVous() {
   // le detail complet apparait au survol (infobulle), sans besoin d'une
   // icone ✅ distincte -- la presence meme de ce chip suffit a signaler
   // que quelque chose est renseigne.
-  var champsRenseignes = [id.civilite, id.prenom, id.nom, id.adresse, id.telephone, id.email, id.ville].filter(Boolean);
-  if (champsRenseignes.length) {
+  // TACHE (retour utilisateur : "je dois remplir les champs obligatoires
+  // avant d'avoir cette partie validee") : le chip "Coordonnees" ne doit
+  // apparaitre qu'une fois l'identite reellement complete (meme regle que
+  // la coche verte de la pyramide, voir identiteEstComplete()) -- pas des
+  // le premier champ rempli. C'est ce declenchement premature qui donnait
+  // l'impression d'une validation immediate et incoherente.
+  if (identiteEstComplete()) {
     var tooltip = [id.civilite, id.prenom, id.nom].filter(Boolean).join(' ') +
       (id.adresse ? ' — ' + id.adresse : '') +
       (id.ville ? ' (' + id.ville + ')' : '') +
@@ -5822,6 +6062,11 @@ function resumeVous() {
   (dossier.langues || []).forEach(function (l, i) {
     items.push({ label: l.langue + ' ' + l.niveau, source: 'langue', index: i });
   });
+  // TACHE (retour utilisateur : "pas trop valorisant" -- retire du resume
+  // en haut du bandeau) : le drapeau dossier.languesFrancaisUniquement reste
+  // utilise pour valider la pyramide "Langues" (voir complet(), plus bas) et
+  // le bouton reste dans la pyramide elle-meme -- seul ce chip visible en
+  // permanence, meme bloc replie, disparait.
   return items;
 }
 function resumeOnSuppressionVous(idx) {
@@ -5865,6 +6110,7 @@ var CONFIG_BLOC_VOUS = {
     dossier.identite = { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' };
     dossier.permis = { possede: null, categories: [], vehicule: null };
     dossier.langues = [];
+    dossier.languesFrancaisUniquement = false;
   },
   sousSections: [
     {
@@ -5885,7 +6131,7 @@ var CONFIG_BLOC_VOUS = {
     },
     {
       id: 'langues', titre: 'Langues',
-      complet: function () { return dossier.langues.length > 0; },
+      complet: function () { return dossier.langues.length > 0 || !!dossier.languesFrancaisUniquement; },
       contenuHTML: contenuLangues,
       wire: function (rerender) { wireLangues(rerender); }
     }
@@ -6094,7 +6340,8 @@ function resumeCandidature() {
     else if (dossier.typeRecherche === 'offre') { items.push({ label: 'Réponse à une offre', source: 'typeRecherche' }); }
     var rc = dossier.rechercheCandidature || {};
     if (rc.entreprise) { items.push({ label: rc.entreprise, source: 'rc-entreprise' }); }
-    if (rc.lienOffre) { items.push({ label: rc.lienOffre, source: 'rc-lien' }); }
+    if (rc.site) { items.push({ label: rc.site, source: 'rc-site' }); }
+    if (rc.lienOffre) { items.push({ label: (rc.lienOffre.length > 40 ? rc.lienOffre.slice(0, 40) + '…' : rc.lienOffre), source: 'rc-lien' }); }
   }
   if (obj.structure) { items.push({ label: obj.structure, source: 'structure' }); }
   if (obj.poste) { items.push({ label: obj.poste, source: 'poste' }); }
@@ -6112,6 +6359,7 @@ function resumeOnSuppressionCandidature(idx) {
   if (item.source === 'modeRecherche') { dossier.modeRecherche = null; dossier.typeRecherche = null; return; }
   if (item.source === 'typeRecherche') { dossier.typeRecherche = null; return; }
   if (item.source === 'rc-entreprise') { dossier.rechercheCandidature.entreprise = ''; return; }
+  if (item.source === 'rc-site') { dossier.rechercheCandidature.site = ''; return; }
   if (item.source === 'rc-lien') { dossier.rechercheCandidature.lienOffre = ''; return; }
   var o = dossier.objectif;
   var obj = o && dossier[o];
@@ -6133,7 +6381,7 @@ var CONFIG_BLOC_CANDIDATURE = {
     }
     dossier.modeRecherche = null;
     dossier.typeRecherche = null;
-    dossier.rechercheCandidature = { entreprise: '', lienOffre: '' };
+    dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
   },
   // TACHE (retour utilisateur : 2 sous-sections qui se repetaient) : une
   // SEULE sous-section a la fois desormais, choisie selon l'objectif --
@@ -6220,14 +6468,18 @@ var CONFIG_BLOC_COMPLEMENTS = {
 // editable (taches dediees ulterieures -- voir accordeons "squelette"
 // ci-dessous, clairement signales comme temporaires).
 function pageResultats() {
-  var carteChoisie = !!dossier.dernierDocumentPrepare;
-  // TACHE (retour utilisateur : "Sélectionné" affiché sur une carte
-  // verrouillée) : le repli par defaut pointait toujours vers 'cv', meme
-  // quand cette carte est verrouillee (mode "pret") -- une carte pouvait
-  // alors etre a la fois grisee ET marquee "Selectionne", deux etats
-  // normalement incompatibles. Repli intelligent : pointe vers la premiere
-  // carte reellement disponible.
+  // TACHE (retour utilisateur : "je suis en train de faire mon CV, la carte
+  // est bleue 'Sélectionné', mais rien ne s'affiche en dessous") : carteChoisie
+  // se basait sur dossier.dernierDocumentPrepare, qui ne se remplit qu'a des
+  // etapes AVANCEES du parcours (voir ses points d'ecriture plus bas dans ce
+  // fichier) -- jamais au moment ou on arrive juste sur cette page. Or la
+  // carte affichee "Sélectionné" (actif, voir carteDocument() plus bas) se
+  // base deja sur docActif, qui LUI est toujours defini (docActifActuel() a
+  // toujours un repli). Ce decalage laissait la zone de contenu totalement
+  // vide malgre une carte visuellement selectionnee. docActif calcule
+  // desormais AVANT carteChoisie, qui s'aligne dessus.
   var docActif = docActifActuel();
+  var carteChoisie = !!docActif;
   // TACHE (retour utilisateur : navigation libre entre CV/Lettre/Entretien) :
   // etatAccordeon pointe desormais vers le tiroir du document ACTIF avant
   // toute autre chose dans cette fonction -- voir accordeonPourType().
@@ -6435,17 +6687,32 @@ function pageResultats() {
   var accordeonChoixIA = blocAccordeon('choix-ia', titreEtape('&#129302; Choisissez votre assistant IA'),
     'Cliquez sur un assistant ci-dessous. L’application prépare et copie tout pour vous, puis ouvre l’assistant : vous n’avez rien à taper.',
     styleMiniAnimation +
-    miniAnimationEtapes(['Vous cliquez sur un assistant', 'Tout est copié pour vous', 'Il s’ouvre automatiquement', 'Vous revenez ici après']) +
-    // TACHE (retour utilisateur : "ici il me manque une vidéo, rajoute
-    // Exp_imp_ai.mp4") : cle 'export-ia-texte' desormais libre pour cet
-    // usage (l'etape "Analyse assistee par IA" du wizard, qui couvrait le
-    // meme geste, utilise maintenant 'import-reponse-ia' -- voir metiers.js,
-    // rendreExplication()).
-    '<div class="text-center mb-2">' + htmlDeclencheurDemoVideo('export-ia-texte') + '</div>' +
-    '<div class="ia-grid text-center">' + ASSISTANTS_IA.map(function (a) {
-      return '<button type="button" class="pastille-selection" data-assistant="' + a.id + '" style="' +
-        stylePastilleInline(false) + 'font-size:1.15rem;padding:0.75rem 1.5rem;font-weight:600;">' + a.nom + '</button>';
-    }).join('') + '</div>');
+    // TACHE (retour utilisateur : "les gens cliquent sur les chiffres au
+    // lieu des pastilles IA, ce n'est pas clair") : schema restructure en
+    // 2 colonnes -- les etapes numerotees a GAUCHE (verticales, hors du
+    // chemin du clic), les pastilles d'assistant SEULES a droite,
+    // agrandies, bien isolees, avec un titre explicite juste au-dessus
+    // pour qu'il n'y ait aucune ambiguite sur ou cliquer. Message ajoute
+    // pour rassurer une personne qui a deja fait ce parcours pour un
+    // autre document (CV/lettre/entretien) : c'est exactement le meme.
+    '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">' +
+      '<div style="flex:0 0 200px;">' +
+      ['Vous cliquez sur un assistant', 'Tout est copié pour vous', 'Il s’ouvre automatiquement', 'Vous revenez ici après'].map(function (texte, i) {
+        return '<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.7rem;">' +
+          '<span class="mini-anim-etape" style="width:1.9rem;height:1.9rem;font-size:0.9rem;flex-shrink:0;animation-delay:' + (i * 0.5) + 's;">' + (i + 1) + '</span>' +
+          '<span class="small text-muted">' + texte + '</span></div>';
+      }).join('') +
+      '</div>' +
+      '<div style="flex:1 1 260px;text-align:center;background:#F0F6FF;border:2px solid #BFDBFE;border-radius:12px;padding:1rem;">' +
+      '<p class="fw-bold mb-1" style="font-size:1.1rem;color:#0d3c8a;">&#128071; Cliquez ici pour continuer</p>' +
+      '<p class="small text-muted mb-3">Vous allez suivre exactement le même processus, quel que soit le document (CV, lettre, entretien).</p>' +
+      '<div class="ia-grid text-center">' + ASSISTANTS_IA.map(function (a) {
+        return '<button type="button" class="pastille-selection" data-assistant="' + a.id + '" style="' +
+          stylePastilleInline(false) + 'font-size:1.15rem;padding:0.75rem 1.5rem;font-weight:600;">' + a.nom + '</button>';
+      }).join('') + '</div>' +
+      '<div class="text-center mt-3">' + htmlDeclencheurDemoVideo('export-ia-texte') + '</div>' +
+      '</div>' +
+    '</div>');
   // TACHE (page Action, tache 3) : reutilise integralement analyserReponseIACV/
   // Lettre/Entretien + genererResumeImportCV/genererResumeGeneriqueImportIA
   // (deja existantes, memes fonctions que celles utilisees par l'ancienne
@@ -6797,7 +7064,11 @@ function pageResultats() {
         (etapeAtteinte('apercu-document') ? accordeonApercuDoc : '') +
         (etapeAtteinte('exporter-document') ? accordeonExporter : '')
       : '') +
-    accordeonRessources +
+    // TACHE (retour utilisateur : "Ressources et liens utiles visible
+    // seulement en même temps que le bandeau Exporter") : etait toujours
+    // affiche, quelle que soit l'avancee dans le parcours -- desormais
+    // conditionne exactement comme "Exporter" (meme etapeAtteinte).
+    (etapeAtteinte('exporter-document') ? accordeonRessources : '') +
     // TACHE (bouton "Merci bien, j'ai fini") : n'apparait que si le document
     // ACTUELLEMENT actif (docActif) a ete reellement enregistre par la
     // personne (telechargement Word ou texte) -- pas seulement atteint son
@@ -6942,17 +7213,27 @@ function brancherEvenementsResultats() {
       // recalculees ici car cette fonction n'a pas acces aux variables
       // locales de pageResultats() (portee separee).
       var modePret = (dossier.modeCreation === 'pret');
+      // TACHE (retour utilisateur : "je veux éviter de cliquer sur Lettre
+      // de motivation pour que le bandeau s'ouvre, je veux qu'il soit
+      // ouvert directement") : force explicitement l'ouverture de la
+      // premiere etape ("Adaptation au métier") des le choix du document,
+      // en plus du filet de secours deja present dans accordeonPourType()
+      // -- pour ne jamais dependre d'un ordre d'execution fragile entre
+      // les deux.
       if (outil === 'cv') {
         if (modePret) { return; } // carte verrouillee : deja un CV (mode "pret")
         dossier.dernierDocumentPrepare = 'cv';
+        if (!etatAccordeonParType.cv) { etatAccordeonParType.cv = { 'adaptation-metier': true }; }
         pageResultats();
       } else if (outil === 'lettre') {
         if (!modePret && !dossier.cvTermine) { return; } // carte verrouillee : CV pas encore termine
         dossier.dernierDocumentPrepare = 'lettre';
+        if (!etatAccordeonParType.lettre) { etatAccordeonParType.lettre = { 'adaptation-metier': true }; }
         pageResultats();
       } else if (outil === 'entretien') {
         if (!dossier.lettreTerminee) { return; } // carte verrouillee : lettre pas encore terminee
         dossier.dernierDocumentPrepare = 'entretien';
+        if (!etatAccordeonParType.entretien) { etatAccordeonParType.entretien = { 'adaptation-metier': true }; }
         pageResultats();
       }
       else if (outil === 'pmsmp') { window.open('https://immersion-facile.beta.gouv.fr/', '_blank'); }
@@ -7002,7 +7283,7 @@ function brancherEvenementsResultats() {
       // (ou se trouve le champ photo) avant de naviguer -- coherent avec
       // le bouton "Valider et revenir à l'aperçu du CV" qui s'y trouve.
       etatBlocERIPOuvert = 'vous';
-      etatAccordeonGroupe.vous = 'identite';
+      etatAccordeonGroupe.vous = { identite: true };
       etatVenantDePhotoAction = true;
       naviguerVers('projet');
     });
@@ -7108,7 +7389,7 @@ function brancherEvenementsResultats() {
       idBoutonImporter: 'btnImporterReponseIA',
       onErreur: function (msg) { messageImportIA.style.color = '#b91c1c'; messageImportIA.textContent = '⚠️ ' + msg; },
       onEffacer: function () { messageImportIA.textContent = ''; },
-      onSucces: function () { messageImportIA.style.color = '#157347'; messageImportIA.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire.'; },
+      onSucces: function (texte, estAjout) { messageImportIA.style.color = '#157347'; messageImportIA.textContent = estAjout ? '✅ Morceau suivant ajouté à la suite. Copiez le prochain morceau puis recliquez, ou cliquez Importer si c’était le dernier.' : '✅ Réponse importée automatiquement depuis le presse-papiers. Si la réponse de l’IA fait plusieurs morceaux, copiez le morceau suivant puis cliquez sur "Coller un morceau supplémentaire", juste en dessous : il s’ajoutera à la suite.'; },
       onCollerManuel: function () { messageImportIA.textContent = ''; }
     });
     btnImporterReponseIA.addEventListener('click', function () {
@@ -7596,6 +7877,15 @@ function entrepriseCibleActuelle() {
   if (obj && obj.structure) { return obj.structure; }
   return '';
 }
+// TACHE (retour utilisateur : lien/message de l'offre séparé du site) :
+// meme principe que entrepriseCibleActuelle()/lienOffreCibleActuel() --
+// point d'acces unique, aucun circuit ancien n'a de champ "site" distinct
+// (of.lien couvrait deja indistinctement les deux avant cette tache), donc
+// pas de repli necessaire ici.
+function siteCibleActuel() {
+  var rc = dossier.rechercheCandidature;
+  return (rc && rc.site) || '';
+}
 function lienOffreCibleActuel() {
   var rc = dossier.rechercheCandidature;
   if (rc && rc.lienOffre) { return rc.lienOffre; }
@@ -7734,20 +8024,25 @@ function texteProfil(type) {
     // of.lien (ancien circuit, toujours modifiable depuis l'ecran
     // "Informations sur votre candidature").
     var entrepriseCible = entrepriseCibleActuelle();
+    var siteCible = siteCibleActuel();
     var lienCible = lienOffreCibleActuel();
     var posteCible = posteCibleActuel();
+    // TACHE (retour utilisateur : lien/message de l'offre séparé du site,
+    // "hyper important") : deux lignes distinctes desormais -- le site
+    // (contexte general sur l'entreprise) et l'offre elle-meme (lien ou
+    // texte colle, ce qui permet de repondre precisement aux criteres
+    // demandes, voir consigne dediee dans cv.md/lettre.md).
+    if (siteCible) { candidature += '- Site de l’entreprise : ' + siteCible + '\n'; }
+    if (lienCible) { candidature += '- Offre visée (lien ou texte) : ' + lienCible + '\n'; }
     if (dossier.objectif === 'offre') {
-      if (lienCible) { candidature += '- Offre visée (lien) : ' + lienCible + '\n'; }
       if (posteCible || entrepriseCible) { candidature += '- Poste visé : ' + (posteCible || '?') + (entrepriseCible ? ' chez ' + entrepriseCible : '') + '\n'; }
     } else if (dossier.objectif === 'spontanee') {
       candidature += '- Démarche : candidature spontanée.\n';
-      if (lienCible) { candidature += '- Offre de référence (lien) : ' + lienCible + '\n'; }
       if (posteCible || entrepriseCible) { candidature += '- Poste souhaité : ' + (posteCible || '?') + (entrepriseCible ? ' chez ' + entrepriseCible : '') + '\n'; }
     } else { // reconversion
       candidature += '- Démarche : changer de métier (reconversion).\n';
       if (posteCible) { candidature += '- Métier visé : ' + posteCible + '\n'; }
       if (entrepriseCible) { candidature += '- Entreprise cible : ' + entrepriseCible + '\n'; }
-      if (lienCible) { candidature += '- Adresse internet : ' + lienCible + '\n'; }
     }
     if (of.dispo && of.dispo.length) { candidature += '- Disponibilités : ' + of.dispo.join(', ') + '\n'; }
   }
@@ -7774,9 +8069,10 @@ function texteProfil(type) {
   // jamais transmise (le bloc ci-dessus ne s'execute pas pour ces objectifs).
   if (dossier.objectif !== 'offre' && dossier.objectif !== 'spontanee' && dossier.objectif !== 'reconversion') {
     var rcOrpheline = dossier.rechercheCandidature;
-    if (rcOrpheline && (rcOrpheline.entreprise || rcOrpheline.lienOffre)) {
+    if (rcOrpheline && (rcOrpheline.entreprise || rcOrpheline.site || rcOrpheline.lienOffre)) {
       if (rcOrpheline.entreprise) { candidature += '- Entreprise ciblée (parcours Candidature) : ' + rcOrpheline.entreprise + '\n'; }
-      if (rcOrpheline.lienOffre) { candidature += '- Lien de l’offre (parcours Candidature) : ' + rcOrpheline.lienOffre + '\n'; }
+      if (rcOrpheline.site) { candidature += '- Site de l’entreprise (parcours Candidature) : ' + rcOrpheline.site + '\n'; }
+      if (rcOrpheline.lienOffre) { candidature += '- Offre visée, lien ou texte (parcours Candidature) : ' + rcOrpheline.lienOffre + '\n'; }
     }
   }
 
@@ -8294,16 +8590,45 @@ function creerBrouillonChoixIACV(valeursIA) {
       valeur: (reco.typeCV && reco.typeCV.valeur) || null,
       justification: (reco.typeCV && reco.typeCV.justification) || ''
     },
-    experiences: versListe(reco.experiencesAMettreEnAvant, function (e) {
-      var correspondance = savoirFaireParExperience.filter(function (s) {
-        return normaliserTexte(s.poste || '') === normaliserTexte(e.poste || '') &&
-          normaliserTexte(s.entreprise || '') === normaliserTexte(e.entreprise || '');
-      })[0];
-      return {
-        poste: e.poste || '', entreprise: e.entreprise || '', texte: e.justification || '',
-        missions: ((correspondance && correspondance.missions) || []).map(function (m) { return { texte: m, garder: true }; })
-      };
-    }),
+    // TACHE (retour utilisateur : "l'IA me donne les 5 d'en haut, celle
+    // qu'il me faut est la 6e ou 7e" -- la personne ne pouvait pas la
+    // rajouter depuis cet écran, puisque seules les experiences
+    // RECOMMANDEES PAR L'IA y apparaissaient) : la liste part desormais de
+    // TOUTES les experiences du dossier, jamais seulement du sous-ensemble
+    // recommande. Celles recommandees par l'IA arrivent en tete (dans son
+    // ordre de pertinence, "garder" a true par defaut) ; toutes les autres
+    // suivent ensuite ("garder" a false par defaut, mais visibles et
+    // cochables) -- la personne peut donc toujours ajouter une experience
+    // que l'IA n'avait pas retenue, sans jamais etre limitee a son choix.
+    experiences: (function () {
+      var recommandees = reco.experiencesAMettreEnAvant || [];
+      function correspondanceMissions(poste, entreprise) {
+        return (savoirFaireParExperience.filter(function (s) {
+          return normaliserTexte(s.poste || '') === normaliserTexte(poste || '') &&
+            normaliserTexte(s.entreprise || '') === normaliserTexte(entreprise || '');
+        })[0] || {}).missions || [];
+      }
+      function estDejaTraitee(e, liste) {
+        return liste.some(function (x) {
+          return normaliserTexte(x.poste || '') === normaliserTexte(e.poste || '') &&
+            normaliserTexte(x.entreprise || '') === normaliserTexte(e.entreprise || '');
+        });
+      }
+      var resultat = recommandees.map(function (e) {
+        return {
+          poste: e.poste || '', entreprise: e.entreprise || '', texte: e.justification || '', garder: true,
+          missions: correspondanceMissions(e.poste, e.entreprise).map(function (m) { return { texte: m, garder: true }; })
+        };
+      });
+      (dossier.experiences || []).forEach(function (e) {
+        if (estDejaTraitee(e, resultat)) { return; }
+        resultat.push({
+          poste: e.poste || '', entreprise: e.entreprise || '', texte: '', garder: false,
+          missions: correspondanceMissions(e.poste, e.entreprise).map(function (m) { return { texte: m, garder: true }; })
+        });
+      });
+      return resultat;
+    })(),
     competences: versListe(reco.competencesAValoriser, function (c) { return { texte: c.competence, sousTexte: c.justification }; }),
     rubriquesMasquables: versListe(reco.rubriquesMasquables, function (r) { return { texte: r.rubrique, sousTexte: r.justification }; })
   };
@@ -8372,7 +8697,17 @@ function contenuOngletExperiencesIA(brouillon) {
   if (!brouillon.experiences.length) {
     return '<p class="text-muted small fst-italic mb-0">Aucune expérience à mettre en avant proposée par l’assistant.</p>';
   }
-  return brouillon.experiences.map(function (e, i) {
+  // TACHE (retour utilisateur : choisir soi-meme ses 5 experiences) :
+  // message explicite -- le CV final n'affiche que 5 experiences au
+  // maximum (contrainte d'une page A4). Cochees par defaut : celles que
+  // l'IA juge les plus pertinentes. La personne reste toujours libre de
+  // decocher/cocher differemment, y compris une experience que l'IA
+  // n'avait pas retenue.
+  var messageChoix = '<p class="small text-muted mb-3">Le CV n’affiche au maximum que <strong>5 expériences</strong>. ' +
+    'Cochez celles que vous souhaitez mettre en avant. Si vous n’en cochez aucune vous-même, ' +
+    'l’application retient par défaut les 5 jugées les plus pertinentes par l’IA pour ce poste précis — ' +
+    'pas nécessairement les 5 plus récentes.</p>';
+  return messageChoix + brouillon.experiences.map(function (e, i) {
     var idBase = 'reco_experiences_' + i;
     var missionsHtml = e.missions.length
       ? e.missions.map(function (m, j) {
@@ -8419,12 +8754,12 @@ function contenuOngletComplementsIA(brouillon) {
 }
 
 var GROUPES_ONGLETS_CHOIX_IA_CV = [
-  { id: 'profil', titre: 'Profil', rendu: contenuOngletProfilIA },
-  { id: 'accroche', titre: 'Accroche', rendu: contenuOngletAccrocheIA },
-  { id: 'experiences', titre: 'Expériences', rendu: contenuOngletExperiencesIA },
-  { id: 'competences', titre: 'Compétences à valoriser', rendu: contenuOngletCompetencesIA },
-  { id: 'strategie', titre: 'Stratégie de candidature', rendu: contenuOngletStrategieIA },
-  { id: 'complements', titre: 'Informations complémentaires', rendu: contenuOngletComplementsIA }
+  { id: 'profil', titre: '👤 Profil', rendu: contenuOngletProfilIA },
+  { id: 'accroche', titre: '✨ Accroche', rendu: contenuOngletAccrocheIA },
+  { id: 'experiences', titre: '💼 Expériences', rendu: contenuOngletExperiencesIA },
+  { id: 'competences', titre: '🛠️ Compétences à valoriser', rendu: contenuOngletCompetencesIA },
+  { id: 'strategie', titre: '🎯 Stratégie de candidature', rendu: contenuOngletStrategieIA },
+  { id: 'complements', titre: '➕ Informations complémentaires', rendu: contenuOngletComplementsIA }
 ];
 
 function genererEcranChoixReponseIACV(brouillon) {
@@ -8505,15 +8840,22 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
 // suivante du parcours).
 function ouvrirEcranChoixReponseIACV(brouillon, onValider, onRetour) {
   function rafraichir() {
+    // TACHE (retour utilisateur : "après chaque flèche je reviens sur le
+    // 1er onglet") : bug d'ordre -- le clic de restauration de l'onglet
+    // actif se declenchait AVANT que wireOngletsValidationImport() ait
+    // attache les ecouteurs sur le DOM fraichement regenere : le clic ne
+    // faisait donc rien, et l'onglet "actif par defaut" (le premier,
+    // fixe par genererEcranChoixReponseIACV()) restait affiche. Cablage
+    // d'abord, restauration ensuite.
     var ongletActif = document.querySelector('.onglet-validation-import-btn.actif');
     var idOngletActif = ongletActif ? ongletActif.dataset.ongletBtn : null;
     document.getElementById('corpsEcranChoixIACV').innerHTML = genererEcranChoixReponseIACV(brouillon);
+    wireOngletsValidationImport();
+    wireEcranChoixReponseIACV(brouillon, rafraichir);
     if (idOngletActif) {
       var btn = document.querySelector('[data-onglet-btn="' + idOngletActif + '"]');
       if (btn) { btn.click(); }
     }
-    wireOngletsValidationImport();
-    wireEcranChoixReponseIACV(brouillon, rafraichir);
   }
 
   ouvrirFenetreERIP({
@@ -9416,11 +9758,11 @@ function ligneChampObjetConflit(categorie, champNom, valeurExistante, valeurProp
 // onglet "Autres informations" n'est ajoute par genererEcranValidationImport()
 // QUE s'il contient reellement quelque chose.
 var GROUPES_ONGLETS_VALIDATION_IMPORT = [
-  { id: 'identite', titre: 'Identité & mobilité', cles: ['identite', 'permis', 'langues'] },
-  { id: 'experiences', titre: 'Expériences professionnelles', cles: ['experiences'] },
-  { id: 'formations', titre: 'Formations & certifications', cles: ['formations', 'certifications'] },
-  { id: 'competences', titre: 'Compétences transférables', cles: ['competences'] },
-  { id: 'complements', titre: 'Loisirs, engagements & logiciels', cles: ['loisirs', 'engagements', 'logiciels'] }
+  { id: 'identite', titre: '🪪 Identité & mobilité', cles: ['identite', 'permis', 'langues'] },
+  { id: 'experiences', titre: '💼 Expériences professionnelles', cles: ['experiences'] },
+  { id: 'formations', titre: '🎓 Formations & certifications', cles: ['formations', 'certifications'] },
+  { id: 'competences', titre: '🛠️ Compétences transférables', cles: ['competences'] },
+  { id: 'complements', titre: '➕ Loisirs, engagements & logiciels', cles: ['loisirs', 'engagements', 'logiciels'] }
 ];
 var LIBELLES_CATEGORIES_VALIDATION_IMPORT = {
   identite: 'Identité', permis: 'Mobilité (permis)', langues: 'Langues',
@@ -10164,6 +10506,37 @@ function construireObjetCVPourExport(modeleId) {
       objetFinal.competences = unifierEtPlafonnerCompetences(objetDecide.competences, recoCompetences, dossier.metierCible, 5);
     }
 
+    // TACHE (retour utilisateur : "le CV dépasse une page, il faut
+    // adapter les missions") : A4 Détaillé ne plafonnait jusqu'ici que le
+    // NOMBRE d'expériences (capacites.experiences, 5 max) -- jamais la
+    // LONGUEUR de chaque mission, contrairement à A4 Essentiel (déjà
+    // tronqué, voir formatA5CV.js). Une personne qui rédige des missions
+    // très complètes pouvait donc légitimement déborder d'une page même
+    // avec seulement 4-5 expériences. Budget empirique (~1800 caractères
+    // cumulés sur les missions retenues, calibré pour tenir sur une page
+    // A4 avec le reste du CV) -- appliqué UNIQUEMENT si le total dépasse
+    // ce budget (jamais de troncature quand le contenu tient déjà tel
+    // quel), réparti PROPORTIONNELLEMENT entre les expériences (une
+    // mission déjà courte n'est presque pas touchée, une très longue
+    // absorbe l'essentiel de la coupe), avec un plancher de 100
+    // caractères par mission pour ne jamais la rendre incompréhensible.
+    var BUDGET_MISSIONS_DETAILLE = 1800;
+    if (Array.isArray(objetFinal.experiences) && objetFinal.experiences.length) {
+      var totalMissions = objetFinal.experiences.reduce(function (total, e) { return total + (e.missions ? e.missions.length : 0); }, 0);
+      if (totalMissions > BUDGET_MISSIONS_DETAILLE) {
+        var facteurReduction = BUDGET_MISSIONS_DETAILLE / totalMissions;
+        objetFinal.experiences = objetFinal.experiences.map(function (e) {
+          if (!e.missions) { return e; }
+          var longueurCible = Math.max(100, Math.round(e.missions.length * facteurReduction));
+          if (longueurCible >= e.missions.length) { return e; }
+          var copie = {};
+          Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
+          copie.missions = _dnTronquerTexte(e.missions, longueurCible);
+          return copie;
+        });
+      }
+    }
+
     return objetFinal;
   }).catch(function () {
     return objetCV;
@@ -10218,6 +10591,32 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
     if (!d) { return; }
     objetDecide[spec.cle] = d.rubriqueMasquee ? [] : d.elementsRetenus.map(function (e) { return e.element; });
   });
+
+  // TACHE (retour utilisateur : "j'ai choisi 2 expériences mais le CV en
+  // affiche 4") : deciderListeObjets() (utilisee juste au-dessus via
+  // decider()) complete TOUJOURS jusqu'a la capacite avec les experiences
+  // NON recommandees ("Présente dans le dossier, aucune recommandation
+  // spécifique de l'IA") -- comportement voulu pour formations/langues
+  // (l'IA ne se prononce jamais dessus, rien a "exclure" a proprement
+  // parler), mais faux pour les experiences : depuis l'Écran 3, la
+  // personne a deja passe en revue TOUTES ses experiences (voir
+  // creerBrouillonChoixIACV(), qui liste desormais systematiquement
+  // TOUT dossier.experiences, pas seulement les recommandations de l'IA)
+  // -- experiencesAMettreEnAvant reflete donc un choix complet et
+  // volontaire, jamais une liste partielle a completer. Decocher une
+  // experience doit l'EXCLURE du CV, pas la laisser remonter par simple
+  // "manque de place" comme le ferait deciderListeObjets() pour une
+  // rubrique ou l'IA n'a jamais eu l'occasion de se prononcer sur
+  // certains elements.
+  if (recommandationsGenerique.experiences.length) {
+    var experiencesChoisies = recommandationsGenerique.experiences.map(function (reco) {
+      return (objetCV.experiences || []).filter(function (e) {
+        return estDoublonProbable(e, reco, ['poste', 'entreprise']);
+      })[0];
+    }).filter(Boolean);
+    var capaciteExperiences = (typeof capacites.experiences === 'number') ? capacites.experiences : experiencesChoisies.length;
+    objetDecide.experiences = experiencesChoisies.slice(0, capaciteExperiences);
+  }
 
   // TACHE (retour utilisateur : plafond de competences) : n'est plus geree
   // ici -- deplacee vers classerCompetencesParPertinence(), appliquee
@@ -10297,7 +10696,15 @@ function ouvrirEcranValidationImport(onImportTermine, onRetour) {
 
   ouvrirFenetreERIP({
     titre: 'Vérifiez les informations importées',
-    taille: 'large',
+    // TACHE (retour utilisateur : "2 colonnes et 3 lignes, je veux 2
+    // lignes et 3 colonnes, comme la fenêtre de choix IA") : les libellés
+    // de cet ecran sont plus longs que ceux de l'Écran 3 ("Formations &
+    // certifications", "Loisirs, engagements & logiciels"...) -- ne
+    // tenaient pas a 3 par ligne dans la largeur "large" (700px), pourtant
+    // la meme que l'Écran 3. Fenetre elargie a "tresLarge" (900px,
+    // deja disponible, voir style.css) plutot que de raccourcir les
+    // libellés.
+    taille: 'tresLarge',
     contenuHTML:
       '<p class="text-muted small">Décochez ce que vous ne souhaitez pas ajouter, modifiez librement le texte avant de valider.</p>' +
       contenuEcran +
@@ -11070,7 +11477,7 @@ function recommencer() {
     entretienDirect: { structure: '', poste: '' },
     rechercheEntreprise: { structure: '' },
     catalogueActif: {}, experiences: [], experiencesPerso: [],
-    formations: [], loisirs: [], engagements: [], certifications: [], langues: [], permis: { possede: null, categories: [], vehicule: null },
+    formations: [], loisirs: [], engagements: [], certifications: [], langues: [], languesFrancaisUniquement: false, permis: { possede: null, categories: [], vehicule: null },
     contrat: [], tempsTravail: [], accepte: [], accepteAucune: false,
     offre: { lien: '', poste: '', structure: '', type: '', dispo: [] },
     spontanee: { lien: '', poste: '', structure: '', type: '', dispo: [] },
@@ -11096,7 +11503,7 @@ function recommencer() {
     dernierDocumentPrepare: null,
     preferencesIA: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
     profilTexteManuel: null,
-    modeRecherche: null, typeRecherche: null, rechercheCandidature: { entreprise: '', lienOffre: '' }
+    modeRecherche: null, typeRecherche: null, rechercheCandidature: { entreprise: '', site: '', lienOffre: '' }
   };
   blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: false, metier: false };
   historiquePages = ['cv'];
@@ -11224,7 +11631,13 @@ function terminerParcours() {
         // un document deja avance retrouve son propre etat.
         pageResultats();
       },
-      'Merci, tout est en ordre', effacerEtRecommencer
+      // TACHE (retour utilisateur : "en cliquant sur le bouton bleu ils
+      // pensent avoir fini et en fait non") : "Merci, tout est en ordre"
+      // est la VRAIE action de fin -- vert desormais (au lieu du gris par
+      // defaut de confirmerAction, reserve a un vrai "Annuler"), pour ne
+      // plus laisser le bleu ("Oui, continuer") passer pour l'option de
+      // fin.
+      'Merci, tout est en ordre', effacerEtRecommencer, 'btn-success'
     );
   }
 
@@ -11272,13 +11685,13 @@ function terminerParcours() {
 // pas gardent le comportement par defaut (bouton "Annuler" qui ferme sans
 // rien faire). Seul terminerParcours() les utilise, pour transformer ce
 // bouton en un vrai second choix plutot qu'une simple fermeture neutre.
-function confirmerAction(titre, texte, labelConfirmer, classeConfirmer, onConfirmer, labelAnnuler, onAnnuler) {
+function confirmerAction(titre, texte, labelConfirmer, classeConfirmer, onConfirmer, labelAnnuler, onAnnuler, classeAnnuler) {
   var overlay = ouvrirFenetreERIP({
     titre: titre,
     contenuHTML:
       '<p>' + texte + '</p>' +
       '<div class="modal-actions">' +
-        '<button class="btn btn-outline-secondary" data-role="annuler">' + (labelAnnuler || 'Annuler') + '</button>' +
+        '<button class="btn ' + (classeAnnuler || 'btn-outline-secondary') + '" data-role="annuler">' + (labelAnnuler || 'Annuler') + '</button>' +
         '<button class="btn ' + classeConfirmer + '" data-role="confirmer">' + labelConfirmer + '</button>' +
       '</div>'
   });

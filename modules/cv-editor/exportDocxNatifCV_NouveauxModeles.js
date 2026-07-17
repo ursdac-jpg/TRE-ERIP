@@ -420,8 +420,20 @@ function _dnConstruireCreatif(docx, objetCV, opts) {
 }
 
 // ---- Enregistrement dans le systeme existant (etend, ne remplace rien) ----
-GENERATEURS_DOCX_NATIFS_CV['impact'] = function (docx, objetCV) { return _dnConstruireImpact(docx, objetCV); };
-GENERATEURS_DOCX_NATIFS_CV['dispo'] = function (docx, objetCV) { return _dnConstruireDispo(docx, objetCV); };
-GENERATEURS_DOCX_NATIFS_CV['creatif'] = function (docx, objetCV) { return _dnConstruireCreatif(docx, objetCV); };
+// TACHE (retour utilisateur : moteur de mise en page centralisé,
+// conversion 1/5 -- Impact) : ce chemin (genererDocxNatifCV) n'est plus
+// qu'un repli de secours, jamais appele en pratique (formatA5CV.js,
+// genererDocxNatifCVFormat(), toujours disponible dans cette appli, est
+// prioritaire -- voir son commentaire). Mis a jour quand meme, pour que
+// les deux chemins restent coherents si ce repli devait un jour servir.
+GENERATEURS_DOCX_NATIFS_CV['impact'] = function (docx, objetCV) {
+  return _dnConstruireDeuxColonnes(docx, objetCV, { primaire: '0F172A', accentSidebar: '0D9488', fondSidebar: 'F1F5F9', texteSidebar: '0F172A', styleBandeau: 'teinte' });
+};
+GENERATEURS_DOCX_NATIFS_CV['dispo'] = function (docx, objetCV) {
+  return _dnConstruireUneColonne(docx, objetCV, { primaire: 'C2410C', texte: '1F2937', secondaire: '6B7280', police: 'Calibri', bandeauResume: true });
+};
+GENERATEURS_DOCX_NATIFS_CV['creatif'] = function (docx, objetCV) {
+  return _dnConstruireDeuxColonnes(docx, objetCV, { primaire: '6D28D9', fondSidebar: 'F5F3FF', texteSidebar: '3B0764', styleBandeau: 'teinte', styleEnTete: 'banniere', texteBandeauSecondaire: 'E9D5FF' });
+};
 
 MODELES_AVEC_DOCX_NATIF_CV.push('impact', 'dispo', 'creatif');

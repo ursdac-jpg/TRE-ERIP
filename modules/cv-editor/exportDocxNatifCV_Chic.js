@@ -196,7 +196,12 @@ function _dnConstruireChic(docx, objetCV, opts) {
 }
 
 // ---- Enregistrement dans le systeme existant (etend, ne remplace rien) ----
-GENERATEURS_DOCX_NATIFS_CV['chic'] = function (docx, objetCV) { return _dnConstruireChic(docx, objetCV, {}); };
+// TACHE (retour utilisateur : moteur de mise en page centralisé,
+// conversion 4/5 -- Chic) : ce chemin n'est plus qu'un repli de secours
+// (voir commentaire equivalent, exportDocxNatifCV_NouveauxModeles.js).
+GENERATEURS_DOCX_NATIFS_CV['chic'] = function (docx, objetCV) {
+  return _dnConstruireDeuxColonnes(docx, objetCV, { primaire: '3F3F3F', fondSidebar: 'EDE4D6', texteSidebar: '2A2A2A', styleBandeau: 'teinte', styleTitreSection: 'bandeau-sombre', styleEnTete: 'bloc-colonne', police: 'Georgia', texteClairSurSombre: 'F5F1E8' });
+};
 MODELES_AVEC_DOCX_NATIF_CV.push('chic');
 if (typeof MODELES_AVEC_COULEURS_CV !== 'undefined') { MODELES_AVEC_COULEURS_CV.push('chic'); }
 if (typeof MODELES_AVEC_FORMAT_A5_CV !== 'undefined') { MODELES_AVEC_FORMAT_A5_CV.push('chic'); }

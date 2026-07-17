@@ -825,6 +825,75 @@ var REFERENTIEL_METIERS_ERIP = [
     pistesEntretien: ['Décrire la diversité des missions réalisées au sein d\'une collectivité.'],
     synonymes: [], motsCles: [], conceptsAssocies: [],
     niveauPertinence: null
+  },
+  // TACHE (retour utilisateur : catalogue "Animaux", point 13) : 5
+  // nouveaux metiers, prealables indispensables au catalogue -- sans eux,
+  // la plupart de ses entrees n'auraient eu aucun metier reel a proposer
+  // derriere (seuls Apiculteur et Toiletteur animalier existaient avant).
+  {
+    id: 'veterinaire', nom: 'Vétérinaire', famille: 'Santé animale', secteur: 'Santé',
+    rome: null, fap: null,
+    activites: ['patients', 'outils'], actions: ['soigner', 'diagnostiquer'],
+    environnement: ['sante'], valeurs: ['metier_sens', 'contact_humain'],
+    savoirFaire: ['Diagnostic', 'Soins'], savoirEtre: ['Empathie', 'Rigueur', 'Responsabilité'],
+    savoirs: ['Notions médicales de base', 'Pharmacologie'],
+    argumentsCV: ['assurer le diagnostic et les soins des animaux dans le respect de leur bien-être'],
+    argumentsLettre: ['mettre ma rigueur et mon empathie au service de la santé animale'],
+    pistesEntretien: ['Décrire une consultation ou une intervention marquante.'],
+    synonymes: [], motsCles: [], conceptsAssocies: [],
+    niveauPertinence: null
+  },
+  {
+    id: 'auxiliaire_veterinaire', nom: 'Auxiliaire vétérinaire', famille: 'Santé animale', secteur: 'Santé',
+    rome: null, fap: null,
+    activites: ['patients', 'clients'], actions: ['soigner', 'accueillir'],
+    environnement: ['sante'], valeurs: ['metier_sens', 'contact_humain'],
+    savoirFaire: ['Soins', 'Accueil'], savoirEtre: ['Empathie', 'Patience', 'Rigueur'],
+    savoirs: ['Notions médicales de base', 'Hygiène et asepsie en cabinet vétérinaire'],
+    argumentsCV: ['assister le vétérinaire et accueillir les propriétaires d\'animaux'],
+    argumentsLettre: ['mettre mon sens de l\'accueil et mon amour des animaux au service d\'un cabinet vétérinaire'],
+    pistesEntretien: ['Décrire l\'accueil d\'un propriétaire inquiet pour son animal.'],
+    synonymes: ['ASV'], motsCles: [], conceptsAssocies: [],
+    niveauPertinence: null
+  },
+  {
+    id: 'agent_equestre', nom: 'Agent équestre / Palefrenier', famille: 'Agriculture et viticulture', secteur: 'Agriculture',
+    rome: null, fap: null,
+    activites: ['exterieur', 'outils'], actions: ['soigner', 'nettoyer'],
+    environnement: ['exploitation_agricole', 'exterieur'], valeurs: ['exterieur', 'metier_sens'],
+    savoirFaire: ['Soins', 'Entretien'], savoirEtre: ['Rigueur', 'Endurance', 'Autonomie'],
+    savoirs: ['Alimentation et santé du cheval'],
+    argumentsCV: ['assurer les soins quotidiens et l\'entretien des chevaux et de leurs installations'],
+    argumentsLettre: ['mettre mon endurance et mon sens du soin au service d\'une structure équestre'],
+    pistesEntretien: ['Décrire une journée type auprès des chevaux.'],
+    synonymes: ['palefrenier', 'lad'], motsCles: [], conceptsAssocies: [],
+    niveauPertinence: null
+  },
+  {
+    id: 'eleveur', nom: 'Éleveur', famille: 'Agriculture et viticulture', secteur: 'Agriculture',
+    rome: null, fap: null,
+    activites: ['exterieur', 'outils'], actions: ['soigner', 'gerer'],
+    environnement: ['exploitation_agricole', 'exterieur'], valeurs: ['exterieur', 'autonomie', 'metier_sens'],
+    savoirFaire: ['Soins', 'Gestion administrative'], savoirEtre: ['Autonomie', 'Rigueur', 'Endurance'],
+    savoirs: ['Alimentation et reproduction animale'],
+    argumentsCV: ['assurer le suivi sanitaire et la gestion d\'un cheptel'],
+    argumentsLettre: ['contribuer à la production animale locale, un secteur qui me tient à cœur'],
+    pistesEntretien: ['Décrire une tâche d\'élevage réalisée au fil des saisons.'],
+    synonymes: [], motsCles: [], conceptsAssocies: [],
+    niveauPertinence: null
+  },
+  {
+    id: 'agent_animalier', nom: 'Agent animalier', famille: 'Services', secteur: 'Environnement',
+    rome: null, fap: null,
+    activites: ['clients', 'outils'], actions: ['soigner', 'nettoyer', 'accueillir'],
+    environnement: ['espaces_verts', 'exterieur'], valeurs: ['metier_sens', 'contact_humain'],
+    savoirFaire: ['Soins', 'Entretien'], savoirEtre: ['Empathie', 'Rigueur', 'Patience'],
+    savoirs: ['Comportement animalier de base'],
+    argumentsCV: ['assurer les soins quotidiens et l\'entretien des espaces d\'un refuge ou d\'un parc animalier'],
+    argumentsLettre: ['mettre mon sens du soin et ma patience au service du bien-être animal'],
+    pistesEntretien: ['Décrire une situation de prise en charge d\'un animal difficile.'],
+    synonymes: ['soigneur animalier'], motsCles: [], conceptsAssocies: [],
+    niveauPertinence: null
   }
 ];
 

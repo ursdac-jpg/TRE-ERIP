@@ -57,7 +57,7 @@ var CATALOGUE_VALEURS_PROFESSIONNELLES = [
       { id: 'teletravail', label: 'Pouvoir télétravailler', icon: '💻', categorie: 'Équilibre de vie',
         description: 'Pouvoir travailler depuis son domicile tout ou partie du temps.',
         motivations: ['Équilibre de vie', 'Autonomie'], savoirEtre: ['Autonomie', 'Organisation'],
-        metiers: ['Developpeur informatique', 'Assistant administratif'],
+        metiers: ['Développeur informatique', 'Assistant administratif'],
         arguments: ['organiser mon travail de manière autonome depuis mon domicile'] }
     ]
   },
@@ -71,7 +71,7 @@ var CATALOGUE_VALEURS_PROFESSIONNELLES = [
         arguments: ['évoluer dans un environnement de travail agréable et bienveillant'] },
       { id: 'travail_equipe', label: 'Travailler en équipe', icon: '🤝', categorie: 'Ambiance',
         description: 'Collaborer régulièrement avec d\'autres personnes.',
-        motivations: ['Relationnel'], savoirEtre: ['Travail en équipe', 'Coordination', 'Entraide'], metiers: ['Chef d\'equipe'],
+        motivations: ['Relationnel'], savoirEtre: ['Travail en équipe', 'Coordination', 'Entraide'], metiers: ['Chef d\'équipe'],
         arguments: ['collaborer efficacement au sein d\'une équipe', 'contribuer à un travail collectif'] },
       { id: 'sentir_utile', label: 'Se sentir utile', icon: '❤️', categorie: 'Ambiance',
         description: 'Avoir le sentiment d\'apporter une contribution positive.',
@@ -112,7 +112,7 @@ var CATALOGUE_VALEURS_PROFESSIONNELLES = [
       { id: 'responsabilites', label: 'Avoir des responsabilités', icon: '🎖️', categorie: 'Sens et évolution',
         description: 'Se voir confier des missions à responsabilité.',
         motivations: ['Leadership'], savoirEtre: ['Responsabilité', 'Leadership', 'Organisation', 'Coordination'],
-        metiers: ['Chef d\'equipe'],
+        metiers: ['Chef d\'équipe'],
         arguments: ['prendre des responsabilités au sein d\'une équipe ou d\'un projet'] },
       { id: 'fier_metier', label: 'Être fier de mon métier', icon: '⭐', categorie: 'Sens et évolution',
         description: 'Exercer une activité dont on peut être fier.',
@@ -126,7 +126,7 @@ var CATALOGUE_VALEURS_PROFESSIONNELLES = [
     items: [
       { id: 'pas_physique', label: 'Un travail pas trop physique', icon: '💪', categorie: 'Conditions de travail',
         description: 'Limiter la charge physique du poste.',
-        motivations: ['Confort'], savoirEtre: [], metiers: ['Assistant administratif', 'Teleconseiller'],
+        motivations: ['Confort'], savoirEtre: [], metiers: ['Assistant administratif', 'Téléconseiller'],
         arguments: ['exercer une activité avec une charge physique limitée'] },
       { id: 'calme', label: 'Un travail calme', icon: '🪑', categorie: 'Conditions de travail',
         description: 'Travailler dans un environnement peu stressant.',
@@ -147,7 +147,7 @@ var CATALOGUE_VALEURS_PROFESSIONNELLES = [
       { id: 'exterieur', label: 'Travailler dehors', icon: '🌿', categorie: 'Conditions de travail',
         description: 'Exercer une activité en extérieur plutôt qu\'en intérieur.',
         motivations: ['Epanouissement personnel'], savoirEtre: ['Adaptabilité', 'Endurance', 'Sécurité'],
-        metiers: ['Ouvrier paysagiste / Jardinier', 'Manoeuvre / Aide de chantier'],
+        metiers: ['Ouvrier paysagiste / Jardinier', 'Manœuvre / Aide de chantier'],
         arguments: ['exercer une activité au grand air'] }
     ]
   },

@@ -3,7 +3,10 @@
    ------------------------------------------------------------
    TACHE 22A puis 22B : referentiel dedie a l'ecran "Avec qui ou
    avec quoi travailliez-vous principalement ?" (personnes,
-   materiels, lieux).
+   materiels, animaux -- ex "lieux", retiree TACHE (retour utilisateur) :
+   faisait doublon avec la page "Environnement", remplacee par "Animaux",
+   qui comble un vrai manque plutot que de simplement retirer une
+   categorie).
 
    Meme structure et meme esprit que data/actionsProfessionnelles.js
    (TACHE 21C), pour un fonctionnement identique dans toute
@@ -45,7 +48,7 @@ var CATALOGUE_PERSONNES_MATERIELS_LIEUX = [
         savoirs: [], metiers: ['Conseiller de vente', 'Agent d\'accueil'] },
       { id: 'collegues', label: 'Des collègues', icon: '🤝', categorie: 'Personnes',
         savoirFaire: [], savoirEtre: ['Travail en équipe', 'Coordination', 'Entraide'],
-        savoirs: [], metiers: ['Chef d\'equipe'] },
+        savoirs: [], metiers: ['Chef d\'équipe'] },
       { id: 'enfants', label: 'Des enfants', icon: '👶', categorie: 'Personnes',
         savoirFaire: [], savoirEtre: ['Pédagogie', 'Patience', 'Bienveillance'],
         savoirs: [], metiers: ['Auxiliaire petite enfance', 'Animateur'] },
@@ -57,7 +60,7 @@ var CATALOGUE_PERSONNES_MATERIELS_LIEUX = [
         savoirs: ['Notions médicales de base'], metiers: ['Aide-soignant', 'Infirmier'] },
       { id: 'eleves_etudiants', label: 'Des élèves / étudiants', icon: '👨‍🏫', categorie: 'Personnes',
         savoirFaire: ['Formation', 'Transmission'], savoirEtre: ['Pédagogie', 'Patience'],
-        savoirs: [], metiers: ['Formateur / Educateur', 'Animateur'] }
+        savoirs: [], metiers: ['Formateur / Éducateur', 'Animateur'] }
     ]
   },
   {
@@ -69,55 +72,54 @@ var CATALOGUE_PERSONNES_MATERIELS_LIEUX = [
         savoirs: [], metiers: ['Technicien de maintenance', 'Agent de production'] },
       { id: 'ordinateur', label: 'Un ordinateur', icon: '💻', categorie: 'Matériels',
         savoirFaire: ['Bureautique', 'Analyse de données'], savoirEtre: ['Organisation'],
-        savoirs: [], metiers: ['Assistant administratif', 'Developpeur informatique'] },
+        savoirs: [], metiers: ['Assistant administratif', 'Développeur informatique'] },
       { id: 'documents', label: 'Des documents', icon: '📄', categorie: 'Matériels',
         savoirFaire: ['Gestion administrative', 'Bureautique'], savoirEtre: ['Rigueur'],
-        savoirs: [], metiers: ['Assistant administratif', 'Secretaire medicale'] },
+        savoirs: [], metiers: ['Assistant administratif', 'Secrétaire médicale'] },
       { id: 'marchandises', label: 'Des marchandises', icon: '📦', categorie: 'Matériels',
         savoirFaire: ['Gestion des stocks', 'Logistique'], savoirEtre: ['Rigueur'],
-        savoirs: [], metiers: ['Preparateur de commandes / Magasinier', 'Cariste'] },
+        savoirs: [], metiers: ['Préparateur de commandes / Magasinier', 'Cariste'] },
       { id: 'vehicules', label: 'Des véhicules', icon: '🚗', categorie: 'Matériels',
         savoirFaire: ['Conduite', 'Logistique'], savoirEtre: ['Sécurité'],
         savoirs: ['Code de la route'], metiers: ['Chauffeur routier', 'Chauffeur-livreur'] },
       { id: 'outils', label: 'Des outils', icon: '🛠️', categorie: 'Matériels',
         savoirFaire: ['Travail manuel', 'Technique', 'Précision'], savoirEtre: [],
-        savoirs: [], metiers: ['Macon', 'Electricien'] },
+        savoirs: [], metiers: ['Maçon', 'Électricien'] },
       { id: 'appareils_numeriques', label: 'Des appareils numériques', icon: '📱', categorie: 'Matériels',
         savoirFaire: ['Bureautique', 'Technique'], savoirEtre: [],
-        savoirs: [], metiers: ['Teleconseiller', 'Assistant administratif'] },
+        savoirs: [], metiers: ['Téléconseiller', 'Assistant administratif'] },
       { id: 'produits', label: 'Des produits', icon: '💊', categorie: 'Matériels',
         savoirFaire: ['Gestion des stocks'], savoirEtre: ['Rigueur'],
-        savoirs: ['Règles d\'hygiène et de conservation'], metiers: ['Vendeur en alimentation', 'Preparateur de commandes / Magasinier'] }
+        savoirs: ['Règles d\'hygiène et de conservation'], metiers: ['Vendeur en alimentation', 'Préparateur de commandes / Magasinier'] }
     ]
   },
   {
-    categorie: 'Lieux',
-    icone: '📍',
+    // TACHE (retour utilisateur : "Lieux" fait doublon avec la page
+    // "Environnement", remplacé par "Animaux" -- comble un vrai manque
+    // (aucune des 2 autres categories, Personnes/Materiels, ne couvre le
+    // travail avec des animaux) plutot que de simplement retirer une
+    // categorie redondante. 5 nouveaux metiers crees pour l'occasion
+    // (Vétérinaire, Auxiliaire vétérinaire, Agent équestre/Palefrenier,
+    // Éleveur, Agent animalier -- voir referentielMetiersERIP.js),
+    // combines aux 2 deja existants (Apiculteur, Toiletteur animalier).
+    categorie: 'Animaux',
+    icone: '🐾',
     items: [
-      { id: 'magasin', label: 'En magasin', icon: '🛒', categorie: 'Lieux',
-        savoirFaire: ['Merchandising', 'Gestion des stocks'], savoirEtre: ['Accueil'],
-        savoirs: [], metiers: ['Conseiller de vente', 'Hote de caisse'] },
-      { id: 'bureau', label: 'En bureau', icon: '🏢', categorie: 'Lieux',
-        savoirFaire: ['Bureautique', 'Gestion administrative'], savoirEtre: ['Organisation'],
-        savoirs: [], metiers: ['Assistant administratif', 'Comptable / Assistant comptable'] },
-      { id: 'exterieur', label: 'En extérieur', icon: '🌳', categorie: 'Lieux',
-        savoirFaire: [], savoirEtre: ['Adaptabilité', 'Endurance', 'Sécurité'],
-        savoirs: [], metiers: ['Ouvrier paysagiste / Jardinier', 'Manoeuvre / Aide de chantier'] },
-      { id: 'deplacement', label: 'En déplacement', icon: '🚗', categorie: 'Lieux',
-        savoirFaire: ['Planification'], savoirEtre: ['Gestion du temps', 'Autonomie'],
-        savoirs: [], metiers: ['Chauffeur-livreur', 'Agent d\'accueil touristique'] },
-      { id: 'famille', label: 'Chez des particuliers / en famille', icon: '🏠', categorie: 'Lieux',
-        savoirFaire: [], savoirEtre: ['Aide à la personne', 'Entraide', 'Adaptabilité', 'Bienveillance'],
-        savoirs: [], metiers: ['Assistant de vie aux familles (ADVF)', 'Employe de menage a domicile'] },
-      { id: 'seul', label: 'Seul(e)', icon: '👤', categorie: 'Lieux',
-        savoirFaire: [], savoirEtre: ['Autonomie', 'Organisation', 'Responsabilité'],
-        savoirs: [], metiers: ['Chauffeur routier', 'Ouvrier agricole / viticole'] },
-      { id: 'atelier_usine', label: 'En atelier / usine', icon: '🏭', categorie: 'Lieux',
-        savoirFaire: ['Technique'], savoirEtre: ['Sécurité', 'Rigueur'],
-        savoirs: ['Normes de sécurité industrielle'], metiers: ['Agent de production', 'Operateur d\'usinage (commande numerique)'] },
-      { id: 'etablissement', label: 'En établissement', icon: '🏥', categorie: 'Lieux',
-        savoirFaire: ['Soins'], savoirEtre: ['Empathie', 'Rigueur'],
-        savoirs: [], metiers: ['Aide-soignant', 'Agent de service hospitalier (ASH)'] }
+      { id: 'animaux_compagnie', label: 'Des animaux de compagnie', icon: '🐕', categorie: 'Animaux',
+        savoirFaire: ['Soins'], savoirEtre: ['Patience', 'Empathie', 'Sens du détail'],
+        savoirs: ['Techniques de toilettage animalier'], metiers: ['Toiletteur animalier', 'Agent animalier'] },
+      { id: 'chevaux', label: 'Des chevaux', icon: '🐴', categorie: 'Animaux',
+        savoirFaire: ['Soins', 'Entretien'], savoirEtre: ['Rigueur', 'Endurance', 'Autonomie'],
+        savoirs: ['Alimentation et santé du cheval'], metiers: ['Agent équestre / Palefrenier'] },
+      { id: 'elevage_ferme', label: 'Des animaux d\'élevage / de ferme', icon: '🐄', categorie: 'Animaux',
+        savoirFaire: ['Soins', 'Gestion administrative'], savoirEtre: ['Autonomie', 'Rigueur', 'Endurance'],
+        savoirs: ['Alimentation et reproduction animale'], metiers: ['Éleveur'] },
+      { id: 'abeilles', label: 'Des abeilles', icon: '🐝', categorie: 'Animaux',
+        savoirFaire: ['Travail manuel'], savoirEtre: ['Patience', 'Autonomie', 'Rigueur'],
+        savoirs: ['Cycle des abeilles', 'Techniques d\'apiculture de base'], metiers: ['Apiculteur'] },
+      { id: 'soins_veterinaires', label: 'Des soins vétérinaires', icon: '🩺', categorie: 'Animaux',
+        savoirFaire: ['Diagnostic', 'Soins'], savoirEtre: ['Empathie', 'Rigueur', 'Responsabilité'],
+        savoirs: ['Notions médicales de base'], metiers: ['Vétérinaire', 'Auxiliaire vétérinaire'] }
     ]
   }
 ];

@@ -29,4 +29,12 @@ var MODELES_CV_DISPONIBLES = [
   { id: 'dispo', nom: 'Dispo' },
   { id: 'creatif', nom: 'Créatif' },
   { id: 'chic', nom: 'Chic' },
+  // TACHE (moteur Composeur, V1/Beta) : premier (et pour l'instant seul)
+  // modele issu du nouveau moteur de composition -- generation entierement
+  // separee des 14 modeles ci-dessus (voir composeurMoteur.js), interceptee
+  // en tout debut de genererDocxNatifCVFormat() (formatA5CV.js), avant
+  // toute logique existante. Pas de templates/composeur/composeur.json
+  // pour l'instant (miniature generique par defaut, sans consequence sur
+  // la generation reelle du CV).
+  { id: 'composeur', nom: 'Composeur (Bêta)' },
 ];

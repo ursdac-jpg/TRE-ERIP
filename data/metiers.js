@@ -1269,6 +1269,31 @@ function fermerAssistantDepotCV() {
   if (f) { f.remove(); }
 }
 
+// TACHE (retour utilisateur : "je veux le tel/mail en jaune pour les
+// trouver plus facilement", option B validée) : detecte les telephones
+// (formats francais courants, espaces/points/tirets optionnels) et les
+// emails dans un texte, et affiche le resultat en lecture seule, en
+// evidence (fond jaune), au-dessus du textarea correspondant -- jamais
+// dans le textarea lui-meme (un <textarea> ne peut afficher aucune mise
+// en forme). Purement indicatif : n'efface rien automatiquement, la
+// personne reste seule a decider et a modifier le texte.
+function afficherDetectionCoordonnees(texte) {
+  var zone = document.getElementById('detectionCoordonneesEtape2');
+  if (!zone) { return; }
+  var regexTelephone = /\b0[1-9](?:[\s.\-]?\d{2}){4}\b|\+33[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/g;
+  var regexEmail = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  var telephones = (texte.match(regexTelephone) || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; });
+  var emails = (texte.match(regexEmail) || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; });
+  var trouves = telephones.concat(emails);
+  if (!trouves.length) { zone.innerHTML = ''; return; }
+  zone.innerHTML = '<p class="small text-muted mb-1">Coordonnées détectées dans le texte ci-dessous — pensez à les retirer si vous ne voulez pas les envoyer :</p>' +
+    '<div class="d-flex flex-wrap gap-2">' +
+    trouves.map(function (t) {
+      return '<span style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:6px;padding:0.2rem 0.6rem;font-size:0.85rem;font-weight:600;">' +
+        echapperAttribut(t) + '</span>';
+    }).join('') + '</div>';
+}
+
 function ouvrirAssistantDepotCV(mode, options) {
   fermerAssistantDepotCV();
   var modeCV = mode || 'maj';
@@ -1567,12 +1592,19 @@ function ouvrirAssistantDepotCV(mode, options) {
 
     function rendreChoixAssistant() {
       zone.innerHTML =
-        '<p class="small fw-bold mb-2">Choisissez votre assistant IA</p>' +
+        // TACHE (retour utilisateur : "une personne a bloqué ici sans
+        // comprendre qu'il faut cliquer sur une pastille") : titre
+        // agrandi (etait un simple <p> discret), instruction explicite
+        // ajoutee juste en dessous plutot que sous-entendue par le seul
+        // titre, pastilles agrandies avec un effet de survol plus
+        // marque pour bien signaler qu'elles sont cliquables.
+        '<p class="fw-bold mb-1" style="font-size:1.3rem;">Choisissez votre assistant IA</p>' +
+        '<p class="small text-muted mb-2">Cliquez sur une des pastilles ci-dessous pour continuer.</p>' +
         '<div class="d-flex flex-wrap gap-2 mb-3" id="carteAssistantsIAWizard">' +
         ASSISTANTS_IA.map(function (a) {
           var actif = (etat.assistantChoisi && etat.assistantChoisi.id === a.id) ? ' active-card' : '';
-          return '<div class="carte carte-selection-compacte' + actif + '" data-assistant-id="' + a.id + '" ' +
-            'style="cursor:pointer;padding:0.5rem 1rem;">' + a.nom + '</div>';
+          return '<div class="carte carte-selection-compacte carte-assistant-agrandie' + actif + '" data-assistant-id="' + a.id + '" ' +
+            'style="cursor:pointer;padding:0.75rem 1.4rem;font-size:1.05rem;font-weight:600;">' + a.nom + '</div>';
         }).join('') +
         '</div>' +
         '<div id="zoneExplicationAssistant"></div>';
@@ -1692,7 +1724,7 @@ function ouvrirAssistantDepotCV(mode, options) {
       idBoutonImporter: 'btnImporterWizard',
       onErreur: function (message) { messageImport.style.color = '#b91c1c'; messageImport.textContent = '⚠️ ' + message; },
       onEffacer: function () { messageImport.textContent = ''; },
-      onSucces: function () { messageImport.style.color = '#157347'; messageImport.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire. Vérifiez l’aperçu ci-dessous, puis cliquez sur "Importer".'; },
+      onSucces: function (texte, estAjout) { messageImport.style.color = '#157347'; messageImport.textContent = estAjout ? '✅ Morceau suivant ajouté à la suite. Copiez le prochain morceau puis recliquez, ou cliquez Importer si c’était le dernier.' : '✅ Réponse importée automatiquement depuis le presse-papiers. Si la réponse de l’IA fait plusieurs morceaux, copiez le morceau suivant puis cliquez sur "Coller un morceau supplémentaire", juste en dessous : il s’ajoutera à la suite. Vérifiez l’aperçu ci-dessous, puis cliquez sur "Importer".'; },
       onCollerManuel: function () { messageImport.textContent = ''; }
     });
 
@@ -1761,6 +1793,17 @@ function ouvrirAssistantDepotCV(mode, options) {
             '<p class="small mb-2" style="color:#B45309;">&#128274; Il est fortement recommandé de masquer les ' +
             'informations qui permettraient de vous identifier facilement (nom, coordonnées, photo) avant l’envoi ' +
             'à l’assistant IA.</p>' +
+            // TACHE (retour utilisateur : "je veux le tel/mail en jaune
+            // pour les trouver plus facilement") : un <textarea> ne peut
+            // afficher aucune mise en forme (limite du HTML, pas du
+            // code) -- solution retenue (option B, validée) : une liste
+            // en LECTURE SEULE, juste au-dessus, qui detecte
+            // automatiquement les telephones/emails presents dans le
+            // texte et les affiche en evidence (fond jaune) pour que la
+            // personne les retrouve vite dans le texte ci-dessous et les
+            // efface elle-meme. Mise a jour a chaque frappe (voir
+            // cablerEtape2VerificationTexte ci-dessous).
+            '<div id="detectionCoordonneesEtape2" class="mb-2"></div>' +
             '<textarea class="form-control" id="texteEditeurCV" rows="16" style="font-size:0.85rem;"></textarea>' +
             // TACHE (chantier "Videos d'accompagnement") : geste
             // "masquage-texte" -- htmlDeclencheurDemoVideo() (app.js) ne
@@ -1783,6 +1826,8 @@ function ouvrirAssistantDepotCV(mode, options) {
           onAfficher: function () {
             var champ = document.getElementById('texteEditeurCV');
             champ.value = (typeof etat.texteDocumentPrepare === 'string') ? etat.texteDocumentPrepare : dossier.cvTexte;
+            afficherDetectionCoordonnees(champ.value);
+            champ.addEventListener('input', function () { afficherDetectionCoordonnees(champ.value); });
           }
         };
       }
@@ -1894,8 +1939,17 @@ function ouvrirAssistantDepotCV(mode, options) {
         // pour le detail du comportement (lecture seule, Entree globale,
         // filet de secours).
         htmlCollageInstantane('Wizard',
-          '<div class="d-flex gap-2 mb-2 mt-2">' +
-          '<button type="button" class="btn btn-primary btn-sm" id="btnImporterWizard">Importer</button>' +
+          '<div class="d-flex align-items-center gap-2 mb-2 mt-2">' +
+          // TACHE (retour utilisateur : "je clique sur la vidéo par erreur
+          // 2 fois sur 3") : "Importer" etait un petit bouton bootstrap
+          // standard (btn-sm), nettement moins visible que "Voir la
+          // démonstration" juste en dessous (grand bouton bleu en
+          // pilule) -- la personne cliquait le mauvais des deux par
+          // reflexe visuel. Meme style proeminent que "Importer dans le
+          // CV" (page Action) desormais, pour qu'il soit clairement le
+          // bouton principal de cette etape.
+          '<button type="button" id="btnImporterWizard" style="font-size:1.05rem;font-weight:700;padding:0.65rem 1.5rem;' +
+          'background:#0d6efd;color:#FFFFFF;border:none;border-radius:999px;box-shadow:0 4px 14px rgba(13,110,253,.4);">&#128229; Importer</button>' +
           '<button type="button" class="btn btn-outline-secondary btn-sm" id="btnEffacerRecoller">Effacer et recoller</button>' +
           '</div>') +
         '<div id="messageImportWizard" class="mt-2 small"></div>' +
@@ -2670,7 +2724,7 @@ function ouvrirRecuperationLettreV1(estImage) {
     idBoutonImporter: 'btnExportDocxLettreV1',
     onErreur: function (msg) { message.style.color = '#b91c1c'; message.textContent = '⚠️ ' + msg; },
     onEffacer: function () { message.textContent = ''; },
-    onSucces: function () { message.style.color = '#157347'; message.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire.'; },
+    onSucces: function (texte, estAjout) { message.style.color = '#157347'; message.textContent = estAjout ? '✅ Morceau suivant ajouté à la suite. Copiez le prochain morceau puis recliquez, ou cliquez Importer si c’était le dernier.' : '✅ Réponse importée automatiquement depuis le presse-papiers. Si la réponse de l’IA fait plusieurs morceaux, copiez le morceau suivant puis cliquez sur "Coller un morceau supplémentaire", juste en dessous : il s’ajoutera à la suite.'; },
     onCollerManuel: function () { message.textContent = ''; }
   });
 
@@ -2786,7 +2840,7 @@ function ouvrirRecuperationEntretien() {
     idBoutonImporter: 'btnExportDocxEntretien',
     onErreur: function (msg) { message.style.color = '#b91c1c'; message.textContent = '⚠️ ' + msg; },
     onEffacer: function () { message.textContent = ''; },
-    onSucces: function () { message.style.color = '#157347'; message.textContent = '✅ Réponse importée automatiquement depuis le presse-papiers, aucune saisie nécessaire.'; },
+    onSucces: function (texte, estAjout) { message.style.color = '#157347'; message.textContent = estAjout ? '✅ Morceau suivant ajouté à la suite. Copiez le prochain morceau puis recliquez, ou cliquez Importer si c’était le dernier.' : '✅ Réponse importée automatiquement depuis le presse-papiers. Si la réponse de l’IA fait plusieurs morceaux, copiez le morceau suivant puis cliquez sur "Coller un morceau supplémentaire", juste en dessous : il s’ajoutera à la suite.'; },
     onCollerManuel: function () { message.textContent = ''; }
   });
 

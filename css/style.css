@@ -514,9 +514,24 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 
 /* TACHE 47 : composant generique accordeon (replie par defaut), reutilisable */
 .accordeon { background: #f8fafc; border-radius: 1.2rem; border: 2px solid #e2e8f0; padding: 1rem 1.2rem; margin: 1.2rem 0; }
+/* TACHE (retour utilisateur : "petit v peu visible, je veux un fond vert
+   léger sur les blocs deja valides pour les distinguer des autres") : cette
+   classe existait deja dans le HTML (voir blocAccordeon() dans app.js) mais
+   n'avait jamais recu de style -- aucune difference visuelle avec un
+   accordeon non valide jusqu'ici. */
+.accordeon.accordeon-deja-visitee { background: #eef9f2; border-color: #bfe6cc; }
 .accordeon-entete {
   background: none; border: none; width: 100%; display: flex; justify-content: space-between;
   align-items: center; padding: 0; cursor: pointer; font-size: 1rem; color: #0b1a33; text-align: left;
+}
+.accordeon-titre-groupe { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+/* TACHE (retour utilisateur) : remplace l'ancien "✔" minuscule, quasi
+   invisible -- message explicite, a la fois etat ET action possible. */
+.accordeon-badge-valide {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.8rem; font-weight: 700; color: #157347;
+  background: #d1f4de; border-radius: 20px; padding: 0.25rem 0.7rem;
+  white-space: nowrap;
 }
 .accordeon-fleche { color: #0d6efd; font-size: 0.85rem; }
 .accordeon-intro { margin: 0.5rem 0 0; }
@@ -534,13 +549,61 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; cursor: pointer;
   padding: 0.5rem 0; min-height: 2.6rem;
 }
-.bloc-erip-entete h5 { margin: 0; flex: 1; font-size: 1.4rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+/* TACHE (retour utilisateur : inversion des polices, PAGE POTENTIEL
+   UNIQUEMENT) : la personne trouve que les titres de bandeau (Analyse de
+   votre profil, Métiers recommandés, etc.) et les titres type "Domaine
+   cible"/"Métier cible" (voir .banniere-metier-cible-titre plus bas)
+   doivent echanger leurs tailles sur l'ecran Potentiel -- ces derniers
+   deviennent les plus imposants. .bloc-erip-entete h5 est PARTAGEE entre
+   Mon Projet et Potentiel (meme composant blocERIP()) : cette regle de base
+   s'applique donc par defaut a toutes les pages, MAIS "Mon Projet" (ci-
+   dessous, scope .grille-mon-projet) la re-agrandit -- l'inversion demandee
+   ne visait QUE l'ecran Potentiel, pas Mon Projet. */
+.bloc-erip-entete h5 { margin: 0; flex: 1; font-weight: 700; color: #0b1a33; font-size: 1.05rem; }
 .bloc-erip-compteur {
   font-size: 0.95rem; font-weight: 700; color: #4a5b6e; background: #eef1f6;
   border-radius: 20px; padding: 0.3rem 0.9rem;
 }
 .bloc-erip-fleche { color: #0d6efd; font-size: 1.1rem; }
 .bloc-erip-complet { font-size: 1.05rem; }
+/* TACHE (retour utilisateur : "titres de Mon projet trop petits") : scope a
+   .grille-mon-projet (conteneur propre a la page Mon Projet, voir
+   pageProjet() dans app.js) -- redonne aux titres de bandeau leur taille
+   imposante SANS toucher a l'ecran Potentiel, qui partage la meme classe de
+   base .bloc-erip-entete h5 (voir commentaire au-dessus) mais doit rester
+   petit suite a l'inversion demandee. */
+/* TACHE (retour utilisateur : "trop grand, j'ai dit un peu") : 2.1rem etait
+   trop proche du titre de page (h1, 2.8rem) -- ramene a une taille
+   clairement intermediaire entre les titres de pyramide (1.2rem) et le
+   titre de page, pour que la hierarchie visuelle reste lisible sans
+   ecraser "Mon projet" au-dessus. */
+.grille-mon-projet .bloc-erip-entete h5 { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+/* TACHE (retour utilisateur : "un message grand et visible sur chaque
+   bandeau quand ils ont fini, qui invite à compléter les autres") : le HTML
+   existait deja (bloc-erip-message-complet, voir blocERIP() dans app.js)
+   mais n'avait jamais recu de style -- il s'affichait donc en texte plat,
+   quasi invisible. Encart vert bien marque, coherent avec le reste de la
+   charte (vert = complet, deja utilise sur les coches et pastilles). */
+.bloc-erip-message-complet {
+  background: #eaf7f0; border: 2px solid #198754; border-radius: 0.8rem;
+  padding: 0.8rem 1.1rem; margin: 0 0 0.9rem;
+  font-size: 1.1rem; font-weight: 700; color: #157347;
+}
+/* TACHE (retour utilisateur : clignotement mal place -- visait toute la
+   barre de navigation au lieu du bloc reellement obligatoire) : animation
+   discrete bleu clair, appliquee au survol du bouton "Reveler mon potentiel"
+   desactive UNIQUEMENT sur le bloc qui bloque reellement l'acces (voir
+   barreNavigation()/options.blocCibleId dans app.js). Volontairement plus
+   douce que .a-completer (rouge, fixe) : pulsation legere, pas un contour
+   agressif -- un signal d'attention, pas une alerte d'erreur. */
+@keyframes clignoteLegerBleu {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.45); }
+  50% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+}
+.bloc-erip-clignote-leger {
+  animation: clignoteLegerBleu 1.1s ease-in-out infinite;
+  border-radius: 1rem;
+}
 
 /* TACHE (refonte Potentiel, Etape A) : bandeau "Metier cible", toujours
    visible en haut de la page Potentiel. */
@@ -549,7 +612,11 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   background: #eef1f6; border: 2px solid #d5dbe4; border-radius: 1rem;
   padding: 0.9rem 1.3rem; margin: 1rem 0 1.5rem;
 }
-.banniere-metier-cible-titre { font-weight: 700; color: #0b1a33; font-size: 1.05rem; }
+/* TACHE (retour utilisateur : inversion des polices) : reprend l'ancienne
+   apparence de .bloc-erip-entete h5 (grand, gras, majuscules) -- voir
+   commentaire au-dessus de .bloc-erip-entete h5. S'applique a "Domaine
+   cible" et "Metier cible", qui partagent cette meme classe. */
+.banniere-metier-cible-titre { font-weight: 800; color: #0b1a33; font-size: 2.1rem; text-transform: uppercase; letter-spacing: 0.02em; }
 .banniere-metier-cible-actif {
   background: #e7f1fd; border-color: #0d6efd;
 }
@@ -789,16 +856,6 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 }
 .reco-fleche:disabled { color: #c3ccd6; cursor: default; }
 .reco-fleche:hover:not(:disabled) { background: #dbe6fb; }
-
-/* TACHE (retour utilisateur : 3 versions de lettre, cartes dans l'apercu) :
-   carte cliquable, mise en evidence quand active -- meme esprit visuel
-   que .carte-modele-cv (bordure qui s'epaissit/se colore a la selection). */
-.carte-version-lettre {
-  cursor: pointer; border: 2px solid #E5E7EB; border-radius: 8px; padding: 0.6rem 0.8rem;
-  min-width: 180px; max-width: 240px; background: #FFFFFF;
-}
-.carte-version-lettre:hover { border-color: #93C5FD; }
-.carte-version-lettre-active { border-color: #2563EB; border-width: 3px; background: #EFF6FF; }
 
 .confirmation-reset-bloc {
   background: #fff5f5; border: 2px solid #f8d7da; border-radius: 0.8rem; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;

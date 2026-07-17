@@ -44,28 +44,28 @@ var CATALOGUE_ENVIRONNEMENTS_TRAVAIL = [
         savoirs: [], metiers: ['Assistant administratif', 'Comptable / Assistant comptable'] },
       { id: 'usine', label: 'Usine / Atelier / Site industriel', icon: '🏭', categorie: 'En intérieur',
         savoirFaire: ['Technique'], savoirEtre: ['Sécurité', 'Rigueur'],
-        savoirs: ['Normes de sécurité industrielle'], metiers: ['Agent de production', 'Operateur d\'usinage (commande numerique)'] },
+        savoirs: ['Normes de sécurité industrielle'], metiers: ['Agent de production', 'Opérateur d\'usinage (commande numérique)'] },
       { id: 'magasin', label: 'Magasin / Commerce', icon: '🛒', categorie: 'En intérieur',
         savoirFaire: ['Merchandising', 'Gestion des stocks'], savoirEtre: ['Accueil'],
-        savoirs: [], metiers: ['Conseiller de vente', 'Hote de caisse'] },
+        savoirs: [], metiers: ['Conseiller de vente', 'Hôte de caisse'] },
       { id: 'sante', label: 'Établissement de santé', icon: '🏥', categorie: 'En intérieur',
         savoirFaire: ['Soins'], savoirEtre: ['Empathie', 'Rigueur'],
         savoirs: [], metiers: ['Aide-soignant', 'Agent de service hospitalier (ASH)'] },
       { id: 'ecole_formation', label: 'École / Centre de formation', icon: '🏫', categorie: 'En intérieur',
         savoirFaire: ['Formation', 'Transmission'], savoirEtre: ['Pédagogie', 'Patience'],
-        savoirs: [], metiers: ['Formateur / Educateur', 'Animateur'] },
+        savoirs: [], metiers: ['Formateur / Éducateur', 'Animateur'] },
       { id: 'cuisine', label: 'Restaurant / Cuisine', icon: '🍽', categorie: 'En intérieur',
         savoirFaire: ['Cuisine'], savoirEtre: ['Respect des normes'],
         savoirs: ['Règles d\'hygiène alimentaire (HACCP)'], metiers: ['Cuisinier / Commis de cuisine', 'Serveur en restauration'] },
       { id: 'hotel', label: 'Hôtel', icon: '🏨', categorie: 'En intérieur',
         savoirFaire: [], savoirEtre: ['Accueil', 'Sens du service'],
-        savoirs: [], metiers: ['Receptionniste en hotellerie', 'Employe d\'etage en hotellerie'] },
+        savoirs: [], metiers: ['Réceptionniste en hôtellerie', 'Employé d\'étage en hôtellerie'] },
       { id: 'administration', label: 'Administration / Collectivité', icon: '🏛', categorie: 'En intérieur',
         savoirFaire: ['Gestion administrative', 'Bureautique'], savoirEtre: ['Rigueur'],
-        savoirs: [], metiers: ['Assistant administratif', 'Secretaire medicale'] },
+        savoirs: [], metiers: ['Assistant administratif', 'Secrétaire médicale'] },
       { id: 'laboratoire', label: 'Laboratoire', icon: '🧪', categorie: 'En intérieur',
         savoirFaire: ['Précision', 'Technique'], savoirEtre: ['Rigueur'],
-        savoirs: ['Normes d\'hygiène et de sécurité en laboratoire'], metiers: ['Operateur de production chimique'] }
+        savoirs: ['Normes d\'hygiène et de sécurité en laboratoire'], metiers: ['Opérateur de production chimique'] }
     ]
   },
   {
@@ -74,10 +74,10 @@ var CATALOGUE_ENVIRONNEMENTS_TRAVAIL = [
     items: [
       { id: 'domicile', label: 'Au domicile des particuliers', icon: '🏠', categorie: 'À domicile',
         savoirFaire: [], savoirEtre: ['Aide à la personne', 'Adaptabilité', 'Bienveillance'],
-        savoirs: [], metiers: ['Assistant de vie aux familles (ADVF)', 'Employe de menage a domicile'] },
+        savoirs: [], metiers: ['Assistant de vie aux familles (ADVF)', 'Employé de ménage à domicile'] },
       { id: 'teletravail_domicile', label: 'À votre domicile (télétravail)', icon: '🏡', categorie: 'À domicile',
         savoirFaire: ['Bureautique'], savoirEtre: ['Autonomie', 'Organisation'],
-        savoirs: [], metiers: ['Assistant administratif', 'Developpeur informatique'] }
+        savoirs: [], metiers: ['Assistant administratif', 'Développeur informatique'] }
     ]
   },
   {
@@ -86,13 +86,13 @@ var CATALOGUE_ENVIRONNEMENTS_TRAVAIL = [
     items: [
       { id: 'exterieur', label: 'Extérieur / Chantier', icon: '🌳', categorie: 'En extérieur',
         savoirFaire: [], savoirEtre: ['Adaptabilité', 'Endurance', 'Sécurité'],
-        savoirs: [], metiers: ['Ouvrier paysagiste / Jardinier', 'Manoeuvre / Aide de chantier'] },
+        savoirs: [], metiers: ['Ouvrier paysagiste / Jardinier', 'Manœuvre / Aide de chantier'] },
       { id: 'exploitation_agricole', label: 'Exploitation agricole', icon: '🚜', categorie: 'En extérieur',
         savoirFaire: ['Travail manuel'], savoirEtre: ['Endurance', 'Adaptabilité'],
         savoirs: [], metiers: ['Ouvrier agricole / viticole', 'Conducteur d\'engins agricoles'] },
       { id: 'espaces_verts', label: 'Espaces verts / Nature', icon: '🌲', categorie: 'En extérieur',
         savoirFaire: ['Travail manuel'], savoirEtre: ['Endurance'],
-        savoirs: [], metiers: ['Ouvrier paysagiste / Jardinier', 'Ouvrier horticole / Maraicher'] },
+        savoirs: [], metiers: ['Ouvrier paysagiste / Jardinier', 'Ouvrier horticole / Maraîcher'] },
       { id: 'evenementiel', label: 'Salle de spectacle / Événementiel', icon: '🎭', categorie: 'En extérieur',
         savoirFaire: [], savoirEtre: ['Organisation', 'Adaptabilité', 'Sens du service'],
         savoirs: [], metiers: ['Animateur'] },
@@ -116,7 +116,7 @@ var CATALOGUE_ENVIRONNEMENTS_TRAVAIL = [
         savoirs: ['Code de la route'], metiers: ['Chauffeur routier', 'Chauffeur-livreur'] },
       { id: 'entrepot_logistique', label: 'Entrepôt / Plateforme logistique', icon: '📦', categorie: 'En déplacement',
         savoirFaire: ['Gestion des stocks', 'Logistique'], savoirEtre: ['Rigueur'],
-        savoirs: [], metiers: ['Preparateur de commandes / Magasinier', 'Cariste', 'Manutentionnaire / Agent de quai'] }
+        savoirs: [], metiers: ['Préparateur de commandes / Magasinier', 'Cariste', 'Manutentionnaire / Agent de quai'] }
     ]
   }
 ];

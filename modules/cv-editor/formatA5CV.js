@@ -75,7 +75,7 @@ var CAPACITES_A4_ESSENTIEL_CV = {
 // utilise desormais CETTE constante plutot que meta.capacites -- le champ
 // "capacites" reste present (inoffensif) dans le JSON de chaque modele,
 // mais n'est plus lu pour A4 Détaillé.
-var CAPACITES_A4_DETAILLE_CV = { experiences: 4, formations: 3, competences: 6, langues: 4, certifications: 3, loisirs: 3, engagements: 2 };
+var CAPACITES_A4_DETAILLE_CV = { experiences: 5, formations: 3, competences: 6, langues: 4, certifications: 3, loisirs: 3, engagements: 2 };
 
 // ---- Rubriques totalement retirees en A5 (jamais montrees, meme vides) ----
 var RUBRIQUES_MASQUEES_A5 = ['certifications', 'loisirs', 'engagements'];
@@ -238,7 +238,55 @@ function _dnOptionsBaseParModele(modeleId) {
     'minimaliste': { construire: 'uneColonne', opts: { primaire: '1A1A1A', texte: '1A1A1A', secondaire: '777777', police: 'Calibri' }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } },
     'institutionnel': { construire: 'uneColonne', opts: { primaire: '1A1A2E', texte: '1A1A2E', secondaire: '555566', police: 'Times New Roman', soulignerTitres: true }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } },
     'elegant': { construire: 'uneColonne', opts: { primaire: '1F2937', texte: '1F2937', secondaire: 'D4AF37', police: 'Georgia', centrerEntete: true, objectifItalique: true, soulignerTitres: true }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } },
-    'jeune-diplome': { construire: 'uneColonne', opts: { primaire: '1D4ED8', texte: '1E293B', secondaire: '3B82F6', police: 'Calibri', ordre: ['profil', 'formations', 'experiences', 'experiencesPersonnelles', 'engagements', 'competences', 'langues', 'certifications', 'permis', 'loisirs'] }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } }
+    'jeune-diplome': { construire: 'uneColonne', opts: { primaire: '1D4ED8', texte: '1E293B', secondaire: '3B82F6', police: 'Calibri', ordre: ['profil', 'formations', 'experiences', 'experiencesPersonnelles', 'engagements', 'competences', 'langues', 'certifications', 'permis', 'loisirs'] }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } },
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 1/5 -- Impact) : theme pur, aucune structure differente
+    // de deuxColonnes -- "primaire" (titres/texte principal) reste FIXE
+    // en graphite quelle que soit la couleur choisie (identite du modele,
+    // meme principe que le beige de Chic) ; seul "accentSidebar"
+    // (soulignement des titres de sidebar) suit la couleur choisie,
+    // comme c'etait deja le cas avec _dnConstruireImpact() avant cette
+    // conversion (son parametre "accent").
+    'impact': { construire: 'deuxColonnes', opts: { primaire: '0F172A', accentSidebar: '0D9488', fondSidebar: 'F1F5F9', texteSidebar: '0F172A', styleBandeau: 'teinte' }, couleur: function (p) { return { accentSidebar: p.primaire, fondSidebar: p.teinte }; } },
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 2/5 -- Dispo) : archetype uneColonne + "bandeauResume"
+    // (pastilles disponibilite/permis/langues/contact sous le nom, voir
+    // exportDocxNatifCV.js) -- seule vraie particularite structurelle,
+    // desormais une option reutilisable du moteur. Competences unifiees
+    // en liste unique comme les autres (etaient en pastilles + fusion
+    // partielle savoirFaire/savoirEtre seulement, savoirs ignore -- meme
+    // decision que pour Impact, cf. conversion 1/5).
+    'dispo': { construire: 'uneColonne', opts: { primaire: 'C2410C', texte: '1F2937', secondaire: '6B7280', police: 'Calibri', bandeauResume: true }, couleur: function (p) { return { primaire: p.primaire, secondaire: p.secondaire }; } },
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 3/5 -- Creatif) : archetype deuxColonnes + "styleEnTete:
+    // 'banniere'" (bandeau plein largeur colore, voir exportDocxNatifCV.js)
+    // -- seule vraie particularite structurelle, desormais une option
+    // reutilisable du moteur. Competences unifiees en liste unique comme
+    // les autres (savoir-etre etait en texte simple sans pastilles ni
+    // fusion, savoirs ignore -- meme decision que pour Impact et Dispo).
+    'creatif': { construire: 'deuxColonnes', opts: { primaire: '6D28D9', fondSidebar: 'F5F3FF', texteSidebar: '3B0764', styleBandeau: 'teinte', styleEnTete: 'banniere', texteBandeauSecondaire: 'E9D5FF' }, couleur: function (p) { return { primaire: p.primaire, fondSidebar: p.teinte, texteBandeauSecondaire: p.secondaire }; } },
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 4/5 -- Chic) : archetype deuxColonnes + "styleEnTete:
+    // 'bloc-colonne'" (nom/monogramme dans un bloc sombre, dans la
+    // colonne principale) + "styleTitreSection: 'bandeau-sombre'" (titres
+    // de section en bandeau plein largeur colore) -- les 2 vraies
+    // particularites structurelles de Chic, desormais des options
+    // reutilisables. Le beige (fondSidebar) reste FIXE quelle que soit la
+    // couleur choisie (identite du modele, comme demande a l'epoque) --
+    // seul "primaire" (le sombre) suit la couleur, meme principe que
+    // l'original. Competences unifiees en liste unique comme les autres.
+    'chic': { construire: 'deuxColonnes', opts: { primaire: '3F3F3F', fondSidebar: 'EDE4D6', texteSidebar: '2A2A2A', styleBandeau: 'teinte', styleTitreSection: 'bandeau-sombre', styleEnTete: 'bloc-colonne', police: 'Georgia', texteClairSurSombre: 'F5F1E8' }, couleur: function (p) { return { primaire: p.primaire }; } },
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 5/5 -- Trajectoire, dernier des 5) : archetype
+    // deuxColonnes + "styleExperiences: 'frise'" (experiences en tableau
+    // date/detail) + "styleTitreSection: 'bandeau-sombre'" (titres en
+    // bandeau colore, deja reutilise de Chic) -- seule vraie
+    // particularite structurelle desormais propre a Trajectoire. Profil
+    // repasse en colonne principale et Formations en sidebar (assignation
+    // standard des 11 autres modeles, au lieu de l'inverse dans
+    // l'original) -- simplification deliberee pour la coherence, comme
+    // pour les autres conversions.
+    'trajectoire': { construire: 'deuxColonnes', opts: { primaire: '14213D', accentSidebar: '14213D', styleTitreSection: 'bandeau-sombre', styleExperiences: 'frise' }, couleur: function (p) { return { primaire: p.primaire, accentSidebar: p.primaire }; } }
   };
   return base[modeleId] || null;
 }
@@ -277,27 +325,15 @@ function _dnConstruireDocumentAvecOptions(docx, objetCV, modeleId, couleurId, fo
   }
 
   switch (modeleId) {
-    case 'impact':
-      if (palette) { opts.accent = palette.primaire; opts.fondSidebar = palette.teinte; }
-      return _dnConstruireImpact(docx, objetCV, opts);
-    case 'dispo':
-      if (palette) { opts.primaire = palette.primaire; opts.teinte = palette.teinte; }
-      return _dnConstruireDispo(docx, objetCV, opts);
-    case 'creatif':
-      if (palette) { opts.primaire = palette.primaire; opts.fondSidebar = palette.teinte; opts.texteBandeauSecondaire = palette.secondaire; }
-      return _dnConstruireCreatif(docx, objetCV, opts);
-    case 'trajectoire':
-      if (palette) { opts.primaire = palette.primaire; opts.secondaire = palette.secondaire; }
-      return _dnConstruireTrajectoire(docx, objetCV, opts);
-    // TACHE (correction bug : "Chic ne fonctionne pas") : Chic etait
-    // enregistre dans coloriationDocxNatifCV.js (_construireAvecCouleur),
-    // mais PAS ici -- or c'est CETTE fonction (_dnConstruireDocumentAvecOptions)
-    // qui est reellement appelee par l'apercu et le telechargement
-    // (genererDocxNatifCVFormat, la SEULE utilisee desormais). Ajoute ici,
-    // la ou ca compte vraiment.
-    case 'chic':
-      if (palette) { opts.primaire = palette.primaire; }
-      return _dnConstruireChic(docx, objetCV, opts);
+    // TACHE (retour utilisateur : "concevoir un moteur de mise en page
+    // Word intelligent et centralisé", conversions 2/5 et 3/5 -- Dispo et
+    // Creatif) : rejoignent desormais le moteur generique via
+    // _dnOptionsBaseParModele() -- voir leurs entrees plus bas. Cas
+    // speciaux retires d'ici.
+    // TACHE (retour utilisateur : moteur de mise en page centralisé,
+    // conversion 5/5 -- Trajectoire) : rejoint desormais le moteur
+    // generique via _dnOptionsBaseParModele() -- voir son entree plus
+    // bas. Cas special retire d'ici, plus aucun modele a code dedie.
     default:
       var config = _dnOptionsBaseParModele(modeleId);
       if (!config) { return null; }
@@ -319,6 +355,17 @@ function _dnConstruireDocumentAvecOptions(docx, objetCV, modeleId, couleurId, fo
 //   (construireObjetCVPourExportA5, TOUJOURS applique) + page A5 reelle.
 // ============================================================
 function genererDocxNatifCVFormat(modeleId, couleurId, formatPage) {
+  // TACHE (moteur Composeur, V1/Beta -- architecture-moteur-cv.md §0.1) :
+  // point de contact UNIQUE avec le reste de l'application. Generation
+  // entierement separee (composeurMoteur.js et les autres fichiers
+  // composeur*.js) -- aucune des 14 lignes de logique existante
+  // ci-dessous n'est executee pour ce modele, aucune d'entre elles n'est
+  // modifiee non plus. formatPage/couleurId ignores pour l'instant (une
+  // seule presentation, un seul theme en V1 -- voir composeurTheme.js).
+  if (modeleId === 'composeur') {
+    return genererDocxComposeur(dossier);
+  }
+
   var promesseObjet;
   if (formatPage === 'A5') {
     promesseObjet = Promise.resolve(construireObjetCVPourExportA5(modeleId));
