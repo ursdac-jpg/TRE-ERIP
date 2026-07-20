@@ -133,6 +133,11 @@ function _dnConstruireImpact(docx, objetCV, opts) {
   if (savoirEtre.length) { sidebar.push(titreSidebar('Qualités')); sidebar.push(_dnPastilles(docx, savoirEtre, 'E2E8F0', PRIMAIRE)); }
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
   if (loisirsTexte) { sidebar.push(titreSidebar("Centres d'intérêt")); sidebar.push(texteSidebar(loisirsTexte)); }
+  var competencesPersonnelles = _dnListe(objetCV.competencesPersonnelles);
+  if (competencesPersonnelles.length) {
+    sidebar.push(titreSidebar('Compétences personnelles'));
+    competencesPersonnelles.forEach(function (c) { sidebar.push(texteSidebar(c.competence)); });
+  }
   var engagementsTexte = _dnTexteJoint(objetCV.engagements);
   if (engagementsTexte) { sidebar.push(titreSidebar('Engagements')); sidebar.push(texteSidebar(engagementsTexte)); }
 
@@ -263,7 +268,7 @@ function _dnConstruireDispo(docx, objetCV, opts) {
   var savoirFaire = _dnListe(objetCV.competences && objetCV.competences.savoirFaire);
   var savoirEtre = _dnListe(objetCV.competences && objetCV.competences.savoirEtre);
   if (savoirFaire.length || savoirEtre.length) {
-    enfants.push(titre('Compétences'));
+    enfants.push(titre('Compétences professionnelles'));
     enfants.push(_dnPastilles(docx, savoirFaire.concat(savoirEtre), TEINTE, PRIMAIRE));
   }
 
@@ -277,6 +282,11 @@ function _dnConstruireDispo(docx, objetCV, opts) {
 
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
   if (loisirsTexte) { enfants.push(titre("Centres d'intérêt")); enfants.push(texte(loisirsTexte)); }
+  var competencesPersonnellesListe = _dnListe(objetCV.competencesPersonnelles);
+  if (competencesPersonnellesListe.length) {
+    enfants.push(titre('Compétences personnelles'));
+    competencesPersonnellesListe.forEach(function (c) { enfants.push(texte(c.competence)); });
+  }
 
   return new docx.Document({
     numbering: { config: [ { reference: refPuces, levels: [ { level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT,
@@ -361,7 +371,7 @@ function _dnConstruireCreatif(docx, objetCV, opts) {
     if (permis.possede) { sidebar.push(texteSidebar('Permis ' + _dnTexteJoint(permis.categories), { after: 100 })); }
   }
   var savoirFaire = _dnListe(objetCV.competences && objetCV.competences.savoirFaire);
-  if (savoirFaire.length) { sidebar.push(titreSidebar('Compétences')); sidebar.push(_dnTexteGrasColore(docx, savoirFaire, PRIMAIRE)); }
+  if (savoirFaire.length) { sidebar.push(titreSidebar('Compétences professionnelles')); sidebar.push(_dnTexteGrasColore(docx, savoirFaire, PRIMAIRE)); }
   var savoirEtre = _dnListe(objetCV.competences && objetCV.competences.savoirEtre);
   if (savoirEtre.length) { sidebar.push(titreSidebar('Qualités')); savoirEtre.forEach(function (q) { sidebar.push(texteSidebar('— ' + q)); }); }
   var langues = _dnListe(objetCV.langues);
@@ -376,6 +386,11 @@ function _dnConstruireCreatif(docx, objetCV, opts) {
   }
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
   if (loisirsTexte) { sidebar.push(titreSidebar("Centres d'intérêt")); sidebar.push(texteSidebar(loisirsTexte)); }
+  var competencesPersonnellesCreatif = _dnListe(objetCV.competencesPersonnelles);
+  if (competencesPersonnellesCreatif.length) {
+    sidebar.push(titreSidebar('Compétences personnelles'));
+    competencesPersonnellesCreatif.forEach(function (c) { sidebar.push(texteSidebar(c.competence)); });
+  }
 
   var principal = [];
   var texteProfil = _dnTexteProfil(objetCV);

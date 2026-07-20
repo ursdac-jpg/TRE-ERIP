@@ -55,8 +55,19 @@ function extraireDonneesCV(dossierSource) {
       codePostal: id.codePostal || '',
       ville: id.ville || ''
     },
-    // Metier ou secteur cible, tel que choisi sur la page Potentiel.
-    titreCV: d.metierCible || d.secteurCible || '',
+    // TACHE (retour utilisateur : "j'ai ce titre RESTAURATION dans tous
+    // les modèles" -- bug réel enfin localisé après une longue
+    // investigation) : cette ligne recalculait son propre titre depuis
+    // metierCible/secteurCible SANS JAMAIS lire dossier.titreCV -- le
+    // vrai champ que le module Découverte et l'écran classique
+    // "Intitulé" remplissent soigneusement. Les deux portaient le même
+    // nom ("titreCV") par coïncidence malheureuse, mais étaient deux
+    // logiques totalement différentes : normaliserDonneesCV() lisait
+    // celle-ci (la mauvaise), jamais dossier.titreCV directement.
+    // dossier.titreCV a désormais la priorité -- l'ancien calcul
+    // (page "Potentiel", antérieure à Découverte) ne sert plus que de
+    // repli si dossier.titreCV est vide.
+    titreCV: d.titreCV || d.metierCible || d.secteurCible || '',
     competences: {
       savoirFaire: savoirFaire.slice(),
       savoirEtre: savoirEtre.slice(),
@@ -100,6 +111,12 @@ function extraireDonneesCV(dossierSource) {
     contrat: (d.contrat || []).slice(),
     tempsTravail: (d.tempsTravail || []).slice(),
     loisirs: (d.loisirs || []).slice(),
+    // TACHE (retour utilisateur : loisirs factuels vs compétences
+    // personnelles) : candidates issues du module Découverte (loisirs
+    // reformulés), fusionnées avec celles de l'IA classique au moment de
+    // la génération (appliquerMoteurDecisionCV, app.js) -- jamais
+    // affichées directement, cette extraction ne fait que transporter.
+    competencesPersonnellesDecouverte: (d.competencesPersonnellesDecouverte || []).slice(),
     engagements: (d.engagements || []).slice(),
     // CV entier deja retape par l'IA et colle par la personne (page Action,
     // export Canva) -- PAS une simple accroche/profil, voir docs/SCHEMA_CV.md.

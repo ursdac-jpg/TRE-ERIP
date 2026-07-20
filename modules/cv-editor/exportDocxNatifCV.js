@@ -234,6 +234,17 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
     contenuSidebar.push(titreSidebar("Centres d’intérêt"));
     contenuSidebar.push(texteSidebarLigne(loisirsTexte));
   }
+  // TACHE (retour utilisateur : "compétences personnelles" -- bloc
+  // additif, jamais un remplacement des loisirs, voir cv.md point 10) :
+  // même consigne que pour _dnConstruireUneColonne -- n'apparaît que si
+  // l'IA en a proposé, source tracée en petit texte.
+  var competencesPersonnelles = _dnListe(objetCV.competencesPersonnelles);
+  if (competencesPersonnelles.length) {
+    contenuSidebar.push(titreSidebar('Compétences personnelles'));
+    competencesPersonnelles.forEach(function (c) {
+      contenuSidebar.push(texteSidebarLigne(c.competence));
+    });
+  }
   var engagementsTexte = _dnTexteJoint(objetCV.engagements);
   if (engagementsTexte) {
     contenuSidebar.push(titreSidebar('Engagements'));
@@ -251,7 +262,7 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirEtre))
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirs));
   if (competencesToutes.length) {
-    contenuPrincipal.push(titrePrincipal('Compétences'));
+    contenuPrincipal.push(titrePrincipal('Compétences professionnelles'));
     competencesToutes.forEach(function (c) { contenuPrincipal.push(puce(c, refPucesPrincipal, PRIMAIRE, 18)); });
   }
   var experiences = _dnListe(objetCV.experiences);
@@ -277,7 +288,11 @@ function _dnConstruireDeuxColonnes(docx, objetCV, opts) {
       // une option reutilisable (n'entre jamais en jeu en A4 Essentiel,
       // qui garde sa propre presentation compacte, prioritaire ci-dessus).
       experiences.forEach(function (e) {
-        var dateTexte = [e.dateDebut, e.dateFin || 'aujourd’hui'].filter(Boolean).join(' - ');
+        // TACHE (retour utilisateur, suite) : "aujourd'hui" affiché seul
+        // sans aucune vraie date reste trompeur, même si ce n'est pas
+        // aussi cassé que "De ... à aujourd'hui" -- corrigé pour rester
+        // cohérent avec les 2 autres correctifs du même problème.
+        var dateTexte = e.dateDebut ? [e.dateDebut, e.dateFin || 'aujourd’hui'].filter(Boolean).join(' - ') : '';
         var contenuDroite = [ new Paragraph({ shading: { type: ShadingType.CLEAR, color: 'auto', fill: PRIMAIRE }, spacing: { after: 60 },
           children: [ new TextRun({ text: e.poste + (e.entreprise ? ' — ' + e.entreprise : ''), bold: true, color: 'FFFFFF', size: 18, font: 'Calibri' }) ] }) ];
         if (e.lieu) { contenuDroite.push(new Paragraph({ spacing: { after: 60 }, children: [ new TextRun({ text: e.lieu, italics: true, color: TEXTE_PRINCIPAL, size: 16, font: 'Calibri' }) ] })); }
@@ -527,9 +542,16 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
   var competencesToutes = _dnListe(objetCV.competences && objetCV.competences.savoirFaire)
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirEtre))
     .concat(_dnListe(objetCV.competences && objetCV.competences.savoirs));
-  if (competencesToutes.length) { contenuSidebar.push(titreSidebar('Compétences')); competencesToutes.forEach(function (c) { contenuSidebar.push(puceSidebar(c)); }); }
+  if (competencesToutes.length) { contenuSidebar.push(titreSidebar('Compétences professionnelles')); competencesToutes.forEach(function (c) { contenuSidebar.push(puceSidebar(c)); }); }
   var loisirsTexte = _dnTexteJoint(objetCV.loisirs);
   if (loisirsTexte) { contenuSidebar.push(titreSidebar("Centres d’intérêt")); contenuSidebar.push(texteSimple(loisirsTexte, { size: 15 })); }
+  // TACHE (retour utilisateur : "compétences personnelles" -- bloc
+  // additif, jamais un remplacement des loisirs, voir cv.md point 10) :
+  var competencesPersonnellesTraj = _dnListe(objetCV.competencesPersonnelles);
+  if (competencesPersonnellesTraj.length) {
+    contenuSidebar.push(titreSidebar('Compétences personnelles'));
+    competencesPersonnellesTraj.forEach(function (c) { contenuSidebar.push(puceSidebar(c.competence)); });
+  }
 
   var contenuPrincipal = [];
   var experiences = _dnListe(objetCV.experiences);
@@ -537,7 +559,12 @@ function _dnConstruireTrajectoire(docx, objetCV, opts) {
     contenuPrincipal.push(bandeauSection('Expérience professionnelle'));
     contenuPrincipal.push(new Paragraph({ children: [] }));
     experiences.forEach(function (e) {
-      var dateTexte = 'De ' + (e.dateDebut || '') + '\nà ' + (e.dateFin || 'aujourd’hui');
+      // TACHE (retour utilisateur : "regarde les expériences pro" -- même
+      // bug que texteProfil()/panneau "Vérifier les informations",
+      // trouvé ici une 3e fois dans le modèle "frise" : "De ... à
+      // aujourd'hui" s'affichait même sans aucune date. Corrigé de la
+      // même façon : sans dateDebut, la case reste simplement vide.
+      var dateTexte = e.dateDebut ? ('De ' + e.dateDebut + '\nà ' + (e.dateFin || 'aujourd’hui')) : '';
       contenuPrincipal.push(ligneFrise(dateTexte, e.poste + (e.entreprise ? ' — ' + e.entreprise : ''), e.contrat, e.missions));
       contenuPrincipal.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
     });
@@ -674,7 +701,7 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
         .concat(_dnListe(objetCV.competences && objetCV.competences.savoirEtre))
         .concat(_dnListe(objetCV.competences && objetCV.competences.savoirs));
       if (!tout.length) { return []; }
-      return [ titreSection('Compétences') ].concat(tout.map(puce));
+      return [ titreSection('Compétences professionnelles') ].concat(tout.map(puce));
     },
     experiences: function () {
       var exp = _dnListe(objetCV.experiences);
@@ -734,13 +761,30 @@ function _dnConstruireUneColonne(docx, objetCV, opts) {
       var t = _dnTexteJoint(objetCV.loisirs);
       return t ? [ titreSection("Centres d’intérêt"), texte(t) ] : [];
     },
+    // TACHE (retour utilisateur : "compétences personnelles" -- bloc
+    // additif, jamais un remplacement des loisirs, voir cv.md point 10) :
+    // n'apparaît que si l'IA en a proposé (déclenchement décidé côté
+    // prompt : absence de formation + signal de reconversion/peu
+    // d'expérience/profil mince). La source (expérience ou loisir dont
+    // la compétence est tirée) reste visible en petit texte, pour ne
+    // jamais présenter une affirmation sans son origine traçable.
+    competencesPersonnelles: function () {
+      var cp = _dnListe(objetCV.competencesPersonnelles);
+      if (!cp.length) { return []; }
+      var r = [ titreSection('Compétences personnelles') ];
+      // TACHE (retour utilisateur : "ne pas marquer dans les () les
+      // sources... déjà visible dans Centres d'intérêt") : plus de ligne
+      // "Issu de", seulement le texte de la compétence.
+      cp.forEach(function (c) { r.push(puce(c.competence)); });
+      return r;
+    },
     engagements: function () {
       var t = _dnTexteJoint(objetCV.engagements);
       return t ? [ titreSection('Engagements'), texte(t) ] : [];
     }
   };
 
-  var ordre = opts.ordre || ['profil', 'competences', 'experiences', 'experiencesPersonnelles', 'formations', 'langues', 'certifications', 'loisirs', 'engagements'];
+  var ordre = opts.ordre || ['profil', 'competences', 'experiences', 'experiencesPersonnelles', 'formations', 'langues', 'certifications', 'loisirs', 'competencesPersonnelles', 'engagements'];
   ordre.forEach(function (cle) { enfants = enfants.concat(blocs[cle] ? blocs[cle]() : []); });
 
   return new docx.Document({
@@ -786,7 +830,7 @@ var GENERATEURS_DOCX_NATIFS_CV = {
   },
   'jeune-diplome': function (docx, objetCV) {
     return _dnConstruireUneColonne(docx, objetCV, { primaire: '1D4ED8', texte: '1E293B', secondaire: '3B82F6', police: 'Calibri',
-      ordre: ['profil', 'formations', 'experiences', 'experiencesPersonnelles', 'engagements', 'competences', 'langues', 'certifications', 'permis', 'loisirs'] });
+      ordre: ['profil', 'formations', 'experiences', 'experiencesPersonnelles', 'engagements', 'competences', 'langues', 'certifications', 'permis', 'loisirs', 'competencesPersonnelles'] });
   }
 };
 

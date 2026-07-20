@@ -81,6 +81,7 @@ function normaliserDonneesCV(dossierSource) {
     langues: brut.langues,
     permis: brut.permis,
     loisirs: brut.loisirs,
+    competencesPersonnellesDecouverte: brut.competencesPersonnellesDecouverte,
     engagements: brut.engagements
   };
 }

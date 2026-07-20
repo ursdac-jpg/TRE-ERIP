@@ -116,7 +116,6 @@ var dossier = {
   // automatiquement (extraction fiable) ; nom/prenom/adresse jamais devines.
   identite: { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' },
   entretienDirect: { structure: '', poste: '' },  // TACHE 36 : parcours autonome "Preparer un entretien"
-  rechercheEntreprise: { structure: '' },  // TACHE (recherche assistant) : entreprise saisie depuis le parcours guide
   catalogueActif: {},    // Etape 3 : suivi Oui/Non par catalogue (cle = nom du champ, ex. 'loisirs')
   experiences: [],
   experiencesPerso: [],  // benevolat, entraide familiale, foyer... (valorisation)
@@ -217,12 +216,16 @@ var dossier = {
   // Ne sont JAMAIS affichees telles quelles dans un document : elles servent
   // uniquement de contexte transmis a l'IA (aucune logique de prompt cablee
   // a ce stade, voir tache dediee).
-  preferencesIA: {
-    niveauPoste: null,
-    niveauLangage: null,
-    adaptationMetier: null,
-    ton: null,
-    longueur: null
+  // TACHE (retour utilisateur : "je ne veux pas que les choix du CV passent
+  // automatiquement dans la lettre") : un objet DISTINCT par type de
+  // document (cv/lettre/entretien), plus un seul objet partage -- chaque
+  // document garde ses propres reglages. Un bouton dedie ("Reprendre les
+  // choix du CV/de la lettre") permet de copier volontairement, voir
+  // boutonReprendrePreferencesIA() dans app.js.
+  preferencesIAParType: {
+    cv: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+    lettre: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+    entretien: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null }
   },
   // TACHE (retour utilisateur : "Verifier les informations") : override
   // manuel du texte transmis a l'IA (texteProfilEffectif()) -- null tant
@@ -680,8 +683,14 @@ function ouvrirPanneauChoixParcours(metierNom) {
   // TACHE (ameliorations parcours recherche, point 1) : un nouveau metier
   // clique efface systematiquement tout historique du parcours precedent
   // (parcours choisi, entreprise saisie), pour eviter toute confusion.
+  // TACHE (retour utilisateur : "si le final est le même, autant
+  // rassembler les informations") : reinitialise desormais le MEME modele
+  // de donnees que le bloc Candidature de Mon Projet (voir
+  // validerEntrepriseGuidee() plus bas), dossier.rechercheEntreprise
+  // (ancien champ separe, plus jamais lu) est retire.
   rechercheGuidee = { metier: metierNom, parcours: null };
-  dossier.rechercheEntreprise = { structure: '' };
+  dossier.typeRecherche = null;
+  dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
   var contenu =
     '<p class="fw-bold mb-1">' + metierNom + '</p>' +
     '<p class="text-muted small">Choisissez le parcours qui correspond a votre situation.</p>' +
@@ -710,67 +719,68 @@ function ouvrirPanneauEntreprise() {
     '<label><input type="radio" name="entrepriseConnueGuide" value="oui"> Oui</label>' +
     '<label><input type="radio" name="entrepriseConnueGuide" value="non"> Non</label>' +
     '</div>' +
-    '<div id="champEntrepriseGuide" class="d-none">' +
-    '<input type="text" class="form-control form-control-sm" id="entrepriseGuideInput" ' +
-    'placeholder="Nom de l\'entreprise ou lien internet"></div>' +
     '<div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-primary" id="validerEntrepriseGuideBtn" disabled ' +
     'title="Choisissez une réponse pour continuer.">Continuer &#8594;</button></div>';
   var panneau = ouvrirPanneauGuide('&#127970; Entreprise', contenu);
-  var champ = document.getElementById('champEntrepriseGuide');
-  var champInput = document.getElementById('entrepriseGuideInput');
   var btnValider = document.getElementById('validerEntrepriseGuideBtn');
 
-  // TACHE (ameliorations parcours recherche, point 2) : le bouton reste
-  // desactive (curseur interdit, message explicite) tant que "Oui" est
-  // choisi sans que le champ ne soit rempli.
-  function majBoutonEntreprise() {
-    var reponse = document.querySelector('input[name="entrepriseConnueGuide"]:checked');
-    if (!reponse) {
-      btnValider.disabled = true;
-      btnValider.title = 'Choisissez une réponse pour continuer.';
-      return;
-    }
-    if (reponse.value === 'oui' && !champInput.value.trim()) {
-      btnValider.disabled = true;
-      btnValider.title = 'Indiquez le nom de l\'entreprise ou un lien internet pour continuer.';
-    } else {
-      btnValider.disabled = false;
-      btnValider.title = '';
-    }
-  }
   panneau.querySelectorAll('input[name="entrepriseConnueGuide"]').forEach(function (el) {
     el.addEventListener('change', function () {
-      champ.classList.toggle('d-none', this.value !== 'oui');
-      majBoutonEntreprise();
+      btnValider.disabled = false;
+      btnValider.title = '';
     });
   });
-  champInput.addEventListener('input', majBoutonEntreprise);
 
   btnValider.addEventListener('click', function () {
     if (btnValider.disabled) { return; }
     var reponse = document.querySelector('input[name="entrepriseConnueGuide"]:checked');
     var estOui = reponse && reponse.value === 'oui';
-    var valeur = estOui ? champInput.value.trim() : '';
+
+    // TACHE (retour utilisateur : "je veux ici les mêmes informations qu'à
+    // la page Mon projet, pour être cohérent") : le champ unique "Nom de
+    // l'entreprise ou lien internet" est retire -- reutilise directement
+    // ouvrirFormulaireCoordonneesEntreprise(), le MEME formulaire (Nom /
+    // Site / Lien-offre) que le bloc Candidature de Mon Projet. Il ecrit
+    // deja lui-meme dans dossier.rechercheCandidature et dossier.typeRecherche
+    // ('offre'), plus rien a dupliquer ici.
+    if (estOui) {
+      ouvrirFormulaireCoordonneesEntreprise(function () { validerEntrepriseGuidee(true); }, ouvrirPanneauEntreprise);
+      return;
+    }
 
     // TACHE (ameliorations parcours recherche, point 4) : specifiquement pour
     // la lettre de motivation, "Non" declenche un avertissement avant de
     // poursuivre (la lettre sera moins personnalisee sans entreprise connue).
-    if (!estOui && rechercheGuidee.parcours === 'lettre') {
+    if (rechercheGuidee.parcours === 'lettre') {
       ouvrirPanneauAvertissementEntreprise();
       return;
     }
-    validerEntrepriseGuidee(valeur, estOui);
+    validerEntrepriseGuidee(false);
   });
 }
 
-// Enregistre l'entreprise (ou son absence) et poursuit le parcours.
-function validerEntrepriseGuidee(valeur, estOui) {
-  dossier.rechercheEntreprise = dossier.rechercheEntreprise || { structure: '' };
-  dossier.rechercheEntreprise.structure = valeur;
+// Enregistre le choix (entreprise connue ou non) et poursuit le parcours.
+// TACHE (retour utilisateur : "si le final est le même, autant rassembler
+// les informations et éviter de les retaper plusieurs fois") : ecrit
+// desormais directement dans le MEME modele de donnees que le bloc
+// Candidature de Mon Projet (dossier.modeRecherche / dossier.typeRecherche /
+// dossier.rechercheCandidature) au lieu du champ separe
+// dossier.rechercheEntreprise -- en arrivant sur Mon Projet, "Un métier
+// précis" et "Je réponds à une offre d'emploi" (ou "Recherche simple")
+// apparaissent donc deja coches, sans redemander l'entreprise (voir
+// etatAccesRevelation(), qui ne la redemande que si
+// rechercheCandidature.entreprise est encore vide).
+function validerEntrepriseGuidee(estOui) {
+  dossier.modeRecherche = 'metier';
+  if (estOui) {
+    // dossier.typeRecherche et dossier.rechercheCandidature ont deja ete
+    // renseignes par ouvrirFormulaireCoordonneesEntreprise() ci-dessus.
+  } else {
+    dossier.typeRecherche = 'simple';
+    dossier.rechercheCandidature = { entreprise: '', site: '', lienOffre: '' };
+  }
   ajouterMetierCandidat(rechercheGuidee.metier);
-  // TACHE (ameliorations parcours recherche, point 2) : sans entreprise
-  // connue, on privilegie un CV general plutot que specifique.
-  dossier.typeCV = estOui ? 'specifique' : 'general';
+  dossier.typeCV = typeCVDepuisTypeRecherche();
   fermerPanneauGuide();
   if (cvDisponible()) { lancerParcoursGuide(); } else { ouvrirPanneauCvExistant(); }
 }
@@ -788,7 +798,7 @@ function ouvrirPanneauAvertissementEntreprise() {
   ouvrirPanneauGuide('&#9888;&#65039; Entreprise non renseignee', contenu);
   document.getElementById('retourEntrepriseGuideBtn').addEventListener('click', ouvrirPanneauEntreprise);
   document.getElementById('poursuivreSansEntrepriseGuideBtn').addEventListener('click', function () {
-    validerEntrepriseGuidee('', false);
+    validerEntrepriseGuidee(false);
   });
 }
 
@@ -1571,6 +1581,41 @@ function wireCatalogueDirect(config, rerender) {
 /* ------------------------------------------------------------
    3. FONCTIONS UTILITAIRES DE PROFIL
    ------------------------------------------------------------ */
+// TACHE (étape 5, contrat modele-relation-competence-experience.md) :
+// point d'accès UNIQUE à la relation compétence -> expérience. Aucun
+// module (Composeur, lettre, entretien, futur) ne doit jamais lire
+// experience.competencesDemontrees directement -- seulement appeler
+// cette fonction. C'est ce qui garantit que la structure interne peut
+// évoluer (texte -> id -> objet plus riche) sans jamais avoir à modifier
+// les consommateurs : seul le corps de cette fonction changerait.
+//
+// Reconstruit la vue inverse à la volée (jamais maintenue en double,
+// principe posé au contrat : "l'expérience produit la preuve, jamais
+// l'inverse stocké"). Réutilise correspond() (metiers.js) pour tolérer
+// une légère reformulation entre le texte de la compétence demandée et
+// celui conservé sur l'expérience.
+//
+// Absence de dossier.experiences[i].competencesDemontrees == lien
+// inconnu pour cette expérience (parcours catalogue classique ou CV
+// importé, contrat §3.1) -- retourne simplement un tableau vide pour
+// ces expériences-là, jamais une erreur.
+function experiencesQuiDemontrent(competenceTexte, listeExperiences) {
+  if (!competenceTexte) { return []; }
+  // TACHE (étape 5, isolation du Composeur : composeurComposition.js ne
+  // doit jamais dépendre du dossier global) : liste explicite fournie en
+  // 2e paramètre si l'appelant en a une (ex. le Composeur, qui veut ne
+  // citer que les expériences réellement retenues sur CE CV précis, pas
+  // toutes celles du dossier sans limite) -- repli sur dossier.experiences
+  // sinon, pour les appelants qui, eux, travaillent directement sur le
+  // dossier global (lettre, entretien).
+  var source = listeExperiences || dossier.experiences || [];
+  return source.filter(function (e) {
+    return (e.competencesDemontrees || []).some(function (c) {
+      return (typeof correspond === 'function') ? correspond(c, competenceTexte) : c === competenceTexte;
+    });
+  });
+}
+
 function deduireCompetences() {
   var set = {};
   var ordre = [];
@@ -1619,7 +1664,19 @@ function deduireCompetences() {
     if (refValeur) { (refValeur.savoirEtre || []).forEach(ajouter); }
   });
   if (dossier.competencesCV) { dossier.competencesCV.forEach(ajouter); }
-  if (ordre.length === 0) { ['Motivation', 'Apprentissage'].forEach(ajouter); }
+  // TACHE (retour utilisateur : "quel est le lien entre le BTP et ces
+  // compétences ?") : bug réel et confirmé, trouvé en traçant le JSON réel
+  // -- ce filet de secours (compétences génériques si rien n'a été déduit
+  // du parcours catalogue "Mon Projet") se déclenchait systématiquement
+  // pour un dossier alimenté par le module Découverte, puisque celui-ci
+  // écrit dans dossier.competences.savoirFaire/savoirEtre, un champ que
+  // deduireCompetences() ne regardait jamais. Résultat : "Motivation,
+  // Apprentissage" s'affichait à la place des vraies compétences BTP,
+  // pourtant bien enregistrées à côté. Le filet ne se déclenche
+  // désormais que si le module Découverte n'a lui non plus rien fourni.
+  var decouverteAFourniQuelqueChose = !!(dossier.competences &&
+    ((dossier.competences.savoirFaire || []).length || (dossier.competences.savoirEtre || []).length));
+  if (ordre.length === 0 && !decouverteAFourniQuelqueChose) { ['Motivation', 'Apprentissage'].forEach(ajouter); }
   return ordre;
 }
 
@@ -1730,7 +1787,7 @@ function afficherCompetencesDetectees(etape) {
   else { intro = 'Votre profil se précise.'; }
   return blocAccordeon('competences-detectees-' + etape,
     '&#129513; Compétences déjà identifiées <span class="badge bg-primary ms-1">' + comps.length + '</span>',
-    intro, liste);
+    intro, liste, true);
 }
 
 /* ------------------------------------------------------------
@@ -1742,9 +1799,9 @@ var ETAPES = [
   { id: 'activites', label: '🤝 Expérience' },
   { id: 'actions', label: '⭐ Ce que vous faisiez' },
   { id: 'environnement', label: '🌍 Environnement' },
-  { id: 'valeurs', label: '❤️ Attentes' },
+  { id: 'valeurs', label: '⚖️ Attentes' },
   { id: 'projet', label: '📋 Mon projet' },
-  { id: 'revelation', label: '🔮 Potentiel' },
+  { id: 'revelation', label: '🧭 Faire le point' },
   { id: 'resultats', label: '✨ Action' }
 ];
 
@@ -2411,7 +2468,6 @@ function pageActivites() {
     // bas, qui reutilise le meme libelle mais a bon droit (elle, c'est
     // vraiment un environnement).
     titreSelection: 'Votre entourage de travail', iconeSelection: '&#11088;',
-    placeholderRecherche: '&#128269; Rechercher une personne, un matériel ou un animal...',
     precedent: 'objectif', suivant: 'actions', labelSuivant: null
   });
 }
@@ -2420,7 +2476,7 @@ function pageActivites() {
 // Purement transitoire (pas de sauvegarde), reinitialise a chaque rechargement.
 var etatSelectionCatalogue = {};
 function etatCatalogue(champ) {
-  if (!etatSelectionCatalogue[champ]) { etatSelectionCatalogue[champ] = { onglet: 0, recherche: '' }; }
+  if (!etatSelectionCatalogue[champ]) { etatSelectionCatalogue[champ] = { onglet: 0 }; }
   return etatSelectionCatalogue[champ];
 }
 var LIMITE_ACTIONS = 12;
@@ -2444,14 +2500,13 @@ function trouverItemParId(catalogue, id) {
 // zone de selection avec compteur/limite, catalogue filtre). Reutilise par
 // pageActions() et pageActivites() pour un comportement identique dans toute
 // l'application. config = { champ, etape, titre, sousTitre, catalogue,
-// limite, titreSelection, iconeSelection, placeholderRecherche, precedent,
+// limite, titreSelection, iconeSelection, precedent,
 // suivant, labelSuivant }
 function pageSelectionCatalogue(config) {
   dossier[config.champ] = dossier[config.champ] || [];
   var selectedIds = dossier[config.champ];
   var etat = etatCatalogue(config.champ);
   var limiteAtteinte = selectedIds.length >= config.limite;
-  var rechercheNormalisee = normaliserTexte(etat.recherche).trim();
 
   function carteSelectionneeHTML(item) {
     return '<div class="carte active-card action-carte-anim carte-selection-compacte" data-role="deselection" data-value="' + item.id + '">' +
@@ -2481,26 +2536,14 @@ function pageSelectionCatalogue(config) {
       '" data-onglet="' + i + '">' + groupe.icone + ' ' + groupe.categorie + '</button>';
   }).join('');
 
-  var itemsCatalogue;
-  if (rechercheNormalisee) {
-    itemsCatalogue = [];
-    config.catalogue.forEach(function (groupe) {
-      groupe.items.forEach(function (item) {
-        if (selectedIds.indexOf(item.id) === -1 && normaliserTexte(item.label).indexOf(rechercheNormalisee) !== -1) {
-          itemsCatalogue.push(item);
-        }
-      });
-    });
-  } else {
-    itemsCatalogue = config.catalogue[etat.onglet].items.filter(function (item) {
-      return selectedIds.indexOf(item.id) === -1;
-    });
-  }
+  var itemsCatalogue = config.catalogue[etat.onglet].items.filter(function (item) {
+    return selectedIds.indexOf(item.id) === -1;
+  });
 
   var grilleCatalogue = '<div class="objectifs objectifs-catalogue">' +
     (itemsCatalogue.length
       ? itemsCatalogue.map(carteCatalogueHTML).join('')
-      : '<p class="text-muted text-center w-100">Aucun élément disponible' + (rechercheNormalisee ? ' pour cette recherche' : ' dans cette catégorie') + '.</p>') +
+      : '<p class="text-muted text-center w-100">Aucun élément disponible dans cette catégorie.</p>') +
     '</div>';
 
   var messageLimite = limiteAtteinte
@@ -2518,9 +2561,26 @@ function pageSelectionCatalogue(config) {
     // les 4 pages qui partagent ce meme composant (Experience, Ce que
     // vous faisiez, Environnement, Attentes).
     '<div class="cv-section cv-section-compact mt-3"><h4>&#128218; Catalogue</h4>' +
-    '<div class="recherche-actions"><input type="text" class="form-control" id="rechercheCatalogueInput" ' +
-    'placeholder="' + config.placeholderRecherche + '" value="' + echapperAttribut(etat.recherche) + '"></div>' +
-    (rechercheNormalisee ? '' : '<div class="onglets-actions">' + onglets + '</div>') +
+    // TACHE (retour utilisateur : "les personnes ont du mal à faire le
+    // lien entre le titre et ce qu'il faut faire -- pas évident que c'est
+    // une question qui les invite à choisir") : message d'instruction
+    // explicite juste au-dessus des cartes, au plus pres de l'action
+    // attendue (le sous-titre sous le H1, plus haut, ne suffisait pas).
+    // TACHE (retour utilisateur : "la barre de recherche a-t-elle sa
+    // place ? je n'ai vu personne l'utiliser") : retiree -- peu d'elements
+    // par categorie (6 a 9), deja tries par onglet, une recherche
+    // n'apportait rien de plus et alourdissait l'ecran juste au moment ou
+    // il fallait le simplifier.
+    // TACHE (retour utilisateur : "message trop petit, peu d'espace avec
+    // les cartes -- animation ? quel est ton avis ?") : agrandi et mis en
+    // encart distinct (fond teinte + espace) plutot qu'anime -- ce message
+    // revient sur 4 ecrans a chaque etape du parcours, une animation en
+    // permanence sur un texte repete finit par se fondre dans le decor.
+    // Icone 👇 (pointe vers le catalogue juste en dessous) plutot que 👉
+    // (pointait vers la droite, sans rapport avec la position des cartes).
+    '<p class="message-instruction-catalogue">&#128071; Cliquez sur les cartes qui correspondent à votre situation ' +
+    '(plusieurs choix possibles).</p>' +
+    '<div class="onglets-actions">' + onglets + '</div>' +
     messageLimite +
     grilleCatalogue +
     '</div>' +
@@ -2535,17 +2595,6 @@ function pageSelectionCatalogue(config) {
   app.innerHTML = html;
 
   wireAccordeon(function () { pageSelectionCatalogue(config); });
-
-  var inputRecherche = document.getElementById('rechercheCatalogueInput');
-  inputRecherche.addEventListener('input', function () {
-    etat.recherche = this.value;
-    pageSelectionCatalogue(config);
-  });
-  // Redonne le focus (et la position du curseur) apres le re-rendu, pour que
-  // la frappe reste fluide malgre la reconstruction complete de la page.
-  inputRecherche.focus();
-  var pos = inputRecherche.value.length;
-  inputRecherche.setSelectionRange(pos, pos);
 
   document.querySelectorAll('.onglet-action').forEach(function (el) {
     el.addEventListener('click', function () {
@@ -2590,7 +2639,6 @@ function pageActions() {
     sousTitre: 'Choisissez les actions que vous réalisiez régulièrement.',
     catalogue: CATALOGUE_ACTIONS_PRO, limite: LIMITE_ACTIONS,
     titreSelection: 'Vos actions sélectionnées', iconeSelection: '&#9989;',
-    placeholderRecherche: '&#128269; Rechercher une action...',
     precedent: 'activites', suivant: 'environnement', labelSuivant: null
   });
 }
@@ -2602,7 +2650,6 @@ function pageEnvironnement() {
     sousTitre: 'Choisissez les environnements qui correspondent le mieux à vos expériences.',
     catalogue: CATALOGUE_ENVIRONNEMENTS_TRAVAIL, limite: 9,
     titreSelection: 'Vos principaux environnements', iconeSelection: '&#11088;',
-    placeholderRecherche: '&#128269; Rechercher un environnement...',
     precedent: 'actions', suivant: 'valeurs', labelSuivant: null
   });
 }
@@ -2697,11 +2744,10 @@ function wireContratTemps() {
 function pageValeurs() {
   pageSelectionCatalogue({
     champ: 'valeurs', etape: 'valeurs',
-    titre: '&#10084;&#65039; Qu’est-ce qui est important pour vous dans un travail ?',
+    titre: '&#9878;&#65039; Qu’est-ce qui est important pour vous dans un travail ?',
     sousTitre: 'Choisissez ce qui compte le plus pour vous.',
     catalogue: CATALOGUE_VALEURS_PROFESSIONNELLES, limite: 5,
     titreSelection: 'Vos priorités', iconeSelection: '&#11088;',
-    placeholderRecherche: '&#128269; Rechercher une valeur...',
     precedent: 'environnement', suivant: 'projet', labelSuivant: 'Continuer &#8594;'
   });
 }
@@ -2722,7 +2768,7 @@ function messageVAE() {
       blocAccordeon('vae', '&#128161; Vous avez de l’expérience sans diplôme correspondant ?', '',
         '<p class="mb-0">Cette expérience, même auprès de proches ou de la famille, peut être reconnue par une ' +
         '<strong>VAE</strong> (Validation des Acquis de l’Expérience). ' +
-        'Parlez-en à votre conseiller pour vous renseigner.</p>') +
+        'Parlez-en à votre conseiller pour vous renseigner.</p>', true) +
       '</div>';
   }
   return '';
@@ -3437,13 +3483,37 @@ function wireFormation(rerender) {
   if (btnAjouterFormation) {
     btnAjouterFormation.addEventListener('click', function () {
       if (!brouillonFormationEnCours) { return; }
-      dossier.formations.push({
-        niveau: brouillonFormationEnCours.niveauVisible,
-        intitule: brouillonFormationEnCours.intitule,
-        annee: brouillonFormationEnCours.annee
-      });
-      brouillonFormationEnCours = null;
-      rerender();
+      function ajouterFormationBrouillon() {
+        dossier.formations.push({
+          niveau: brouillonFormationEnCours.niveauVisible,
+          intitule: brouillonFormationEnCours.intitule,
+          annee: brouillonFormationEnCours.annee
+        });
+        brouillonFormationEnCours = null;
+        rerender();
+      }
+      // TACHE (retour utilisateur : "si la personne tape Ajouter sans avoir
+      // mis le nom du diplôme, je veux un message disant de compléter ou de
+      // continuer quand même") : meme principe que l'avertissement metier
+      // cible (ouvrirPanneauAvertissementMetierCible) -- ne bloque jamais,
+      // "Continuer quand même" reste toujours possible (ex. diplome dont le
+      // nom exact echappe a la personne).
+      var intituleVide = !brouillonFormationEnCours.intitule || !brouillonFormationEnCours.intitule.trim();
+      if (intituleVide) {
+        confirmerAction(
+          '&#9888;&#65039; Intitulé du diplôme non renseigné',
+          'Vous n’avez pas indiqué l’intitulé de ce diplôme (ex. « CAP Cuisine », « BEP Vente »...). ' +
+          'Vous pouvez le compléter, ou continuer quand même.',
+          'Continuer quand même', 'btn-primary', ajouterFormationBrouillon,
+          'Compléter', function () {
+            var champ = document.getElementById('niveauFormationIntitule');
+            if (champ) { champ.focus(); }
+          },
+          'btn-outline-primary'
+        );
+        return;
+      }
+      ajouterFormationBrouillon();
     });
   }
 }
@@ -3593,7 +3663,7 @@ function pageProjet() {
     // message au survol) tant que le choix n'est pas complet -- reutilise
     // options.suivantDesactive/suivantDesactiveMessage, deja gere par
     // barreNavigation() (meme mecanisme que Potentiel -> Action).
-    '<div class="barre-navigation-fixe">' + barreNavigation('valeurs', 'revelation', '&#128302; Révéler mon potentiel',
+    '<div class="barre-navigation-fixe">' + barreNavigation('valeurs', 'revelation', '&#129517; Faire le point',
       { suivantDesactive: !etatAccesRevelation().accessible, suivantDesactiveMessage: etatAccesRevelation().message,
         // TACHE (retour utilisateur) : seul le bloc "Candidature" est
         // obligatoire pour acceder a Potentiel (voir etatAccesRevelation()
@@ -3896,33 +3966,29 @@ function pastilleMetierCandidatHTML(nom) {
     '</span>';
 }
 
-// TACHE (demande) : bandeau "Je postule", visible plus bas sur la page une
-// fois qu'un metier ou un secteur a ete choisi -- reprend la meme phrase de
-// confirmation que dans le bandeau "Metier(s) cible(s)", mais dans un
-// encart separe et bien visible, pour la garder sous les yeux plus loin
-// dans la page.
-function banniereJePostule() {
+// TACHE (retour utilisateur : integrer ce message dans le bandeau "Domaine
+// cible"/"Métier cible" plutot qu'un bandeau separe redondant plus bas sur
+// la page) : contenu seul (sans le wrapper .banniere-je-postule), reutilise
+// par banniereDomaineCible()/banniereMetierCible() ci-dessous, qui
+// l'enveloppent elles-memes dans le meme style visuel qu'avant.
+function banniereJePostuleContenu() {
   if (dossier.metierCible) {
     // TACHE (retour utilisateur : retirer les couleurs bleu/jaune) : le
     // candidat ne doit jamais voir si son metier est "reconnu" ou non par le
     // referentiel -- meme bandeau, quelle que soit l'origine du metier.
-    return '<div class="banniere-je-postule banniere-je-postule-accent">' +
-      '<div class="banniere-je-postule-titre">&#128640; Votre candidature est prête</div>' +
+    return '<div class="banniere-je-postule-titre">&#128640; Votre candidature est prête</div>' +
       '<p class="mb-1">Votre candidature sera automatiquement personnalisée pour le métier sélectionné : ' +
       '<strong>' + dossier.metierCible + '</strong>.</p>' +
       '<p class="mb-0">Votre CV, votre lettre de motivation et votre préparation à l’entretien seront adaptés ' +
-      'afin de mettre en valeur les compétences, les qualités et les attentes spécifiques de ce métier.</p>' +
-      '</div>';
+      'afin de mettre en valeur les compétences, les qualités et les attentes spécifiques de ce métier.</p>';
   }
   if (dossier.secteurCible) {
-    return '<div class="banniere-je-postule banniere-je-postule-accent">' +
-      '<div class="banniere-je-postule-titre">&#128640; Votre candidature est prête</div>' +
+    return '<div class="banniere-je-postule-titre">&#128640; Votre candidature est prête</div>' +
       '<p class="mb-1">Votre candidature sera automatiquement personnalisée pour le secteur sélectionné : ' +
       '<strong>' + echapperAttribut(dossier.secteurCible) + '</strong> (pas un métier précis -- utile par exemple ' +
       'pour postuler auprès d’agences d’intérim, sur plusieurs métiers).</p>' +
       '<p class="mb-0">Votre CV, votre lettre de motivation et votre préparation à l’entretien seront adaptés ' +
-      'afin de mettre en valeur les compétences, les qualités et les attentes spécifiques de ce secteur.</p>' +
-      '</div>';
+      'afin de mettre en valeur les compétences, les qualités et les attentes spécifiques de ce secteur.</p>';
   }
   return '';
 }
@@ -3987,14 +4053,17 @@ function ouvrirDemandeCoordonneesEntreprise(onTermine) {
   });
   overlay.querySelector('[data-role="entreprise-connue"]').addEventListener('click', function () {
     fermerFenetreERIP();
-    ouvrirFormulaireCoordonneesEntreprise(onTermine);
+    ouvrirFormulaireCoordonneesEntreprise(onTermine, function () { ouvrirDemandeCoordonneesEntreprise(onTermine); });
   });
 }
 
 // TACHE (retour utilisateur) : formulaire nom (obligatoire) + lien
-// (facultatif). Le bouton Retour ramene a la question precedente
-// (ouvrirDemandeCoordonneesEntreprise), plutot que de fermer sans rien faire.
-function ouvrirFormulaireCoordonneesEntreprise(onTermine) {
+// (facultatif). Le bouton Retour ramene a la question precedente.
+// TACHE (retour utilisateur : reutilisation de ce formulaire par le
+// parcours "recherche d'accueil", voir ouvrirPanneauEntreprise()) : onRetour
+// rend la destination du bouton Retour configurable -- par defaut (appelant
+// historique ci-dessus), elle reste ouvrirDemandeCoordonneesEntreprise().
+function ouvrirFormulaireCoordonneesEntreprise(onTermine, onRetour) {
   var panneau = ouvrirPanneauGuide('&#127970; Coordonnées de l’entreprise',
     '<div class="mb-2"><label class="form-label small">Nom de l’entreprise</label>' +
     '<input type="text" class="form-control form-control-sm" id="coordEntrepriseNom" placeholder="Nom de l’entreprise"></div>' +
@@ -4027,7 +4096,7 @@ function ouvrirFormulaireCoordonneesEntreprise(onTermine) {
   champNom.addEventListener('input', actualiser);
   panneau.querySelector('#btnRetourCoordEntreprise').addEventListener('click', function () {
     fermerPanneauGuide();
-    ouvrirDemandeCoordonneesEntreprise(onTermine);
+    if (onRetour) { onRetour(); } else { ouvrirDemandeCoordonneesEntreprise(onTermine); }
   });
   btnValider.addEventListener('click', function () {
     if (btnValider.disabled) { return; }
@@ -4046,14 +4115,21 @@ function ouvrirFormulaireCoordonneesEntreprise(onTermine) {
 // principe que ouvrirDemandeCoordonneesEntreprise() ci-dessus, boutons a
 // semantique propre, volontairement distincte de confirmerAction().
 function ouvrirPanneauAvertissementMetierCible() {
+  // TACHE (retour utilisateur : "si j'ai choisi un domaine, le message doit
+  // parler de domaine, pas de métier -- ça porte à confusion") : le mode
+  // (metier precis vs domaine) est deja connu a ce stade (choisi dans le
+  // bloc Candidature, voir modeRechercheEffectif()), meme si rien n'a
+  // encore ete selectionne a l'interieur de ce mode.
+  var modeDomaine = modeRechercheEffectif() === 'domaine';
   var overlay = ouvrirFenetreERIP({
-    titre: '&#9888;&#65039; Aucun métier ciblé',
+    titre: modeDomaine ? '&#9888;&#65039; Aucun domaine ciblé' : '&#9888;&#65039; Aucun métier ciblé',
     contenuHTML:
-      '<p>Vous n’avez pas encore renseigné de métier ni de secteur d’activité cible. ' +
+      '<p>Vous n’avez pas encore renseigné de ' + (modeDomaine ? 'domaine' : 'métier') + ' ni de secteur d’activité cible. ' +
       'Cette information permet de personnaliser votre CV, votre lettre de motivation et ' +
       'votre préparation à l’entretien.</p>' +
       '<div class="modal-actions">' +
-        '<button class="btn btn-outline-primary" data-role="choisir-metier">&#127919; Choisir un métier</button>' +
+        '<button class="btn btn-outline-primary" data-role="choisir-metier">' +
+        (modeDomaine ? '&#127760; Choisir un domaine' : '&#127919; Choisir un métier') + '</button>' +
         '<button class="btn btn-primary" data-role="continuer-quand-meme">Continuer quand même</button>' +
       '</div>'
   });
@@ -4161,12 +4237,19 @@ function banniereDomaineCible() {
       echapperAttribut(dossier.secteurCible) + '</strong>.</p>'
     : '';
   var btnEffacerTout = actif
-    ? '<div class="mt-2"><button type="button" class="btn btn-sm btn-outline-danger btn-effacer banniere-metier-cible-effacer" ' +
+    ? '<div class="mt-2"><button type="button" class="btn btn-sm btn-danger btn-effacer banniere-metier-cible-effacer" ' +
       'data-domaine-reset="1">&#10227; Changer de domaine</button></div>'
     : '';
 
   return '<div class="banniere-metier-cible' + (actif ? ' banniere-metier-cible-actif banniere-metier-cible-compacte' : '') +
-    (metierCibleEnEvidence ? ' a-completer' : '') + '" id="banniereMetierCibleZone">' +
+    // TACHE (retour utilisateur : "une fois que j'ai choisi domaine ou
+    // métier, le contour rouge n'a plus besoin d'être visible") : garde-fou
+    // explicite sur "actif" en plus de metierCibleEnEvidence -- le contour
+    // rouge n'a plus lieu d'etre des qu'un domaine est reellement choisi,
+    // quel que soit l'etat exact du drapeau (qui ne se reinitialise qu'au
+    // premier clic/saisie dans la zone, un detail d'implementation qui ne
+    // doit pas pouvoir laisser un contour rouge sur un choix deja fait).
+    ((metierCibleEnEvidence && !actif) ? ' a-completer' : '') + '" id="banniereMetierCibleZone">' +
     '<div class="banniere-metier-cible-titre d-flex justify-content-between align-items-center flex-wrap gap-2">' +
     '<span>&#127760; Domaine cible</span>' +
     '<button type="button" class="btn btn-sm btn-outline-primary btn-changer-mode-recherche" ' +
@@ -4174,6 +4257,12 @@ function banniereDomaineCible() {
     btnEffacerTout +
     zoneChoix +
     confirmation +
+    // TACHE (retour utilisateur : integrer "Votre candidature est prête"
+    // dans ce meme bandeau, sous la confirmation "Domaine cible : X") :
+    // reutilise banniereJePostuleContenu(), qui gere deja les deux cas
+    // (metier OU secteur) -- l'ancien bandeau independant banniereJePostule()
+    // est retire, devenu redondant (voir pageRevelation()).
+    (actif ? '<div class="banniere-je-postule banniere-je-postule-accent mt-3">' + banniereJePostuleContenu() + '</div>' : '') +
     '</div>';
 }
 
@@ -4311,7 +4400,7 @@ function banniereMetierCible() {
   return '<div class="banniere-metier-cible' +
     (actif ? ' banniere-metier-cible-actif' : '') +
     (actif ? ' banniere-metier-cible-compacte' : '') +
-    (metierCibleEnEvidence ? ' a-completer' : '') + '" id="banniereMetierCibleZone">' +
+    ((metierCibleEnEvidence && !actif) ? ' a-completer' : '') + '" id="banniereMetierCibleZone">' +
     '<div class="banniere-metier-cible-titre d-flex justify-content-between align-items-center flex-wrap gap-2">' +
     '<span>&#127919; Métier cible</span>' +
     boutonChangerMode + '</div>' +
@@ -4322,6 +4411,9 @@ function banniereMetierCible() {
       ? '<p class="mb-0 mt-2 small text-muted">Aucun métier sélectionné. Recherchez un métier ci-dessus pour personnaliser ' +
         'votre CV, votre lettre de motivation et votre préparation à l’entretien.</p>'
       : '') +
+    // TACHE (retour utilisateur) : "Votre candidature est prête" integre ici
+    // -- voir meme commentaire dans banniereDomaineCible().
+    (actif ? '<div class="banniere-je-postule banniere-je-postule-accent mt-3">' + banniereJePostuleContenu() + '</div>' : '') +
     '</div>';
 }
 // Pastille d'un metier hors repertoire : croix de retrait + nom en texte
@@ -4403,7 +4495,7 @@ function wireRechercheMetierCible(rerender) {
   var dernierResultats = [];
   function rafraichirResultats() {
     var texte = input.value;
-    var resultats = rechercherMetiersPourAjout(texte);
+    var resultats = rechercherMetiersPourAjout(texte, false);
     dernierResultats = resultats;
     var texteAssezLong = normaliserTexte(texte).trim().length >= 2;
     zoneResultats.innerHTML = resultats.length
@@ -4449,7 +4541,15 @@ function wireRechercheMetierCible(rerender) {
       rerender();
       return;
     }
-    if (dernierResultats.length > 0) { return; }
+    // TACHE (retour utilisateur : "j'ai perdu une fonction hyper
+    // importante -- si mon métier n'est pas dans la liste, je dois quand
+    // même pouvoir le valider avec Entrée") : le blocage precedent
+    // (aucune saisie libre possible tant que des suggestions, meme sans
+    // rapport avec le texte tape, restaient affichees) empechait
+    // exactement ce cas. L'objectif n'est pas de faire correspondre
+    // exactement un metier du referentiel, mais de transmettre un maximum
+    // d'information a l'IA -- Entree valide desormais toujours le texte
+    // tel quel des qu'il n'y a pas de correspondance exacte ci-dessus.
     if (ajouterMetierHorsRepertoire(this.value, rerender)) { rerender(); }
   });
 }
@@ -4680,14 +4780,32 @@ var CONFIG_BLOC_METIERS = {
 // choix pragmatique assumee (la plupart des competences professionnelles
 // extraites d'un CV reel sont des savoir-faire), pas une categorisation
 // fiable a 100%. A ajuster si besoin d'une repartition plus precise.
+// TACHE (retour utilisateur : "quel est le lien entre le BTP et ces
+// compétences ?") : le cœur du bug -- ces deux fonctions ne lisaient
+// jamais dossier.competences.savoirFaire/savoirEtre (le champ alimenté
+// par le module Découverte), seulement deduireCompetences() (calculée à
+// partir des catalogues du parcours "Mon Projet", activites/actions/
+// environnement/valeurs -- un modèle de données totalement différent).
+// Fusion additive ici : le parcours "Mon Projet" continue de fonctionner
+// à l'identique, les compétences du module Découverte s'ajoutent en plus,
+// jamais à la place.
+function fusionnerSansDoublon(listeA, listeB) {
+  var vus = {}; var resultat = [];
+  listeA.concat(listeB).forEach(function (c) { if (!vus[c]) { vus[c] = true; resultat.push(c); } });
+  return resultat;
+}
 function savoirEtreActuels() {
-  return deduireCompetences().filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; });
+  var deduits = deduireCompetences().filter(function (c) { return categorieReelleCompetence(c) === 'Savoir-etre'; });
+  var decouverte = (dossier.competences && dossier.competences.savoirEtre) || [];
+  return fusionnerSansDoublon(deduits, decouverte);
 }
 function savoirFaireActuels() {
-  return deduireCompetences().filter(function (c) {
+  var deduits = deduireCompetences().filter(function (c) {
     var cat = categorieReelleCompetence(c);
     return cat === 'Savoir-faire' || cat === undefined;
   });
+  var decouverte = (dossier.competences && dossier.competences.savoirFaire) || [];
+  return fusionnerSansDoublon(deduits, decouverte);
 }
 // TACHE (correction, fonction retrouvee) : clic sur une competence (Analyse
 // de votre profil) -> metiers associes (trouverMetiersAssocies, deja
@@ -5151,7 +5269,7 @@ function pageRevelation(conserverTirage) {
   // silencieusement un domaine deja choisi -- en mode "metier", rien ne change.
   var modeDomaineEffectif = modeRechercheEffectif() === 'domaine';
   var html = afficherProgression('revelation') +
-    '<div class="text-center"><h1>&#128302; Révélons votre potentiel</h1>' +
+    '<div class="text-center"><h1>&#129517; Faisons le point</h1>' +
     '<p class="sousTitre">Au-delà de votre expérience, voici ce qui fait votre valeur.</p></div>' +
     // TACHE (retour utilisateur) : accordeon (reutilise blocAccordeon(),
     // meme principe que afficherCompetencesDetectees()/messageVAE()) --
@@ -5161,10 +5279,9 @@ function pageRevelation(conserverTirage) {
       ? blocAccordeon('potentiel-identifie',
           '&#128142; Ce qui fait votre valeur <span class="badge bg-primary ms-1">' + messageAime.nombre + '</span>',
           'Au-delà de votre expérience, l\'assistant a identifié ceci chez vous.',
-          'Vous aimez : <strong>' + messageAime.texte + '</strong>')
+          'Vous aimez : <strong>' + messageAime.texte + '</strong>', true)
       : '') +
     banniereMetierCible() +
-    banniereJePostule() +
     messageVAE() +
     (modeDomaineEffectif ? '' : blocERIP(CONFIG_BLOC_METIERS)) +
     blocERIP(CONFIG_BLOC_PROFIL) +
@@ -5221,7 +5338,7 @@ function contenuLangues() {
     '<div class="col-md-2"><button class="btn btn-primary btn-sm" id="ajouterLangueBtn">+ Ajouter</button></div>' +
     '</div>' +
     '<div class="mt-2">' +
-    '<span class="pastille' + (dossier.languesFrancaisUniquement ? ' actif' : '') + '" id="btnLanguesFrancaisUniquement">Aucune langue étrangère à mentionner</span>' +
+    '<span class="pastille pastille-jaune-clair' + (dossier.languesFrancaisUniquement ? ' actif' : '') + '" id="btnLanguesFrancaisUniquement">Aucune langue étrangère à mentionner</span>' +
     '</div>';
 }
 
@@ -5379,7 +5496,19 @@ function blocFormations() {
 // recherche exacte par nom (rechercherBaseConnaissances, deja utilisee par
 // la barre de recherche ERIP) et la recherche par le sens (rechercherMetiersDepuisTexte,
 // concepts + score) -- exactement les memes fonctions, aucune duplication.
-function rechercherMetiersPourAjout(texte) {
+// TACHE (retour utilisateur : "je tape 'chargée des ressources humaine',
+// aucun métier de ce type dans ma base, mais j'ai plein de propositions
+// fausses (Conseiller de vente, Agent d'accueil...) -- déroutant") : cause
+// identifiee -- rechercherMetiersDepuisTexte() (moteur de CONCEPTS/profil,
+// pas de texte litteral) extrait des notions vagues du texte tape (ex.
+// "humaine" -> relation/contact humain) et fait remonter des metiers qui
+// scorent bien sur CES notions, sans aucun rapport textuel avec la
+// recherche. Pertinent pour "Ajouter un métier" (recherche descriptive
+// libre assumee : "travailler dehors, autonomie..."), mais trompeur pour
+// "Métier cible" (la personne tape un INTITULE precis, pas une description)
+// -- inclureConceptuel=false y desactive ce second moteur, ne laissant que
+// la correspondance textuelle exacte de rechercherBaseConnaissances().
+function rechercherMetiersPourAjout(texte, inclureConceptuel) {
   if (!texte || normaliserTexte(texte).trim().length < 2) { return []; }
   var noms = [];
   var resultats = [];
@@ -5388,9 +5517,11 @@ function rechercherMetiersPourAjout(texte) {
       g.resultats.forEach(function (m) { if (noms.indexOf(m.nom) === -1) { noms.push(m.nom); resultats.push(m); } });
     }
   });
-  rechercherMetiersDepuisTexte(texte, 8).forEach(function (m) {
-    if (noms.indexOf(m.nom) === -1) { noms.push(m.nom); resultats.push(m); }
-  });
+  if (inclureConceptuel !== false) {
+    rechercherMetiersDepuisTexte(texte, 8).forEach(function (m) {
+      if (noms.indexOf(m.nom) === -1) { noms.push(m.nom); resultats.push(m); }
+    });
+  }
   return resultats.slice(0, 8);
 }
 
@@ -5510,10 +5641,42 @@ var etatAccordeon = {};
 // aucune des ~25 lectures/ecritures existantes ailleurs dans ce fichier.
 var etatAccordeonParType = {};
 function accordeonPourType(type) {
-  if (!etatAccordeonParType[type]) { etatAccordeonParType[type] = { 'adaptation-metier': true }; }
+  if (!etatAccordeonParType[type]) {
+    etatAccordeonParType[type] = { 'adaptation-metier': true };
+  } else {
+    // TACHE (retour utilisateur : "je me retrouve directement à la 3e
+    // pyramide alors que les 2 premières n'ont pas été validées -- bug") :
+    // garde-fou -- si l'etape actuellement marquee ouverte pour ce type
+    // n'est PAS "Adaptation au metier" (la 1ere), mais que celle-ci n'a
+    // jamais ete reellement validee via "Continuer" (voir
+    // accordeonValidePourType()), l'etat est incoherent -- on repart
+    // proprement de la 1ere etape plutot que de laisser la personne
+    // atterrir plus loin sans explication.
+    var etat = etatAccordeonParType[type];
+    var etapeOuverteId = Object.keys(etat).filter(function (id) { return etat[id] === true; })[0];
+    var valide = accordeonValidePourType(type);
+    if (etapeOuverteId && etapeOuverteId !== 'adaptation-metier' && !valide['adaptation-metier']) {
+      etatAccordeonParType[type] = { 'adaptation-metier': true };
+    }
+  }
   return etatAccordeonParType[type];
 }
-// TACHE (retour utilisateur : bouton "Valider et revenir a l'apercu du CV"
+// TACHE (retour utilisateur : "je ferme juste la pyramide sans avoir
+// continué, et elle affiche 'déjà validé' -- c'est faux, je n'ai rien
+// validé") : etatAccordeon[id] === false confondait deux situations bien
+// distinctes -- une etape repliee APRES un vrai clic sur "Continuer"
+// (progression reelle), et une etape simplement repliee en cliquant sur son
+// titre (aucune progression, on peut meme etre bloque dessus). Nouveau
+// suivi PARALLELE, jamais mis a true que par avancerEtape() (donc par un
+// vrai "Continuer") -- meme principe de "tiroir par type de document" que
+// etatAccordeonParType, via accordeonValidePourType().
+var etatAccordeonValide = {};
+var etatAccordeonValideParType = {};
+function accordeonValidePourType(type) {
+  if (!etatAccordeonValideParType[type]) { etatAccordeonValideParType[type] = {}; }
+  return etatAccordeonValideParType[type];
+}
+// TACHE (retour utilisateur : "Valider et revenir a l'apercu du CV"
 // visible a tort) : ce bouton n'a de sens QUE si la personne est arrivee
 // ici via "Ajouter/Changer ma photo" depuis la page Action -- sinon, elle
 // n'a pas forcement prepare de CV et se retrouverait perdue en cliquant
@@ -5529,6 +5692,10 @@ var etatVenantDePhotoAction = false;
 // visible et rouvrable (etatAccordeon ne fait que basculer un booleen).
 function avancerEtape(idActuel, idSuivant) {
   etatAccordeon[idActuel] = false;
+  // TACHE (retour utilisateur) : SEUL avancerEtape() (donc un vrai clic sur
+  // "Continuer") marque une etape comme reellement validee -- jamais un
+  // simple clic sur le titre pour replier (voir wireAccordeon()).
+  etatAccordeonValide[idActuel] = true;
   etatAccordeon[idSuivant] = true;
 }
 
@@ -5634,7 +5801,7 @@ function activerChampsStandardises(racine) {
 // id : identifiant unique du bloc ; titre : affiche en gras, toujours visible ;
 // texteIntro : court texte d'invitation, toujours visible sous le titre ;
 // contenuHTML : contenu affiche uniquement lorsque le bloc est ouvert.
-function blocAccordeon(id, titre, texteIntro, contenuHTML) {
+function blocAccordeon(id, titre, texteIntro, contenuHTML, purementInformatif, actionsHeader) {
   var ouvert = !!etatAccordeon[id];
   // TACHE (retour utilisateur : "un grand V vert bien visible + la
   // pyramide refermée un peu transparente/grise, pour ne pas inciter à y
@@ -5643,16 +5810,35 @@ function blocAccordeon(id, titre, texteIntro, contenuHTML) {
   // forcement deja ete visitee -- soit manuellement, soit automatiquement
   // en ouvrant l'etape suivante (voir wireAccordeon). "ressources" est
   // volontairement exclue : ce n'est pas une etape a "terminer".
-  var dejaVisitee = (id !== 'ressources' && etatAccordeon[id] === false);
-  // TACHE (retour utilisateur : "petit v peu visible" -- remplace par un
-  // message clair indiquant l'etat ET la possibilite de revenir modifier).
-  // Regroupe avec le titre (plutot qu'un 3e enfant flex direct) pour ne pas
-  // perturber le justify-content:space-between existant entre titre et
-  // fleche (voir .accordeon-entete dans style.css).
-  var badgeValide = dejaVisitee
+  // TACHE (retour utilisateur : "pas normal d'avoir ce message ici, rien
+  // a modifier, c'est juste a titre informatif") : certains accordeons
+  // (Compétences déjà identifiées, Ce qui fait votre valeur, VAE) ne sont
+  // que des syntheses generees automatiquement, sans aucune saisie
+  // possible a l'interieur -- "Déjà validé · cliquez pour modifier" y est
+  // trompeur (rien a modifier). purementInformatif=true les exclut du
+  // badge ET du fond vert, qui gardent leur sens sur les vraies etapes
+  // editables (Adaptation au métier, Informations transmises à l'IA...).
+  var dejaFermee = (!purementInformatif && id !== 'ressources' && etatAccordeon[id] === false);
+  // TACHE (retour utilisateur : "je ferme juste la pyramide sans avoir
+  // continué, et elle affiche 'déjà validé' -- c'est faux") : deux cas
+  // desormais distingues -- "valide" (fermee ET reellement validee via un
+  // clic sur Continuer, voir avancerEtape()) vs "enAttente" (fermee sans
+  // jamais avoir ete validee -- la personne s'est juste arretee ici, par
+  // exemple bloquee ou en pause). Chacun son badge et son fond.
+  var valide = dejaFermee && !!etatAccordeonValide[id];
+  var enAttente = dejaFermee && !valide;
+  var badgeValide = valide
     ? '<span class="accordeon-badge-valide">&#9989; Déjà validé &middot; cliquez pour modifier</span>'
-    : '';
-  return '<div class="accordeon' + (ouvert ? ' ouvert' : '') + (dejaVisitee ? ' accordeon-deja-visitee' : '') + '">' +
+    : (enAttente ? '<span class="accordeon-badge-attente">&#128205; Vous êtes ici &middot; continuez à compléter</span>' : '');
+  var classeEtat = valide ? ' accordeon-deja-visitee' : (enAttente ? ' accordeon-en-attente' : '');
+  return '<div class="accordeon' + (ouvert ? ' ouvert' : '') + classeEtat + '">' +
+    // TACHE (retour utilisateur : bouton "Reprendre les choix", en haut a
+    // droite) : rendu en DEHORS du bouton d'entete ci-dessous -- un <button>
+    // ne peut pas en contenir un autre en HTML valide (le navigateur le
+    // sortirait de force, cassant la mise en page). Positionne en absolu
+    // dans le coin superieur droit via .accordeon-actions-coin (style.css),
+    // .accordeon etant deja en position:relative.
+    (actionsHeader ? '<div class="accordeon-actions-coin">' + actionsHeader + '</div>' : '') +
     '<button type="button" class="accordeon-entete" data-accordeon="' + id + '">' +
     '<span class="accordeon-titre-groupe"><strong>' + titre + '</strong>' + badgeValide + '</span>' +
     '<span class="accordeon-fleche">' + (ouvert ? '&#9650;' : '&#9660;') + '</span>' +
@@ -5729,12 +5915,6 @@ var etatBlocDejaComplet = {};
 // colonnes lue ligne par ligne : gauche puis droite, rangee par rangee).
 var ORDRE_BLOCS_MON_PROJET = ['vous', 'parcours', 'experiences-perso', 'projet', 'complements', 'candidature'];
 var ORDRE_BLOCS_MON_PROJET_ALLEGE = ['vous', 'projet', 'candidature'];
-function blocSuivantDansOrdre(blocId, modeAllege) {
-  var ordre = modeAllege ? ORDRE_BLOCS_MON_PROJET_ALLEGE : ORDRE_BLOCS_MON_PROJET;
-  var idx = ordre.indexOf(blocId);
-  if (idx === -1 || idx === ordre.length - 1) { return null; }
-  return ordre[idx + 1];
-}
 // Detecte, pour chaque bandeau fourni, la transition incomplet -> complet
 // depuis le dernier rendu, et ouvre alors automatiquement le bandeau suivant
 // (toutes ses pyramides y compris, via la remise a zero de ses surcharges
@@ -5742,15 +5922,33 @@ function blocSuivantDansOrdre(blocId, modeAllege) {
 // ouvert si incomplet). Appelee en tout debut de pageProjet(), avant la
 // generation du HTML, pour que le bandeau suivant s'ouvre des ce meme rendu.
 function verifierTransitionsCompletionBlocs(configs, modeAllege) {
+  var ordre = modeAllege ? ORDRE_BLOCS_MON_PROJET_ALLEGE : ORDRE_BLOCS_MON_PROJET;
   configs.forEach(function (config) {
     var compteur = compteurBlocERIP(config);
     var estComplet = compteur.total > 0 && compteur.complet === compteur.total;
     var etaitComplet = !!etatBlocDejaComplet[config.id];
     if (estComplet && !etaitComplet) {
-      var suivant = blocSuivantDansOrdre(config.id, modeAllege);
-      if (suivant) {
-        etatBlocERIPOuvert = suivant;
-        etatAccordeonGroupe[suivant] = {};
+      // TACHE (retour utilisateur : "le seul bandeau non complété -
+      // Candidature - ne s'est pas ouvert") : le premier correctif
+      // s'arretait au tout premier bandeau suivant dans l'ordre, et
+      // n'ouvrait rien s'il etait deja complet lui aussi (ex. Compléments,
+      // juste apres Projet professionnel) -- meme si un AUTRE bandeau plus
+      // loin (Candidature) restait, lui, incomplet. Parcourt desormais
+      // TOUTE la suite de l'ordre jusqu'a trouver le premier reellement
+      // incomplet ; si tout le reste est deja complet, n'ouvre rien (voir
+      // retour utilisateur precedent : "on attend le clic sur Révéler mon
+      // potentiel").
+      var idxActuel = ordre.indexOf(config.id);
+      for (var i = idxActuel + 1; i < ordre.length; i++) {
+        var candidatConfig = configs.filter(function (c) { return c.id === ordre[i]; })[0];
+        if (!candidatConfig) { continue; }
+        var compteurCandidat = compteurBlocERIP(candidatConfig);
+        var candidatComplet = compteurCandidat.total > 0 && compteurCandidat.complet === compteurCandidat.total;
+        if (!candidatComplet) {
+          etatBlocERIPOuvert = candidatConfig.id;
+          etatAccordeonGroupe[candidatConfig.id] = {};
+          break;
+        }
       }
     }
     etatBlocDejaComplet[config.id] = estComplet;
@@ -5841,15 +6039,19 @@ function blocERIP(config) {
   // visible que le bloc soit ouvert ou replie. N'a pas de sens pour un
   // compteur personnalise (pas de notion de "total a atteindre").
   var blocComplet = !config.compteurTexte && compteur.total > 0 && compteur.complet === compteur.total;
-  // TACHE (retour utilisateur : "je veux les chiffres plus gros et
-  // visibles, 1/4 par exemple, le 1 en jaune tant que c'est pas complet,
-  // le 4 en bleu, et le tout en vert et gros quand c'est 4/4") : compteur
-  // desormais colore et agrandi -- HTML au lieu d'un simple texte plat.
+  // TACHE (retour utilisateur : "le 0 en rouge, le 1/2/3 en orange, le 4/4
+  // en vert et plus grand") : le CSS seul ne peut pas conditionner sur la
+  // VALEUR du nombre affiche -- classe distincte calculee ici selon que le
+  // compteur est a zero ou partiellement rempli. Le denominateur (total)
+  // garde sa couleur habituelle dans les deux cas, comme demande ("le 4
+  // reste la couleur actuelle") -- seul le compteur "4/4" integralement
+  // complet passe entierement en vert (voir bloc-erip-compteur-complet).
+  var classeCompteurCours = compteur.complet === 0 ? 'bloc-erip-compteur-zero' : 'bloc-erip-compteur-partiel';
   var texteCompteur = config.compteurTexte
     ? config.compteurTexte()
     : (blocComplet
         ? '<span class="bloc-erip-compteur-complet">' + compteur.complet + ' / ' + compteur.total + '</span>'
-        : '<span class="bloc-erip-compteur-cours">' + compteur.complet + '</span> / <span class="bloc-erip-compteur-cible">' + compteur.total + '</span>');
+        : '<span class="' + classeCompteurCours + '">' + compteur.complet + '</span> / <span class="bloc-erip-compteur-cible">' + compteur.total + '</span>');
   var indicateurComplet = blocComplet ? ' <span class="bloc-erip-complet" title="Ce bloc est complet">&#9989;</span>' : '';
 
   if (!blocOuvert) {
@@ -6460,11 +6662,47 @@ var CONFIG_BLOC_COMPLEMENTS = {
   ]
 };
 
+// TACHE (retour utilisateur : "je ne veux pas que les choix du CV passent
+// automatiquement dans la lettre, mais je veux un bouton pour les reprendre
+// volontairement") : document dont les preferences peuvent etre reprises
+// pour le document actif, et conditions d'affichage du bouton associe.
+var LABELS_DOCUMENT_PREFS = { cv: 'CV', lettre: 'lettre', entretien: 'entretien' };
+function documentPrecedentPourPrefs(docActif) {
+  if (docActif === 'lettre') { return 'cv'; }
+  if (docActif === 'entretien') { return 'lettre'; }
+  return null;
+}
+function preferencesNonVides(prefs) {
+  return !!prefs && Object.keys(prefs).some(function (k) { return !!prefs[k]; });
+}
+function boutonReprendrePreferencesVisible(docActif) {
+  // TACHE (retour utilisateur : "s'il vient ici via 'j'ai un cv', le bouton
+  // ne sera pas présent") : en mode "pret", la carte CV est desactivee et
+  // jamais parcourue (voir desactiveCV dans pageResultats()) -- aucune
+  // preference CV a reprendre pour la lettre dans ce cas.
+  if (docActif === 'lettre' && dossier.modeCreation === 'pret') { return false; }
+  var precedent = documentPrecedentPourPrefs(docActif);
+  if (!precedent) { return false; }
+  return preferencesNonVides(dossier.preferencesIAParType[precedent]);
+}
+// TACHE (retour utilisateur : "bouton la haut a droite, en jaune") : rendu
+// hors du bouton d'entete de l'accordeon (voir commentaire dans
+// blocAccordeon()/style.css .accordeon-actions-coin -- un <button> ne peut
+// pas en contenir un autre en HTML valide).
+function boutonReprendrePreferencesHTML(docActif) {
+  if (!boutonReprendrePreferencesVisible(docActif)) { return ''; }
+  var precedent = documentPrecedentPourPrefs(docActif);
+  return '<button type="button" class="btn btn-sm pastille-jaune-clair" id="btnReprendrePreferencesIA" ' +
+    'data-precedent="' + precedent + '" data-cible="' + docActif + '">' +
+    '&#8635; Reprendre les choix ' + (precedent === 'cv' ? 'du CV' : 'de la ' + LABELS_DOCUMENT_PREFS[precedent]) +
+    '</button>';
+}
+
 // TACHE (refonte page Action, tache 1 : architecture generale) : la page
 // Action devient un flux integre en une seule page, pilote par un
 // selecteur de document (CV / Lettre / Entretien) et organise en
 // accordeons. Cette tache pose UNIQUEMENT le squelette + le cablage de
-// dossier.preferencesIA ; aucun traitement IA, aucun import, aucun apercu
+// dossier.preferencesIAParType ; aucun traitement IA, aucun import, aucun apercu
 // editable (taches dediees ulterieures -- voir accordeons "squelette"
 // ci-dessous, clairement signales comme temporaires).
 function pageResultats() {
@@ -6484,13 +6722,23 @@ function pageResultats() {
   // etatAccordeon pointe desormais vers le tiroir du document ACTIF avant
   // toute autre chose dans cette fonction -- voir accordeonPourType().
   etatAccordeon = accordeonPourType(docActif);
+  etatAccordeonValide = accordeonValidePourType(docActif);
 
   // TACHE (retour utilisateur : validation trop stricte) : Entreprise et
   // Lieu sont desormais facultatifs -- sous-titre construit uniquement a
   // partir de ce qui est reellement renseigne, jamais de parenthese vide.
   var expHtml = dossier.experiences.map(function (e, i) {
     var sousTitre = [e.entreprise, e.lieu ? '(' + e.lieu + ')' : ''].filter(Boolean).join(' ');
-    return '<div class="cv-item"><div><strong>' + e.poste + '</strong>' + (sousTitre ? ' &ndash; ' + sousTitre : '') + '<br><small>' + e.dateDebut + ' &rarr; ' + (e.dateFin || 'En cours') + '</small>' + (e.missions ? '<br><small class="text-muted">' + e.missions + '</small>' : '') + '</div><span class="remove-item" data-index="' + i + '" data-type="exp">&#10005;</span></div>';
+    // TACHE (retour utilisateur : "regarde les expériences pro" -- 4
+    // expériences affichant toutes "→ En cours" sans aucune date) : même
+    // bug que celui déjà corrigé dans texteProfil() (app.js), mais dans
+    // cette autre fonction qui construit l'aperçu "Vérifier les
+    // informations" -- oublié lors de la première correction. Le module
+    // Découverte autorise volontairement l'absence de date ; sans
+    // dateDebut, la ligne de période ne doit simplement pas apparaître,
+    // plutôt que d'afficher "→ En cours" qui n'a aucun sens ici.
+    var ligneDate = e.dateDebut ? ('<br><small>' + e.dateDebut + ' &rarr; ' + (e.dateFin || 'En cours') + '</small>') : '';
+    return '<div class="cv-item"><div><strong>' + e.poste + '</strong>' + (sousTitre ? ' &ndash; ' + sousTitre : '') + ligneDate + (e.missions ? '<br><small class="text-muted">' + e.missions + '</small>' : '') + '</div><span class="remove-item" data-index="' + i + '" data-type="exp">&#10005;</span></div>';
   }).join('');
 
   var cvComplet = (dossier.modeCreation !== 'pret');
@@ -6639,19 +6887,21 @@ function pageResultats() {
     '<p class="small text-muted mt-3 mb-1">Aperçu exact du texte transmis à l’IA :</p>' +
     '<pre style="white-space:pre-wrap;background:#f8f9fa;padding:0.75rem;border-radius:6px;font-size:0.82rem;max-height:220px;overflow:auto;">' +
     echapperAttribut(texteProfilEffectif(docActif)) + '</pre>' +
-    '<button type="button" class="btn btn-primary mt-2" id="btnContinuerInfosIA">Continuer &#8594;</button>');
+    '<div class="d-flex justify-content-end mt-2"><button type="button" class="btn btn-primary" id="btnContinuerInfosIA">Continuer &#8594;</button></div>');
 
-  // Accordeon "Adaptation au metier" : seule logique fonctionnelle demandee
-  // pour cette tache -- ecrit directement dans dossier.preferencesIA,
-  // reutilise par tous les futurs modules (CV, lettre, entretien...).
+  // Accordeon "Adaptation au metier" : lit/ecrit desormais dans les
+  // preferences PROPRES au document actif (voir dossier.preferencesIAParType)
+  // -- plus un objet unique partage entre CV/lettre/entretien (retour
+  // utilisateur : reprise volontaire uniquement, via le bouton dedie ci-dessous).
   function groupePreference(champ, titre, options) {
-    var valeurActuelle = dossier.preferencesIA[champ];
+    var valeurActuelle = dossier.preferencesIAParType[docActif][champ];
     return '<p class="question mb-1"><strong>' + titre + '</strong></p><div class="mb-3">' +
       pastillesSelection(champ, options, valeurActuelle) + '</div>';
   }
   var accordeonAdaptation = blocAccordeon('adaptation-metier', titreEtape('&#127891; Adaptation au métier'),
     'Ces préférences ne sont jamais affichées dans vos documents : elles orientent uniquement les réponses de ' +
-    'l’assistant IA. Elles sont conservées et réutilisées automatiquement pour le CV, la lettre et l’entretien.',
+    'l’assistant IA. Propres à ce document -- utilisez le bouton "Reprendre les choix" ci-dessus si vous voulez ' +
+    'les récupérer d’un document déjà préparé.',
     groupePreference('niveauPoste', 'Niveau du poste recherché', [
       { valeur: 'employe', label: 'Employé / Opérateur' },
       { valeur: 'ouvrier_qualifie', label: 'Ouvrier qualifié' },
@@ -6680,7 +6930,8 @@ function pageResultats() {
       { valeur: 'equilibree', label: 'Équilibrée' },
       { valeur: 'detaillee', label: 'Détaillée' }
     ]) +
-    '<button type="button" class="btn btn-primary" id="btnContinuerAdaptation">Continuer &#8594;</button>');
+    '<div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-primary" id="btnContinuerAdaptation">Continuer &#8594;</button></div>',
+    false, boutonReprendrePreferencesHTML(docActif));
 
   // TACHE (page Action, tache 2) : reutilise ASSISTANTS_IA + ouvrirFenetreAssistantIA(),
   // deja prets pour cet usage (voir leurs commentaires). Aucune logique dupliquee.
@@ -6763,7 +7014,13 @@ function pageResultats() {
     entretien: [{ id: 'apercu', label: 'Aperçu' }, { id: 'docx', label: 'Télécharger le Word' }, { id: 'texte-blocs', label: 'Texte à copier' }]
   };
   var listeFormatsExport = (formatsParTypeExport[docActif] || []).map(function (f) {
-    return '<button type="button" class="pastille-selection" data-format-export="' + f.id + '" style="' + stylePastilleInline(false) + '">' + f.label + '</button>';
+    // TACHE (retour utilisateur : "je veux que le bouton Télécharger le
+    // Word s'allume doucement en bleu, pour inciter les gens à cliquer") :
+    // classe dediee (voir .pastille-export-docx-incitation, style.css),
+    // uniquement sur ce bouton precis -- les autres (Aperçu, Texte à
+    // copier, Autre) restent inchanges.
+    var classeIncitation = f.id === 'docx' ? ' pastille-export-docx-incitation' : '';
+    return '<button type="button" class="pastille-selection' + classeIncitation + '" data-format-export="' + f.id + '" style="' + stylePastilleInline(false) + '">' + f.label + '</button>';
   }).join('');
   // TACHE (retour utilisateur : navigation croisee, deplacee dans Exporter) :
   // suggere le document suivant -- ne reinitialise rien (etatAccordeon
@@ -6772,14 +7029,17 @@ function pageResultats() {
   // repartir de zero dans son parcours.
   var suggestionSuivante = '';
   if (docActif === 'cv') {
-    suggestionSuivante = '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 border rounded p-3 mt-3" style="background:#F8FAFC;">' +
-      '<p class="small mb-0 me-2">Avec ces informations, on peut aussi rédiger votre lettre de motivation.</p>' +
-      '<button type="button" id="btnSuggererLettre" class="btn btn-outline-primary text-nowrap">&#9993; Lettre de motivation</button>' +
+    // TACHE (retour utilisateur : "je veux que le texte soit sur ou sous le
+    // bouton") : passe d'une ligne cote a cote (texte + bouton) a un
+    // empilement centre -- plus lisible, notamment sur petit ecran.
+    suggestionSuivante = '<div class="text-center border rounded p-3 mt-3" style="background:#F8FAFC;">' +
+      '<p class="small mb-2">Avec ces informations, on peut aussi rédiger votre lettre de motivation.</p>' +
+      '<button type="button" id="btnSuggererLettre" class="btn btn-outline-primary">&#9993; Lettre de motivation</button>' +
       '</div>';
   } else if (docActif === 'lettre') {
-    suggestionSuivante = '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 border rounded p-3 mt-3" style="background:#F8FAFC;">' +
-      '<p class="small mb-0 me-2">On peut préparer ensemble l’entretien d’embauche, à partir de cette lettre et du CV créé précédemment.</p>' +
-      '<button type="button" id="btnSuggererEntretien" class="btn btn-outline-primary text-nowrap">&#127908; Préparation à l’entretien</button>' +
+    suggestionSuivante = '<div class="text-center border rounded p-3 mt-3" style="background:#F8FAFC;">' +
+      '<p class="small mb-2">On peut préparer ensemble l’entretien d’embauche, à partir de cette lettre et du CV créé précédemment.</p>' +
+      '<button type="button" id="btnSuggererEntretien" class="btn btn-outline-primary">&#127908; Préparation à l’entretien</button>' +
       '</div>';
   }
   var accordeonExporter = blocAccordeon('exporter-document', titreEtape('&#128228; Exporter'), '',
@@ -6997,7 +7257,7 @@ function pageResultats() {
         '</div>' +
         '<p class="small text-muted mt-3 mb-2">&#128196; Ceci est le rendu exact du fichier Word qui sera téléchargé — ' +
         'vous pourrez le modifier librement, avec toutes les options de mise en forme de Word, une fois ouvert.</p>' +
-        '<button type="button" class="btn btn-primary mt-3" id="btnContinuerApercu">Continuer &#8594;</button>';
+        '<div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-primary" id="btnContinuerApercu">Continuer &#8594;</button></div>';
     })());
 
   // TACHE (retour utilisateur : bandeaux hors parcours) : retires -- prevus
@@ -7047,6 +7307,13 @@ function pageResultats() {
       if (id !== derniereEtapeOuverte && etatAccordeon[id] === true) { etatAccordeon[id] = false; }
     });
   }
+  // TACHE (retour utilisateur : "je clique sur Retour et je me retrouve
+  // sur 'Faire le point'") : cible normalement toujours 'revelation',
+  // mais n'a aucun sens si on arrive depuis le module Découverte (qui
+  // contourne cette page entièrement) -- signal consommé une seule fois,
+  // pour ne pas affecter les visites normales suivantes de cette page.
+  var cibleRetourResultats = 'revelation';
+  if (window._decouverteVersResultats) { cibleRetourResultats = 'cv'; window._decouverteVersResultats = false; }
   var html = afficherProgression('resultats') +
     // TACHE (retour utilisateur : sous-titre pas pertinent hors "creer un cv") :
     // "Choisissez votre document, personnalisez-le..." suppose un parcours
@@ -7075,7 +7342,7 @@ function pageResultats() {
     // etape Exporter (cvTermine/lettreTerminee, qui deverrouillent juste la
     // carte suivante). Change de document actif => disparait, jusqu'a ce
     // que CE nouveau document soit a son tour enregistre.
-    barreNavigation('revelation', null, null,
+    barreNavigation(cibleRetourResultats, null, null,
       { terminerParcours: !!(dossier.documentsEnregistres && dossier.documentsEnregistres[docActif]) });
   app.innerHTML = html;
 
@@ -7107,6 +7374,19 @@ function genererBlobDocumentActif(type) {
   var GENERATEURS_NATIFS_PAR_TYPE = {
     cv: {
       generer: function (modele, donnees, couleur) {
+        // TACHE (retour utilisateur : "je ne peux pas imprimer notre
+        // dernier modèle de cv-composeur" -- bug réel trouvé) : pour le
+        // Composeur, _dnConstruireDocumentAvecOptions() (formatA5CV.js)
+        // renvoie directement genererDocxComposeur(...), une PROMESSE qui
+        // résout déjà un Blob complet (elle empaquette elle-même en
+        // interne) -- jamais un docx.Document synchrone comme pour les
+        // 16 modèles classiques. Le code d'après (docx.Packer.toBlob)
+        // suppose toujours un Document à empaqueter : pour 'composeur',
+        // ça revenait à ré-empaqueter un Blob déjà empaqueté, échec
+        // silencieux à chaque fois, quel que soit le thème choisi.
+        if (modele === 'composeur' && typeof genererDocxComposeur === 'function') {
+          return genererDocxComposeur(dossier, {}, couleur, etat.formatPage);
+        }
         if (typeof _dnConstruireDocumentAvecOptions === 'function') {
           return chargerLibrairieDocxNatif().then(function (docx) {
             var document = _dnConstruireDocumentAvecOptions(docx, donnees, modele, couleur, etat.formatPage);
@@ -7162,7 +7442,19 @@ function genererBlobDocumentActif(type) {
     }
   };
   var configNatif = GENERATEURS_NATIFS_PAR_TYPE[type];
-  var estAvecGenerateurNatif = configNatif && configNatif.generer && configNatif.liste.indexOf(modeleActif) !== -1;
+  // TACHE (retour utilisateur : "je ne peux pas imprimer notre dernier
+  // modèle de cv-composeur" -- vraie cause, enfin trouvée) : la
+  // correction pour 'composeur' existait déjà À L'INTÉRIEUR de
+  // configNatif.generer() (voir plus haut), mais n'était jamais atteinte
+  // -- cette vérification exigeait que le modèle figure dans
+  // MODELES_AVEC_DOCX_NATIF_CV (les 16 modèles classiques uniquement),
+  // et 'composeur' n'y a jamais été ajouté puisqu'il a son propre
+  // générateur, séparé et déjà pris en compte plus haut. Sans ce
+  // correctif, le rejet ici déclenchait le repli vers l'ancien chemin
+  // HTML (exporterDocumentEnDocx), jamais alimenté pour le Composeur --
+  // d'où le message trompeur "aperçu encore en cours de chargement".
+  var estAvecGenerateurNatif = configNatif && configNatif.generer &&
+    (configNatif.liste.indexOf(modeleActif) !== -1 || modeleActif === 'composeur');
   if (!estAvecGenerateurNatif) { return Promise.reject(new Error('Pas de generateur Word natif disponible pour ce modele.')); }
   return configNatif.donnees().then(function (donnees) {
     return configNatif.generer(modeleActif, donnees, etat.couleur);
@@ -7172,20 +7464,25 @@ function genererBlobDocumentActif(type) {
 }
 
 function brancherEvenementsResultats() {
+  // TACHE (retour utilisateur : preferences IA distinctes par document) :
+  // fonction independante de pageResultats() -- recalcule son propre
+  // docActif plutot que d'en dependre (meme fonction que pageResultats()).
+  var docActif = docActifActuel();
   // Accordeons (generique, fonctionne pour tous les data-accordeon de la page)
   wireAccordeon(pageResultats);
 
   // TACHE (page Action, "pastille generique") : remplace le cablage des
-  // radios natifs -- meme ecriture dans dossier.preferencesIA, mais mise a
-  // jour visuelle LOCALE (pas de re-render complet, evite tout saut de
+  // radios natifs -- meme ecriture dans dossier.preferencesIAParType[docActif],
+  // mais mise a jour visuelle LOCALE (pas de re-render complet, evite tout saut de
   // defilement) + desactivation possible d'un second clic sur la pastille
   // deja active (retour a "aucune preference").
   document.querySelectorAll('[data-pastille-champ]').forEach(function (el) {
     el.addEventListener('click', function () {
       var champ = this.dataset.pastilleChamp;
       var valeurClic = this.dataset.pastilleValeur;
-      var nouvelleValeur = (dossier.preferencesIA[champ] === valeurClic) ? null : valeurClic;
-      dossier.preferencesIA[champ] = nouvelleValeur;
+      var prefsActuelles = dossier.preferencesIAParType[docActif];
+      var nouvelleValeur = (prefsActuelles[champ] === valeurClic) ? null : valeurClic;
+      prefsActuelles[champ] = nouvelleValeur;
       document.querySelectorAll('[data-pastille-champ="' + champ + '"]').forEach(function (p) {
         var actif = (p.dataset.pastilleValeur === nouvelleValeur);
         p.setAttribute('aria-pressed', actif ? 'true' : 'false');
@@ -7193,6 +7490,19 @@ function brancherEvenementsResultats() {
       });
     });
   });
+
+  // TACHE (retour utilisateur : bouton "Reprendre les choix") : copie
+  // volontaire des preferences IA du document precedent (CV -> lettre,
+  // lettre -> entretien) vers le document actif -- jamais automatique.
+  var btnReprendrePrefs = document.getElementById('btnReprendrePreferencesIA');
+  if (btnReprendrePrefs) {
+    btnReprendrePrefs.addEventListener('click', function () {
+      var precedent = this.dataset.precedent;
+      var cible = this.dataset.cible;
+      dossier.preferencesIAParType[cible] = Object.assign({}, dossier.preferencesIAParType[precedent]);
+      pageResultats();
+    });
+  }
 
   // TACHE (page Action, tache 2) : les cartes deviennent UNIQUEMENT le
   // selecteur de document actif -- plus aucune popup declenchee ici (toute
@@ -7407,6 +7717,15 @@ function brancherEvenementsResultats() {
         var brouillon = creerBrouillonChoixIACV(resultat.valeurs);
         ouvrirEcranChoixReponseIACV(brouillon, function (brouillonValide) {
           var valeursFinales = appliquerBrouillonChoixIACV(brouillonValide);
+          // TACHE (retour utilisateur : "j'ai ce titre dans tous les
+          // modèles" -- confirme que ce n'est pas un bug de rendu mais de
+          // donnée, partagée par tous les modèles) : cause exacte non
+          // identifiée avec certitude malgré une investigation poussée --
+          // verrouillage en attendant : une fois choisi ici, plus aucun
+          // autre mécanisme ne doit pouvoir écraser silencieusement ce
+          // choix (voir dossier.titreCVVerrouille, respecté par
+          // decouverteParcours.js).
+          if (valeursFinales.titreCV) { dossier.titreCV = valeursFinales.titreCV; dossier.titreCVVerrouille = true; }
           if (!dossier.ia) { dossier.ia = creerDossierIAVide(); }
           if (!dossier.ia.cv) { dossier.ia.cv = creerDossierIAVide().cv; }
           dossier.ia.cv.profil = valeursFinales.profil;
@@ -7486,6 +7805,7 @@ function brancherEvenementsResultats() {
       var brouillon = creerBrouillonChoixIACV(ia);
       ouvrirEcranChoixReponseIACV(brouillon, function (brouillonValide) {
         var valeursFinales = appliquerBrouillonChoixIACV(brouillonValide);
+        if (valeursFinales.titreCV) { dossier.titreCV = valeursFinales.titreCV; dossier.titreCVVerrouille = true; }
         dossier.ia.cv.profil = valeursFinales.profil;
         dossier.ia.cv.accrochesProposees = valeursFinales.accrochesProposees;
         dossier.ia.cv.pointsForts = valeursFinales.pointsForts;
@@ -7787,7 +8107,13 @@ function fermerFenetreAssistantIA() {
 var ETAPES_ASSISTANT_IA_TEXTE = [
   'Le texte nécessaire est <strong>automatiquement copié</strong> dans votre presse-papiers.',
   'Une fois sur le site de {ASSISTANT}, cliquez simplement dans la zone de conversation.',
-  'Faites <strong>Ctrl + V</strong>, puis appuyez sur <strong>Entrée</strong>.',
+  // TACHE (retour utilisateur : "les gens ont la flemme de lire, arrivés
+  // sur la fenêtre de l'assistant ils sont bloqués -- comment rendre ce
+  // geste une évidence ?") : "Ctrl + V" mis en evidence sous forme de
+  // pastille pulsante (voir .cle-pulse, style.css) -- un signal visuel qui
+  // attire l'oeil meme sans lire la phrase, plutot qu'un simple gras
+  // identique au reste du texte.
+  'Faites <span class="cle-pulse">Ctrl + V</span>, puis appuyez sur <strong>Entrée</strong>.',
   'Une fois sa réponse affichée, cliquez sur le bouton "Copier" de {ASSISTANT}.',
   'Revenez ensuite ici pour importer cette réponse.'
 ];
@@ -7975,6 +8301,14 @@ function texteProfil(type) {
       candidature += '- Métiers ciblés dans ce secteur : ' + metiersCiblesSecteur.join(', ') + '\n';
     }
   }
+  // TACHE (retour utilisateur : "je veux m'assurer que le titre ira aussi
+  // dans l'assistant IA, c'est une façon de corriger si c'est mal tapé") :
+  // dossier.titreCV n'était jusqu'ici jamais transmis à l'IA (seulement
+  // utilisé au rendu final du CV, via objectifProfessionnel) -- transmis
+  // désormais, avec une consigne explicite de vérification/correction.
+  if (dossier.titreCV) {
+    candidature += '- Intitulé de CV prévu (à afficher tel quel sous le nom, sauf faute de frappe ou de français évidente à corriger) : ' + dossier.titreCV + '\n';
+  }
   // TACHE (correction, CV general/specifique sans effet) : le choix devient
   // desormais une instruction explicite dans le profil transmis a l'IA --
   // uniquement pour la generation du CV lui-meme (pas pour la lettre ou
@@ -8011,10 +8345,12 @@ function texteProfil(type) {
     if (dossier.entretienDirect.poste) { candidature += '- Poste visé : ' + dossier.entretienDirect.poste + '\n'; }
     if (dossier.entretienDirect.structure) { candidature += '- Entreprise / lien : ' + dossier.entretienDirect.structure + '\n'; }
   }
-  // TACHE (recherche assistant) : entreprise saisie depuis le parcours guide
-  if (dossier.rechercheEntreprise && dossier.rechercheEntreprise.structure) {
-    candidature += '- Entreprise / lien (recherche) : ' + dossier.rechercheEntreprise.structure + '\n';
-  }
+  // TACHE (retour utilisateur : "rassembler les informations, éviter de
+  // les retaper") : dossier.rechercheEntreprise (champ separe du parcours
+  // recherche d'accueil) est retire -- ce parcours ecrit desormais
+  // directement dans dossier.rechercheCandidature, deja lu plus bas (voir
+  // branche dossier.modeRecherche === 'metier' && dossier.typeRecherche
+  // === 'offre').
   if (dossier.objectif === 'offre' || dossier.objectif === 'spontanee' || dossier.objectif === 'reconversion') {
     var of = dossier[dossier.objectif];
     // TACHE (pont retour utilisateur : bloc Candidature <-> generation) :
@@ -8130,14 +8466,21 @@ function texteProfil(type) {
   // ---- SECTION : PROFIL DU CANDIDAT ----
   var profil = '';
   if (dossier.experiences.length) {
-    // TACHE (retour utilisateur : validation trop stricte) : Entreprise et
-    // Lieu sont desormais facultatifs -- la parenthese ne mentionne que ce
-    // qui est reellement renseigne (l'annee de debut reste, elle, toujours
-    // presente, seul champ de date obligatoire).
+    // TACHE (retour utilisateur : "le fichier ne contient pas le profil du
+    // candidat" + "aucune expérience proposée par l'assistant") : bug réel
+    // trouvé -- dateDebut était toujours concaténée telle quelle, même
+    // vide. Le module Découverte (qui autorise volontairement l'absence de
+    // date, doc1 §12) produisait donc "( à en cours)" pour chaque
+    // expérience sans date -- un texte cassé, suffisant pour qu'un
+    // assistant IA externe ne reconnaisse plus la section comme un profil
+    // exploitable. Corrigé : la période n'apparaît que si au moins une
+    // date est réellement connue ; sans aucune date ni entreprise/lieu,
+    // la parenthèse disparaît entièrement plutôt que d'afficher du vide.
     profil += '- Expériences professionnelles :\n' + dossier.experiences.map(function (e) {
       var lieuEntreprise = [e.entreprise, e.lieu].filter(Boolean).join(', ');
-      var periode = e.dateDebut + ' à ' + (e.dateFin || 'en cours');
-      return '   . ' + e.poste + ' (' + (lieuEntreprise ? lieuEntreprise + ', ' + periode : periode) + ')' + (e.missions ? ' — Missions : ' + e.missions : '');
+      var periode = e.dateDebut ? (e.dateDebut + ' à ' + (e.dateFin || 'en cours')) : '';
+      var parenthese = [lieuEntreprise, periode].filter(Boolean).join(', ');
+      return '   . ' + e.poste + (parenthese ? ' (' + parenthese + ')' : '') + (e.missions ? ' — Missions : ' + e.missions : '');
     }).join('\n') + '\n';
   }
   if (dossier.experiencesPerso.length) {
@@ -8203,7 +8546,10 @@ function texteProfil(type) {
   // candidat -- ce sont des instructions de forme, pas des donnees sur la
   // personne.
   var consignes = '';
-  var prefs = dossier.preferencesIA || {};
+  // TACHE (retour utilisateur : preferences IA distinctes par document) :
+  // preferencesIAParType[type], plus dossier.preferencesIA (objet unique
+  // partage retire -- voir declaration du dossier).
+  var prefs = dossier.preferencesIAParType[type] || {};
   if (prefs.niveauPoste) { consignes += '- Niveau du poste recherché : ' + (LABELS_PREFERENCES_IA.niveauPoste[prefs.niveauPoste] || prefs.niveauPoste) + '\n'; }
   if (prefs.niveauLangage) { consignes += '- Niveau de langage souhaité : ' + (LABELS_PREFERENCES_IA.niveauLangage[prefs.niveauLangage] || prefs.niveauLangage) + '\n'; }
   if (prefs.adaptationMetier) { consignes += '- Adaptation au vocabulaire du métier : ' + (LABELS_PREFERENCES_IA.adaptationMetier[prefs.adaptationMetier] || prefs.adaptationMetier) + '\n'; }
@@ -8324,9 +8670,14 @@ var FICHIERS_PROMPTS_EXTERNES = {
   // autonome (il redemande lui-meme tout ce dont il a besoin, aucun profil
   // a lui injecter contrairement aux autres) -- fichier distinct, jamais
   // mele a prompts/lettre.md (le prompt V2 actuel).
-  'lettre-v1': 'prompts/lettre-v1.md'
+  'lettre-v1': 'prompts/lettre-v1.md',
+  // TACHE (module Découverte et valorisation des compétences) : prompt
+  // dédié, philosophie opposée à extraction-cv.md (celui-ci interprète et
+  // propose, l'autre ne fait que lire fidèlement -- jamais le même
+  // fichier, jamais une variante de l'un pour l'autre usage).
+  decouverte: 'prompts/decouverte-competences.md'
 };
-var promptsExternesCharges = { cv: null, lettre: null, entretien: null, 'entretien-accueil': null, accroche: null, 'extraction-cv': null, 'lettre-v1': null };
+var promptsExternesCharges = { cv: null, lettre: null, entretien: null, 'entretien-accueil': null, accroche: null, 'extraction-cv': null, 'lettre-v1': null, decouverte: null };
 
 function chargerPromptsExternes() {
   if (typeof fetch !== 'function') { return; } // navigateur trop ancien : reste sur le texte par defaut
@@ -8350,6 +8701,14 @@ function chargerPromptsExternes() {
 // Textes par defaut (utilises tant que le fichier externe correspondant n'a
 // pas ete charge avec succes). Identiques aux 3 fichiers prompts/*.md.
 function promptParDefaut(type) {
+  if (type === 'decouverte') {
+    // TACHE (module Découverte et valorisation des compétences) : prompt
+    // long et structuré (voir prompts/decouverte-competences.md) -- même
+    // principe que lettre-v1 ci-dessous, pas raisonnable de le dupliquer
+    // ici comme texte de secours.
+    return 'Le prompt n\'a pas pu être chargé pour le moment. Vérifiez votre connexion et réessayez, ou ' +
+      'signalez ce problème si cela persiste.';
+  }
   if (type === 'lettre-v1') {
     // TACHE (retour utilisateur : "co-construire votre lettre de
     // motivation") : prompt V1 tres long (guide conversationnel complet) --
@@ -8573,6 +8932,24 @@ function creerBrouillonChoixIACV(valeursIA) {
   // finit dans le CV. La premiere proposition de l'IA est selectionnee par
   // defaut (deja la mieux classee), la personne peut en choisir une autre
   // ou modifier librement le texte de n'importe laquelle avant de choisir.
+  // TACHE (retour utilisateur : "je veux avoir plusieurs intitulés
+  // possibles, pas seulement 1 seul, c'est le but de cet onglet") --
+  // repris exactement sur le même mécanisme que les accroches ci-dessous
+  // (sélection unique, type radio) : jusqu'ici titreCV n'était qu'un
+  // champ de relecture manuelle, jamais une vraie proposition de l'IA --
+  // cv.md ne demandait même jamais de titre (vérifié). Si l'IA n'a rien
+  // proposé (ancienne réponse, ou prompt pas encore régénéré), repli sur
+  // dossier.titreCV seul, comme avant.
+  var titres = (valeursIA.titresProposes || []).map(function (texte) {
+    return { texte: texte, selectionnee: false };
+  });
+  if (titres.length) {
+    var indexTitreActuel = dossier.titreCV ? titres.findIndex(function (t) { return t.texte === dossier.titreCV; }) : -1;
+    titres[indexTitreActuel !== -1 ? indexTitreActuel : 0].selectionnee = true;
+  } else {
+    titres = [{ texte: dossier.titreCV || '', selectionnee: true }];
+  }
+
   var accroches = (valeursIA.accrochesProposees || []).map(function (texte, i) {
     return { texte: texte, selectionnee: false };
   });
@@ -8583,6 +8960,11 @@ function creerBrouillonChoixIACV(valeursIA) {
     accroches = [{ texte: valeursIA.profil || '', selectionnee: true }];
   }
   return {
+    // TACHE (retour utilisateur : "je veux un onglet Intitulé juste avant
+    // Accroche, pour vérifier/corriger le titre du CV") : desormais une
+    // liste a selection unique (titres), comme accroches -- plus un
+    // simple champ figue.
+    titres: titres,
     accroches: accroches,
     pointsForts: versListe(valeursIA.pointsForts, function (t) { return { texte: t }; }),
     motsCles: versListe(valeursIA.motsCles, function (t) { return { texte: t }; }),
@@ -8590,6 +8972,7 @@ function creerBrouillonChoixIACV(valeursIA) {
       valeur: (reco.typeCV && reco.typeCV.valeur) || null,
       justification: (reco.typeCV && reco.typeCV.justification) || ''
     },
+    postesRecommandes: versListe(reco.postesRecommandes, function (t) { return { texte: t }; }),
     // TACHE (retour utilisateur : "l'IA me donne les 5 d'en haut, celle
     // qu'il me faut est la 6e ou 7e" -- la personne ne pouvait pas la
     // rajouter depuis cet écran, puisque seules les experiences
@@ -8603,10 +8986,17 @@ function creerBrouillonChoixIACV(valeursIA) {
     experiences: (function () {
       var recommandees = reco.experiencesAMettreEnAvant || [];
       function correspondanceMissions(poste, entreprise) {
-        return (savoirFaireParExperience.filter(function (s) {
+        // TACHE (retour utilisateur : missions retravaillées invisibles
+        // -- même bug que celui corrigé dans appliquerMoteurDecisionCV,
+        // trouvé une 3e fois ici, pour l'aperçu affiché sur cet écran)
+        var stricte = savoirFaireParExperience.filter(function (s) {
           return normaliserTexte(s.poste || '') === normaliserTexte(poste || '') &&
             normaliserTexte(s.entreprise || '') === normaliserTexte(entreprise || '');
-        })[0] || {}).missions || [];
+        })[0];
+        if (!stricte && poste) {
+          stricte = savoirFaireParExperience.filter(function (s) { return s.poste && correspond(poste, s.poste); })[0];
+        }
+        return (stricte || {}).missions || [];
       }
       function estDejaTraitee(e, liste) {
         return liste.some(function (x) {
@@ -8617,6 +9007,18 @@ function creerBrouillonChoixIACV(valeursIA) {
       var resultat = recommandees.map(function (e) {
         return {
           poste: e.poste || '', entreprise: e.entreprise || '', texte: e.justification || '', garder: true,
+          // TACHE (retour utilisateur : "j'ai bien donné les dates mais je
+          // ne les vois pas dans le CV" -- bug réellement confirmé et
+          // localisé cette fois, avec le JSON exact fourni) : dateDebut/
+          // dateFin arrivent bien depuis la réponse de l'IA
+          // (experiencesAMettreEnAvant, whitelist déjà corrigée), mais se
+          // perdaient ici -- brouillon.experiences ne les portait jamais,
+          // donc "Je valide" reconstruisait experiencesAMettreEnAvant
+          // SANS elles, quel que soit ce que l'IA avait fourni. Portées
+          // désormais dès la construction du brouillon, pas juste au
+          // moment de l'appliquer (ça n'aurait servi à rien, la donnée
+          // n'existait déjà plus à ce stade).
+          dateDebut: e.dateDebut || '', dateFin: e.dateFin || '',
           missions: correspondanceMissions(e.poste, e.entreprise).map(function (m) { return { texte: m, garder: true }; })
         };
       });
@@ -8624,12 +9026,34 @@ function creerBrouillonChoixIACV(valeursIA) {
         if (estDejaTraitee(e, resultat)) { return; }
         resultat.push({
           poste: e.poste || '', entreprise: e.entreprise || '', texte: '', garder: false,
+          dateDebut: '', dateFin: '',
           missions: correspondanceMissions(e.poste, e.entreprise).map(function (m) { return { texte: m, garder: true }; })
         });
       });
       return resultat;
     })(),
     competences: versListe(reco.competencesAValoriser, function (c) { return { texte: c.competence, sousTexte: c.justification }; }),
+    // TACHE (retour utilisateur : "10 propositions, maximum 5 à choisir...
+    // un croisement entre expériences personnelles, loisirs/centres
+    // d'intérêt, engagements, changement de métier") : fusionne les
+    // propositions de l'IA classique (reco.competencesPersonnelles) avec
+    // celles du module Découverte (dossier.competencesPersonnellesDecouverte,
+    // loisirs reformulés) -- même logique de fusion/déduplication que
+    // appliquerMoteurDecisionCV (app.js), pour que cet onglet montre
+    // exactement ce qui pourra apparaître au final, jamais une liste
+    // partielle. Seules les 5 premières restent cochées par défaut : la
+    // personne peut cocher/décocher librement, mais démarre déjà sous le
+    // plafond plutôt que d'avoir à décocher elle-même 5 propositions.
+    competencesPersonnelles: (function () {
+      var brutesIA = (reco.competencesPersonnelles || []).map(function (c) { return { texte: c.competence, sousTexte: c.source || '' }; });
+      var brutesDecouverte = ((dossier.competencesPersonnellesDecouverte || [])).map(function (c) { return { texte: c.competence, sousTexte: c.source || '' }; });
+      var fusion = brutesIA.slice();
+      brutesDecouverte.forEach(function (c) {
+        var dejaPresente = fusion.some(function (x) { return normaliserPourComparaison(x.texte) === normaliserPourComparaison(c.texte); });
+        if (!dejaPresente) { fusion.push(c); }
+      });
+      return fusion.map(function (item, i) { item.garder = (i < 5); return item; });
+    })(),
     rubriquesMasquables: versListe(reco.rubriquesMasquables, function (r) { return { texte: r.rubrique, sousTexte: r.justification }; })
   };
 }
@@ -8666,6 +9090,42 @@ function contenuListeRecommandationsIA(prefixe, liste, estArea, messageVide) {
   return liste.map(function (item, i) { return ligneRecommandationReordonnable(prefixe, i, liste.length, item, estArea); }).join('');
 }
 
+// TACHE (retour utilisateur : "le titre de CV c'est aussi important que
+// le contenu, je veux un onglet Intitulé juste avant Accroche") : un seul
+// champ à confirmer/corriger, pas une liste de propositions IA comme les
+// autres onglets -- l'IA a déjà eu l'occasion de signaler une faute de
+// frappe évidente dans le CONTEXTE transmis (voir texteProfil()), cet
+// onglet est la dernière vérification humaine avant génération.
+// TACHE (retour utilisateur : "je veux plusieurs intitulés possibles,
+// c'est le but de cet onglet") : repris exactement sur le même mécanisme
+// que contenuOngletAccrocheIA ci-dessous (reco-item, sélection radio) --
+// un champ court (input, pas textarea) puisqu'un intitulé de CV tient
+// toujours sur une ligne, contrairement à une accroche.
+function contenuOngletIntituleIA(brouillon) {
+  if (!brouillon.titres.length) {
+    return '<p class="text-muted small fst-italic mb-0">Aucune proposition d’intitulé de l’assistant.</p>';
+  }
+  return '<p class="text-muted small mb-2">C’est le titre affiché en évidence sous votre nom sur le CV.</p>' +
+    brouillon.titres.map(function (t, i) {
+    var idBase = 'reco_titres_' + i;
+    // TACHE (retour utilisateur : "j'ai choisi et validé Employé
+    // polyvalent en restauration" mais le CV garde l'ancien titre --
+    // investigation approfondie, cause exacte non confirmée avec
+    // certitude, mais piste la plus solide : le rond radio est minuscule,
+    // seul le texte éditable à côté est visuellement engageant --
+    // cliquer dessus pour "choisir" cette option, geste naturel, ne
+    // sélectionnait rien) : toute la carte devient cliquable
+    // (data-selectionne-titre), sauf le champ de texte lui-même (qui
+    // reste éditable sans déclencher le radio) -- cablé plus bas.
+    return '<div class="reco-item mb-2" data-reco-prefixe="reco_titres" data-reco-index="' + i + '" data-selectionne-titre="' + idBase + '" style="cursor:pointer;">' +
+      '<span class="reco-rang">' + (i + 1) + '</span>' +
+      '<input type="radio" name="recoTitreChoix" class="reco-case" id="' + idBase + '_case"' + (t.selectionnee ? ' checked' : '') + '>' +
+      '<div class="reco-corps">' +
+      '<input type="text" class="form-control form-control-sm" id="' + idBase + '_texte" data-champ="texte" value="' + echapperAttribut(t.texte) + '">' +
+      '</div></div>';
+  }).join('');
+}
+
 function contenuOngletProfilIA(brouillon) {
   return '<div class="mb-3"><h6>Points forts</h6>' + contenuListeRecommandationsIA('reco_pointsForts', brouillon.pointsForts, false, 'Aucun point fort proposé par l’assistant.') + '</div>' +
     '<div class="mb-1"><h6>Mots clés</h6>' + contenuListeRecommandationsIA('reco_motsCles', brouillon.motsCles, false, 'Aucun mot clé proposé par l’assistant.') + '</div>';
@@ -8684,7 +9144,9 @@ function contenuOngletAccrocheIA(brouillon) {
   }
   return brouillon.accroches.map(function (a, i) {
     var idBase = 'reco_accroches_' + i;
-    return '<div class="reco-item mb-2" data-reco-prefixe="reco_accroches" data-reco-index="' + i + '">' +
+    // TACHE (même risque identifié sur l'Intitulé, correction préventive
+    // ici aussi -- même structure radio + texte éditable séparé) :
+    return '<div class="reco-item mb-2" data-reco-prefixe="reco_accroches" data-reco-index="' + i + '" data-selectionne-accroche="' + idBase + '" style="cursor:pointer;">' +
       '<span class="reco-rang">' + (i + 1) + '</span>' +
       '<input type="radio" name="recoAccrocheChoix" class="reco-case" id="' + idBase + '_case"' + (a.selectionnee ? ' checked' : '') + '>' +
       '<div class="reco-corps">' +
@@ -8735,6 +9197,22 @@ function contenuOngletCompetencesIA(brouillon) {
   return contenuListeRecommandationsIA('reco_competences', brouillon.competences, false, 'Aucune compétence à valoriser proposée par l’assistant.');
 }
 
+// TACHE (retour utilisateur : "je veux avoir cet onglet avec les
+// compétences à choisir dans la même fenêtre... adapte cet onglet avec
+// les mêmes fonctions que les autres") : même mécanisme générique que
+// Compétences à valoriser (case à cocher + texte modifiable + flèches de
+// réordonnancement, via contenuListeRecommandationsIA) -- un onglet à
+// part entière, jamais mélangé avec l'Intitulé. Le plafond (5 max parmi
+// les 10 proposées) est rappelé ici en toutes lettres et appliqué au
+// câblage (voir wireEcranChoixReponseIACV), jamais dans ce rendu.
+function contenuOngletCompetencesPersonnellesIA(brouillon) {
+  if (!brouillon.competencesPersonnelles.length) {
+    return '<p class="text-muted small fst-italic mb-0">Aucune compétence personnelle proposée par l’assistant pour ce profil.</p>';
+  }
+  return '<p class="text-muted small mb-2">À utiliser surtout quand l’expérience professionnelle manque pour porter la candidature — 5 maximum parmi les propositions ci-dessous.</p>' +
+    contenuListeRecommandationsIA('reco_competencesPersonnelles', brouillon.competencesPersonnelles, false, 'Aucune compétence personnelle proposée par l’assistant.');
+}
+
 function contenuOngletStrategieIA(brouillon) {
   var tc = brouillon.typeCV;
   var html = '<div class="mb-3"><h6>Type de CV recommandé</h6>';
@@ -8745,6 +9223,14 @@ function contenuOngletStrategieIA(brouillon) {
     html += '<p class="text-muted small fst-italic mb-0">Aucune recommandation de l’assistant sur ce point.</p>';
   }
   html += '</div>';
+  // TACHE (retour utilisateur : "je suis sûr qu'il y a plus de contenu et
+  // des informations utiles que notre JSON" -- comparaison avec un texte
+  // en prose demandé à l'IA en parallèle) : un vrai manque trouvé à cette
+  // occasion -- les intitulés de POSTE À RECHERCHER (pas le titre affiché
+  // sur le CV, un autre concept) n'avaient aucune place dans le schéma.
+  // Cet onglet, presque vide jusqu'ici, est l'endroit naturel.
+  html += '<div class="mb-1"><h6>Intitulés de poste à rechercher</h6>' +
+    contenuListeRecommandationsIA('reco_postesRecommandes', brouillon.postesRecommandes, false, 'Aucun intitulé de poste proposé par l’assistant.') + '</div>';
   return html;
 }
 
@@ -8755,9 +9241,11 @@ function contenuOngletComplementsIA(brouillon) {
 
 var GROUPES_ONGLETS_CHOIX_IA_CV = [
   { id: 'profil', titre: '👤 Profil', rendu: contenuOngletProfilIA },
+  { id: 'intitule', titre: '🏷️ Intitulé', rendu: contenuOngletIntituleIA },
   { id: 'accroche', titre: '✨ Accroche', rendu: contenuOngletAccrocheIA },
   { id: 'experiences', titre: '💼 Expériences', rendu: contenuOngletExperiencesIA },
   { id: 'competences', titre: '🛠️ Compétences à valoriser', rendu: contenuOngletCompetencesIA },
+  { id: 'competencesPersonnelles', titre: '🌱 Compétences personnelles', rendu: contenuOngletCompetencesPersonnellesIA },
   { id: 'strategie', titre: '🎯 Stratégie de candidature', rendu: contenuOngletStrategieIA },
   { id: 'complements', titre: '➕ Informations complémentaires', rendu: contenuOngletComplementsIA }
 ];
@@ -8770,7 +9258,7 @@ function genererEcranChoixReponseIACV(brouillon) {
     panneaux += '<div class="onglet-validation-import-panel' + (i === 0 ? ' actif' : '') + '" data-onglet-panel="' + g.id + '">' +
       g.rendu(brouillon) + '</div>';
   });
-  return '<div class="onglets-validation-import">' + boutons + '</div>' +
+  return '<div class="onglets-validation-import onglets-choix-ia-cv">' + boutons + '</div>' +
     '<div class="onglets-validation-import-corps">' + panneaux + '</div>';
 }
 
@@ -8782,7 +9270,8 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
   var LISTES_BROUILLON = {
     reco_pointsForts: brouillon.pointsForts, reco_motsCles: brouillon.motsCles,
     reco_experiences: brouillon.experiences, reco_competences: brouillon.competences,
-    reco_rubriques: brouillon.rubriquesMasquables
+    reco_rubriques: brouillon.rubriquesMasquables, reco_postesRecommandes: brouillon.postesRecommandes,
+    reco_competencesPersonnelles: brouillon.competencesPersonnelles
   };
   document.querySelectorAll('.reco-item').forEach(function (el) {
     var prefixe = el.dataset.recoPrefixe;
@@ -8796,6 +9285,32 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
         var tmp = liste[index]; liste[index] = liste[cible]; liste[cible] = tmp;
         rafraichirEcran();
       });
+    });
+  });
+  // TACHE (retour utilisateur : "je veux plusieurs intitulés possibles")
+  // : même câblage dédié que les accroches ci-dessous -- une seule
+  // "selectionnee" à true à la fois.
+  brouillon.titres.forEach(function (t, i) {
+    var idBaseTitre = 'reco_titres_' + i;
+    var radioTitre = document.getElementById(idBaseTitre + '_case');
+    var champTitreTexte = document.getElementById(idBaseTitre + '_texte');
+    if (radioTitre) {
+      radioTitre.addEventListener('change', function () {
+        if (this.checked) { brouillon.titres.forEach(function (x) { x.selectionnee = false; }); t.selectionnee = true; }
+      });
+    }
+    if (champTitreTexte) { champTitreTexte.addEventListener('input', function () { t.texte = this.value; }); }
+  });
+  // TACHE (retour utilisateur : intitulé choisi non appliqué -- filet de
+  // sécurité supplémentaire) : clic n'importe où sur la carte sélectionne
+  // le radio correspondant -- sauf sur le champ de texte lui-même
+  // (préserve l'édition libre du texte).
+  document.querySelectorAll('[data-selectionne-titre]').forEach(function (carte) {
+    carte.addEventListener('click', function (e) {
+      if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') { return; }
+      var idBase = this.dataset.selectionneTitre;
+      var radio = document.getElementById(idBase + '_case');
+      if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
     });
   });
   // TACHE (retour utilisateur : 5 propositions d'accroche, choix unique) :
@@ -8812,6 +9327,14 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
       });
     }
     if (champTexte) { champTexte.addEventListener('input', function () { a.texte = this.value; }); }
+  });
+  document.querySelectorAll('[data-selectionne-accroche]').forEach(function (carte) {
+    carte.addEventListener('click', function (e) {
+      if (e.target && e.target.tagName === 'TEXTAREA') { return; }
+      var idBase = this.dataset.selectionneAccroche;
+      var radio = document.getElementById(idBase + '_case');
+      if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
   });
   Object.keys(LISTES_BROUILLON).forEach(function (prefixe) {
     LISTES_BROUILLON[prefixe].forEach(function (item, i) {
@@ -8830,6 +9353,24 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
       }
     });
   });
+
+  // TACHE (retour utilisateur : "10 de proposées et maximum 5 à
+  // choisir") : plafond appliqué ici, en plus (pas à la place) du
+  // câblage générique ci-dessus qui vient de mettre à jour item.garder
+  // -- même principe que le plafond de compétences du module Découverte
+  // (decouverteParcours.js) : désactive les cases non cochées dès que le
+  // plafond est atteint, jamais un message d'erreur après coup.
+  (function () {
+    var casesCompPerso = document.querySelectorAll('[data-reco-prefixe="reco_competencesPersonnelles"] .reco-case');
+    if (!casesCompPerso.length) { return; }
+    var PLAFOND_COMPETENCES_PERSONNELLES = 5;
+    function appliquerPlafondCompPerso() {
+      var nbCoches = document.querySelectorAll('[data-reco-prefixe="reco_competencesPersonnelles"] .reco-case:checked').length;
+      casesCompPerso.forEach(function (c) { c.disabled = !c.checked && nbCoches >= PLAFOND_COMPETENCES_PERSONNELLES; });
+    }
+    casesCompPerso.forEach(function (c) { c.addEventListener('change', appliquerPlafondCompPerso); });
+    appliquerPlafondCompPerso();
+  })();
 }
 
 // Ouvre l'ecran (fenetre ERIP, "large"), "Retour" en bas a gauche (rappelle
@@ -8894,15 +9435,23 @@ function appliquerBrouillonChoixIACV(brouillon) {
   // le CV final n'a besoin que d'UN texte de profil -- celle marquee
   // "selectionnee" (repli sur la premiere si, cas limite, aucune ne
   // l'etait pour une raison quelconque).
+  // TACHE (retour utilisateur : plusieurs intitulés possibles) : meme
+  // logique que l'accroche choisie juste en dessous -- celui marque
+  // "selectionnee" (repli sur le premier si, cas limite, aucun ne
+  // l'etait).
+  var titreChoisi = brouillon.titres.filter(function (t) { return t.selectionnee; })[0] || brouillon.titres[0] || { texte: '' };
   var accrocheChoisie = brouillon.accroches.filter(function (a) { return a.selectionnee; })[0] || brouillon.accroches[0] || { texte: '' };
   return {
+    titreCV: titreChoisi.texte || '',
     profil: accrocheChoisie.texte,
     accrochesProposees: brouillon.accroches.map(function (a) { return a.texte; }),
     pointsForts: garder(brouillon.pointsForts).map(function (it) { return it.texte; }),
     motsCles: garder(brouillon.motsCles).map(function (it) { return it.texte; }),
     recommandations: {
       typeCV: brouillon.typeCV,
-      experiencesAMettreEnAvant: garder(brouillon.experiences).map(function (e) { return { poste: e.poste, entreprise: e.entreprise, justification: e.texte }; }),
+      postesRecommandes: garder(brouillon.postesRecommandes).map(function (it) { return it.texte; }),
+      competencesPersonnelles: garder(brouillon.competencesPersonnelles).map(function (it) { return { competence: it.texte, source: it.sousTexte, justification: '' }; }),
+      experiencesAMettreEnAvant: garder(brouillon.experiences).map(function (e) { return { poste: e.poste, entreprise: e.entreprise, justification: e.texte, dateDebut: e.dateDebut, dateFin: e.dateFin }; }),
       competencesAValoriser: garder(brouillon.competences).map(function (it) { return { competence: it.texte, justification: it.sousTexte || '' }; }),
       rubriquesMasquables: garder(brouillon.rubriquesMasquables).map(function (it) { return { rubrique: it.texte, justification: it.sousTexte || '' }; }),
       savoirFaireParExperience: garder(brouillon.experiences).map(function (e) {
@@ -9177,6 +9726,7 @@ function analyserReponseIACV(texteColle) {
   var typeCVBrut = recoBrut.typeCV || {};
 
   var resultat = {
+    titresProposes: normaliserListeTextesIA(objetBrut.titresProposes),
     accrochesProposees: normaliserListeTextesIA(objetBrut.accrochesProposees),
     pointsForts: normaliserListeTextesIA(objetBrut.pointsForts),
     motsCles: normaliserListeTextesIA(objetBrut.motsCles),
@@ -9185,8 +9735,10 @@ function analyserReponseIACV(texteColle) {
         valeur: normaliserTexteIA(typeCVBrut.valeur) || null,
         justification: normaliserTexteIA(typeCVBrut.justification)
       },
-      experiencesAMettreEnAvant: normaliserListeRecommandationsIA(recoBrut.experiencesAMettreEnAvant, ['poste', 'entreprise', 'justification']),
+      postesRecommandes: normaliserListeTextesIA(recoBrut.postesRecommandes),
+      experiencesAMettreEnAvant: normaliserListeRecommandationsIA(recoBrut.experiencesAMettreEnAvant, ['poste', 'entreprise', 'justification', 'dateDebut', 'dateFin']),
       competencesAValoriser: normaliserListeRecommandationsIA(recoBrut.competencesAValoriser, ['competence', 'justification']),
+      competencesPersonnelles: normaliserListeRecommandationsIA(recoBrut.competencesPersonnelles, ['competence', 'source', 'justification']),
       rubriquesMasquables: normaliserListeRecommandationsIA(recoBrut.rubriquesMasquables, ['rubrique', 'justification']),
       savoirFaireParExperience: normaliserSavoirFaireParExperienceIA(recoBrut.savoirFaireParExperience)
     }
@@ -10581,6 +11133,14 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
   // l'IA recommande -- seul le plafond normal (capacites.langues) continue
   // de s'appliquer, comme pour toute autre rubrique.
   if (decisions.langues) { decisions.langues.rubriqueMasquee = false; }
+  // TACHE (retour utilisateur : "j'ai perdu complètement... LOISIRS" --
+  // pas une régression de mes correctifs récents, vérifié, mais un
+  // mécanisme réel : l'IA peut masquer une rubrique entière via
+  // rubriquesMasquables. Loisirs n'avait pas la même protection que
+  // Langues ("presque toujours un atout") -- ajoutée ici, d'autant plus
+  // nécessaire maintenant que les compétences personnelles (plus bas)
+  // ont besoin des loisirs comme matière première.
+  if (decisions.loisirs) { decisions.loisirs.rubriqueMasquee = false; }
 
   // Copie defensive : objetCV (deja normalise) n'est jamais modifie.
   var objetDecide = {};
@@ -10610,9 +11170,21 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
   // certains elements.
   if (recommandationsGenerique.experiences.length) {
     var experiencesChoisies = recommandationsGenerique.experiences.map(function (reco) {
-      return (objetCV.experiences || []).filter(function (e) {
-        return estDoublonProbable(e, reco, ['poste', 'entreprise']);
-      })[0];
+      var candidats = objetCV.experiences || [];
+      // TACHE (retour utilisateur : "j'ai toujours 0 expérience") : la
+      // correspondance stricte (poste+entreprise identiques apres
+      // normalisation) echoue silencieusement des que l'IA reformule un
+      // peu le titre du poste -- frequent et normal pour une IA, meme
+      // quand on lui demande d'etre precise. Filet de secours : si aucune
+      // correspondance stricte, on retente avec correspond() (metiers.js,
+      // deja utilisee partout ailleurs dans l'app pour ce genre de
+      // rapprochement flou) sur le seul champ poste -- jamais a la place
+      // de la correspondance stricte, seulement quand elle echoue.
+      var trouve = candidats.filter(function (e) { return estDoublonProbable(e, reco, ['poste', 'entreprise']); })[0];
+      if (!trouve && reco.poste) {
+        trouve = candidats.filter(function (e) { return e.poste && correspond(e.poste, reco.poste); })[0];
+      }
+      return trouve;
     }).filter(Boolean);
     var capaciteExperiences = (typeof capacites.experiences === 'number') ? capacites.experiences : experiencesChoisies.length;
     objetDecide.experiences = experiencesChoisies.slice(0, capaciteExperiences);
@@ -10645,9 +11217,21 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
   var savoirFaireParExperience = reco.savoirFaireParExperience || [];
   if (savoirFaireParExperience.length && objetDecide.experiences && objetDecide.experiences.length) {
     objetDecide.experiences = objetDecide.experiences.map(function (e) {
+      // TACHE (retour utilisateur : "les missions retravaillées par l'IA
+      // n'apparaissent jamais dans le CV final") : même bug que celui déjà
+      // corrigé pour experiencesAMettreEnAvant, trouvé une 2e fois ici --
+      // la correspondance stricte poste+entreprise échoue dès que
+      // l'entreprise est vide côté dossier (courant pour le module
+      // Découverte) mais que l'IA écrit un texte de remplacement
+      // ("Non renseignée dans le profil") au lieu de laisser vide. Même
+      // filet de secours : correspondance floue sur le seul poste si la
+      // correspondance stricte échoue.
       var propose = savoirFaireParExperience.filter(function (s) {
         return estDoublonProbable(e, s, ['poste', 'entreprise']);
       })[0];
+      if (!propose && e.poste) {
+        propose = savoirFaireParExperience.filter(function (s) { return s.poste && correspond(e.poste, s.poste); })[0];
+      }
       if (!propose || !propose.missions || !propose.missions.length) { return e; }
       var copie = {};
       Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
@@ -10655,6 +11239,82 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
       return copie;
     });
   }
+
+  // TACHE (retour utilisateur : "s'il y a une question sur les années,
+  // pourquoi cette information ne figure pas sur le CV ?") : trouvé --
+  // le schéma demandé à l'IA n'avait jusqu'ici aucun champ de date pour
+  // experiencesAMettreEnAvant (cv.md corrigé en parallèle). Même si l'IA
+  // savait la période (transmise via dossier.informationsNonClassees),
+  // elle n'avait littéralement aucune case où la renvoyer. Applique ici
+  // la date confirmée par l'IA UNIQUEMENT si l'expérience n'en a aucune
+  // (jamais en écrasant une vraie date déjà connue) -- même mécanisme de
+  // correspondance floue que pour les missions.
+  var experiencesAMettreEnAvant = reco.experiencesAMettreEnAvant || [];
+  if (experiencesAMettreEnAvant.length && objetDecide.experiences && objetDecide.experiences.length) {
+    objetDecide.experiences = objetDecide.experiences.map(function (e) {
+      if (e.dateDebut) { return e; } // une vraie date existe deja, jamais ecrasee
+      var propose = experiencesAMettreEnAvant.filter(function (s) {
+        return estDoublonProbable(e, s, ['poste', 'entreprise']);
+      })[0];
+      if (!propose && e.poste) {
+        propose = experiencesAMettreEnAvant.filter(function (s) { return s.poste && correspond(e.poste, s.poste); })[0];
+      }
+      if (!propose || !propose.dateDebut) { return e; }
+      var copie = {};
+      Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
+      copie.dateDebut = propose.dateDebut;
+      if (propose.dateFin) { copie.dateFin = propose.dateFin; }
+      return copie;
+    });
+    // TACHE (retour utilisateur : "si les dates ne sont pas citées
+    // explicitement pour toutes les expériences, alors la date donnée en
+    // réponse à une question soit la date de toutes les expériences pro,
+    // à condition qu'il n'y ait pas de dates renseignées") : second
+    // passage, après le premier ci-dessus (qui applique une date
+    // seulement à l'expérience que l'IA a explicitement associée).
+    // S'il ne reste plus AUCUNE expérience avec une vraie date au
+    // dossier avant ce passage (aucune n'était "citée explicitement"),
+    // et qu'une seule date a malgré tout été trouvée quelque part
+    // (question ciblée ou récit), elle s'applique à toutes les
+    // expériences qui en manquent encore -- jamais si au moins une
+    // expérience avait déjà sa propre date avant ce mécanisme, pour ne
+    // jamais mélanger des périodes distinctes que la personne aurait
+    // renseignées elle-même.
+    var aucuneDateOriginale = objetCV.experiences.every(function (e) { return !e.dateDebut; });
+    if (aucuneDateOriginale) {
+      var dateTrouvee = objetDecide.experiences.filter(function (e) { return e.dateDebut; })[0];
+      if (dateTrouvee) {
+        objetDecide.experiences = objetDecide.experiences.map(function (e) {
+          if (e.dateDebut) { return e; }
+          var copie = {};
+          Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
+          copie.dateDebut = dateTrouvee.dateDebut;
+          if (dateTrouvee.dateFin) { copie.dateFin = dateTrouvee.dateFin; }
+          return copie;
+        });
+      }
+    }
+  }
+
+  // TACHE (retour utilisateur : "compétences personnelles" -- bloc
+  // additif, extrait des expériences ET des loisirs, jamais un
+  // remplacement des loisirs) : le déclenchement (absence de formation +
+  // signal de reconversion/peu d'expérience/profil mince) est décidé par
+  // l'IA elle-même (cv.md, point 10) -- cette fonction ne fait que
+  // transporter le résultat vers objetDecide, jamais redécider si le
+  // bloc doit apparaître. Simple liste vide si l'IA n'a rien produit
+  // (profil avec formation, ou aucun signal déclencheur).
+  // TACHE (retour utilisateur : "10 propositions, max 5 à choisir", écran
+  // dédié) : la fusion IA + Découverte se fait désormais à l'écran de
+  // review (creerBrouillonChoixIACV), où la personne choisit elle-même
+  // jusqu'à 5 parmi les 10 -- reco.competencesPersonnelles porte déjà ce
+  // choix final au moment où cette fonction s'exécute. Refusionner ici
+  // avec dossier.competencesPersonnellesDecouverte réintroduirait des
+  // propositions que la personne aurait explicitement décochées : cette
+  // fonction ne fait donc plus que transporter, jamais refusionner.
+  objetDecide.competencesPersonnelles = (reco.competencesPersonnelles || []).map(function (c) {
+    return { competence: c.competence, source: c.source, justification: c.justification };
+  });
 
   return objetDecide;
 }
@@ -11312,6 +11972,187 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
   var bloc = document.getElementById('paletteCouleurs' + idSuffixe);
   var zonePastilles = document.getElementById('pastillesCouleurs' + idSuffixe);
   if (!bloc || !zonePastilles) { return; }
+
+  // TACHE (Theme Engine, étape B2 -- sélecteur manuel, consigne explicite :
+  // "aucune logique de recommandation à ce stade, pas de score, pas de
+  // pré-cochage intelligent") : réutilise le même canal déjà câblé
+  // partout (etatApercuInline[type].couleur -> couleurId ->
+  // genererDocxNatifCVFormat() -> genererDocxComposeur()), jamais un
+  // nouveau champ d'état parallèle. Le Composeur n'a pas de "couleurs",
+  // il a des thèmes -- cas traité séparément ici, jamais mélangé avec
+  // MODELES_AVEC_COULEURS_CV/obtenirPalettesCouleursCV() (conçus pour de
+  // vraies nuances de couleur, pas des identités visuelles distinctes).
+  if (type === 'cv' && modeleActif === 'composeur' && typeof COMPOSEUR_THEMES_DISPONIBLES !== 'undefined') {
+    bloc.style.display = 'block';
+    var titreBloc = bloc.querySelector('h4');
+    if (titreBloc) { titreBloc.innerHTML = '&#127912; Thème du Composeur'; }
+    var themeActifComplet = etatApercuInline[type].couleur || 'sobre';
+
+    // TACHE (retour utilisateur : "je vais pouvoir choisir si c'est une
+    // colonne ou double colonne") : détecte un éventuel suffixe de
+    // colonnes ("_1col"/"_2col") en tête d'analyse, avant tout découpage
+    // de couleur -- jamais mélangé avec les tirets des nuances.
+    var colonnesActives = null;
+    var idSansColonnesUI = themeActifComplet;
+    ['_1col', '_2col'].forEach(function (suffixe) {
+      if (themeActifComplet.slice(-suffixe.length) === suffixe) {
+        colonnesActives = suffixe === '_2col' ? 2 : 1;
+        idSansColonnesUI = themeActifComplet.slice(0, -suffixe.length);
+      }
+    });
+    var tiretActif = idSansColonnesUI.indexOf('-');
+    var themeBaseActif = tiretActif !== -1 ? idSansColonnesUI.slice(0, tiretActif) : idSansColonnesUI;
+    var idCouleurComplet = tiretActif !== -1 ? idSansColonnesUI.slice(tiretActif + 1) : null; // "bleu" ou "bleu-7"
+    if (!COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif]) { themeBaseActif = 'sobre'; idCouleurComplet = null; }
+    var baseActiveComposeur = idCouleurComplet ? idCouleurComplet.split('-')[0] : null;
+    if (colonnesActives === null) { colonnesActives = COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif].colonnes; }
+
+    // TACHE : reconstruit l'id complet a partir des 3 morceaux
+    // independants (theme, couleur, colonnes) -- point unique de
+    // composition, jamais recopie ailleurs.
+    function idComposeurComplet(theme, couleur, colonnes) {
+      var id = theme + (couleur ? '-' + couleur : '');
+      var colonnesParDefaut = COMPOSEUR_THEMES_DISPONIBLES[theme].colonnes;
+      if (colonnes !== null && colonnes !== colonnesParDefaut) { id += (colonnes === 2 ? '_2col' : '_1col'); }
+      return id;
+    }
+    function appliquerTheme(idTheme) {
+      if (idTheme === etatApercuInline[type].couleur) { return; }
+      etatApercuInline[type].couleur = idTheme;
+      rechargerApercuInline(type, modeleActif);
+      construirePaletteCouleurs(type, idSuffixe, modeleActif);
+    }
+
+    zonePastilles.innerHTML = Object.keys(COMPOSEUR_THEMES_DISPONIBLES).map(function (id) {
+      var th = COMPOSEUR_THEMES_DISPONIBLES[id];
+      var actif = (id === themeBaseActif);
+      return '<button type="button" class="pastille-couleur-cv' + (actif ? ' pastille-couleur-cv-active' : '') +
+        '" data-theme-composeur="' + id + '" title="' + echapperAttribut(th.nom + ' — ' + th.description) +
+        '" aria-label="Thème ' + echapperAttribut(th.nom) + '" style="background:#' + th.couleurs.primaire + ';' +
+        'width:auto;padding:0 0.6rem;border-radius:999px;font-size:0.78rem;color:#fff;height:1.8rem;line-height:1.8rem;">' +
+        echapperAttribut(th.nom) + '</button>';
+    }).join('');
+    zonePastilles.querySelectorAll('[data-theme-composeur]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        // TACHE (retour utilisateur : "si j'ai choisi 2 colonnes, il
+        // reste jusqu'à ce que je change" -- bug réel trouvé) : changer
+        // de thème repart bien de sa couleur d'origine (comportement
+        // volontaire, inchangé), mais doit conserver le nombre de
+        // colonnes déjà choisi -- jamais silencieusement revenir au
+        // défaut du nouveau thème. idComposeurComplet() applique
+        // colonnesActives (l'état actuel, pas celui du nouveau thème).
+        appliquerTheme(idComposeurComplet(this.dataset.themeComposeur, null, colonnesActives));
+      });
+    });
+
+    // TACHE (retour utilisateur : "je veux 6 couleurs et 10 nuances par
+    // couleur, uniformisé pour tous les modèles") : même structure
+    // exacte que les 16 modèles classiques (pastille-couleur-cv avec
+    // rangée de nuances dépliable, voir plus bas dans cette fonction) --
+    // réutilise composeurCouleursDisponibles() (les 6 bases) et
+    // obtenirNuancesCouleurCV() (déjà utilisée par les modèles
+    // classiques), jamais une deuxième palette à part.
+    var couleursDispoBase = (typeof composeurCouleursDisponibles === 'function') ? composeurCouleursDisponibles() : {};
+    var avecNuancesComposeur = (typeof obtenirNuancesCouleurCV === 'function');
+    var zoneCouleurs = document.getElementById('couleursThemeComposeur' + idSuffixe);
+    if (!zoneCouleurs) {
+      zoneCouleurs = document.createElement('div');
+      zoneCouleurs.id = 'couleursThemeComposeur' + idSuffixe;
+      zoneCouleurs.style.cssText = 'margin-top:0.6rem;';
+      zonePastilles.insertAdjacentElement('afterend', zoneCouleurs);
+    }
+    var themeBaseInfo = COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif];
+    var libelleOrigine = '<button type="button" class="pastille-couleur-cv' + (!baseActiveComposeur ? ' pastille-couleur-cv-active' : '') +
+      '" data-couleur-theme-composeur="" title="Couleur d’origine du thème" aria-label="Couleur d’origine" ' +
+      'style="background:#' + themeBaseInfo.couleurs.primaire + ';"></button>';
+    var pointsBase = Object.keys(couleursDispoBase).map(function (idBase) {
+      var c = couleursDispoBase[idBase];
+      var estBaseActive = (baseActiveComposeur === idBase);
+      var nuances = avecNuancesComposeur ? obtenirNuancesCouleurCV(idBase) : [];
+      var rangeeNuances = (avecNuancesComposeur && estBaseActive)
+        ? '<div class="rangee-nuances-cv" style="display:flex;gap:0.3rem;margin-top:0.4rem;flex-wrap:wrap;max-width:220px;">' +
+          nuances.map(function (n) {
+            var actifNuance = (n.id === idCouleurComplet) || (idCouleurComplet === idBase && n.niveau === 10);
+            return '<button type="button" class="pastille-nuance-cv' + (actifNuance ? ' pastille-nuance-cv-active' : '') + '" ' +
+              'data-couleur-theme-composeur="' + n.id + '" title="' + n.nom + '" aria-label="' + n.nom + '" style="background:#' + n.hex + ';"></button>';
+          }).join('') + '</div>'
+        : '';
+      return '<div style="display:inline-block;vertical-align:top;margin-right:0.3rem;">' +
+        '<button type="button" class="pastille-couleur-cv' + (estBaseActive ? ' pastille-couleur-cv-active' : '') + '" ' +
+        'data-couleur-theme-composeur-base="' + idBase + '" title="' + echapperAttribut(c.nom) + (avecNuancesComposeur ? ' — cliquez pour voir les nuances' : '') + '" ' +
+        'aria-label="Couleur ' + echapperAttribut(c.nom) + '" style="background:#' + c.hex + ';"></button>' +
+        rangeeNuances + '</div>';
+    }).join('');
+    zoneCouleurs.innerHTML = '<span class="small text-muted d-block mb-1">Couleur :</span>' + libelleOrigine + pointsBase;
+
+    zoneCouleurs.querySelectorAll('[data-couleur-theme-composeur]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idCouleur = this.dataset.couleurThemeComposeur;
+        appliquerTheme(idComposeurComplet(themeBaseActif, idCouleur || null, colonnesActives));
+      });
+    });
+    zoneCouleurs.querySelectorAll('[data-couleur-theme-composeur-base]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idBase = this.dataset.couleurThemeComposeurBase;
+        if (!avecNuancesComposeur) { appliquerTheme(idComposeurComplet(themeBaseActif, idBase, colonnesActives)); return; }
+        // Meme mecanique que les modeles classiques : un clic deplie la
+        // rangee de nuances (et choisit la 10/10 par defaut), un second
+        // clic sur la meme base la replie sans rien changer.
+        if (baseActiveComposeur === idBase) {
+          baseActiveComposeur = null;
+          construirePaletteCouleurs(type, idSuffixe, modeleActif);
+          return;
+        }
+        if (!idCouleurComplet || idCouleurComplet.split('-')[0] !== idBase) {
+          appliquerTheme(idComposeurComplet(themeBaseActif, idBase + '-' + NB_NUANCES_CV, colonnesActives));
+        } else {
+          baseActiveComposeur = idBase;
+          construirePaletteCouleurs(type, idSuffixe, modeleActif);
+        }
+      });
+    });
+
+    // TACHE (retour utilisateur : "je vais pouvoir choisir si c'est une
+    // colonne ou double colonne ? faisons le test avec Moderne") :
+    // sélecteur indépendant, jamais mélangé avec le choix de couleur --
+    // un thème peut toujours forcer son propre nombre de colonnes par
+    // défaut (colonnesActives déjà initialisé dessus), la personne peut
+    // le changer ici pour ce thème précis.
+    var zoneColonnes = document.getElementById('colonnesThemeComposeur' + idSuffixe);
+    if (!zoneColonnes) {
+      zoneColonnes = document.createElement('div');
+      zoneColonnes.id = 'colonnesThemeComposeur' + idSuffixe;
+      zoneColonnes.style.cssText = 'margin-top:0.6rem;';
+      zoneCouleurs.insertAdjacentElement('afterend', zoneColonnes);
+    }
+    zoneColonnes.innerHTML = '<span class="small text-muted d-block mb-1">Mise en page :</span>' +
+      [1, 2].map(function (n) {
+        var actif = (colonnesActives === n);
+        return '<button type="button" class="btn btn-sm ' + (actif ? 'btn-primary' : 'btn-outline-secondary') +
+          '" data-colonnes-composeur="' + n + '" style="margin-right:0.4rem;">' + n + ' colonne' + (n > 1 ? 's' : '') + '</button>';
+      }).join('');
+    zoneColonnes.querySelectorAll('[data-colonnes-composeur]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var n = parseInt(this.dataset.colonnesComposeur, 10);
+        appliquerTheme(idComposeurComplet(themeBaseActif, idCouleurComplet, n));
+      });
+    });
+    return;
+  }
+
+  // TACHE (retour utilisateur : "j'ai encore les doubles couleurs pour
+  // tous les autres modèles" -- bug réel trouvé) : couleursThemeComposeur/
+  // colonnesThemeComposeur (créés juste au-dessus, spécifiques au
+  // Composeur) ne se supprimaient jamais en quittant ce modèle -- ils
+  // restaient affichés sous la palette de TOUS les autres modèles,
+  // donnant l'impression d'une double rangée de couleurs. Retirés
+  // explicitement dès qu'on n'est plus sur 'composeur', quel que soit le
+  // modèle actif.
+  ['couleursThemeComposeur' + idSuffixe, 'colonnesThemeComposeur' + idSuffixe].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.remove(); }
+  });
+
   // TACHE (couleurs + formats pour la lettre et l'entretien) : chaque
   // type a sa propre fonction de verification (un seul modele chacun
   // aujourd'hui, mais structure prete pour en accueillir d'autres).
@@ -11324,6 +12165,10 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
   var supporte = !!(modeleActif && fonctionSupport && fonctionSupport(modeleActif));
   bloc.style.display = supporte ? 'block' : 'none';
   if (!supporte) { return; }
+  // TACHE (Theme Engine) : remet le libelle d'origine si on revient sur
+  // un modele classique apres avoir affiche celui du Composeur.
+  var titreBlocCouleur = bloc.querySelector('h4');
+  if (titreBlocCouleur) { titreBlocCouleur.innerHTML = '&#127912; Couleurs disponibles'; }
   var couleurActive = etatApercuInline[type].couleur;
   var palettes = obtenirPalettesCouleursCV();
   // TACHE (retour utilisateur : "Nuances rapides", 10 nuances par
@@ -11469,13 +12314,13 @@ function recommencer() {
   // seulement le dossier -- sinon un document deja avance dans la session
   // precedente reapparaitrait "atteint" des la premiere carte choisie.
   etatAccordeonParType = {};
+  etatAccordeonValideParType = {};
   dossier = {
     modeCreation: null, objectif: null, activites: [], actions: [], environnement: [],
     valeurs: [], metiersAjoutes: [], metiersExclus: [], metierCible: null, typeCV: 'general',
     metiersCandidats: [], secteurCible: null,
     identite: { civilite: null, nom: '', prenom: '', adresse: '', codePostal: '', telephone: '', email: '', ville: '' },
     entretienDirect: { structure: '', poste: '' },
-    rechercheEntreprise: { structure: '' },
     catalogueActif: {}, experiences: [], experiencesPerso: [],
     formations: [], loisirs: [], engagements: [], certifications: [], langues: [], languesFrancaisUniquement: false, permis: { possede: null, categories: [], vehicule: null },
     contrat: [], tempsTravail: [], accepte: [], accepteAucune: false,
@@ -11501,11 +12346,26 @@ function recommencer() {
     imports: { courant: null },
     metiersHorsRepertoire: [],
     dernierDocumentPrepare: null,
-    preferencesIA: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+    preferencesIAParType: {
+      cv: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+      lettre: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null },
+      entretien: { niveauPoste: null, niveauLangage: null, adaptationMetier: null, ton: null, longueur: null }
+    },
     profilTexteManuel: null,
     modeRecherche: null, typeRecherche: null, rechercheCandidature: { entreprise: '', site: '', lienOffre: '' }
   };
   blocsAMettreEnEvidence = { candidature: false, mobilite: false, formation: false, metier: false };
+  // TACHE (retour utilisateur : "je viens d'arriver, Candidature est déjà
+  // ouvert et complet alors que tout le reste est vide") : "Réinitialiser"
+  // remettait le dossier a zero, mais pas l'etat d'AFFICHAGE de Mon Projet
+  // (quel bandeau est ouvert) -- un bandeau atteint lors d'une session de
+  // test precedente restait affiche ouvert malgre des donnees videes.
+  // "vous" (1er bandeau) redevient le point de depart, Candidature (dernier
+  // dans ORDRE_BLOCS_MON_PROJET) ne s'ouvrira donc plus qu'en dernier,
+  // naturellement, au fil de la completion des autres.
+  etatBlocERIPOuvert = 'vous';
+  etatAccordeonGroupe = {};
+  etatBlocDejaComplet = {};
   historiquePages = ['cv'];
   naviguerVers('cv');
 }
@@ -11549,6 +12409,16 @@ function sauvegardeExiste() { return lireSauvegarde() !== null; }
 function marquerDocumentEnregistre(type) {
   if (!dossier.documentsEnregistres) { dossier.documentsEnregistres = { cv: false, lettre: false, entretien: false }; }
   dossier.documentsEnregistres[type] = true;
+  // TACHE (retour utilisateur : "Télécharger le Word / Texte à copier /
+  // JSON / CSV = valider le parcours -- le bandeau Exporter doit devenir
+  // déjà validé") : ecrit directement dans le bon tiroir par type (voir
+  // accordeonValidePourType()), plutot que de dependre du pointeur global
+  // etatAccordeonValide (pourrait ne plus correspondre a "type" si
+  // l'appel arrive apres un changement de document). Aucune mise a jour
+  // visuelle immediate necessaire : le bandeau est ouvert au moment du
+  // clic (on regarde ses boutons), donc aucun badge n'est visible avant
+  // qu'il soit referme -- l'etat sera pris en compte au rendu suivant.
+  accordeonValidePourType(type)['exporter-document'] = true;
   var conteneur = document.querySelector('.barre-navigation');
   if (conteneur && pageActuelle === 'resultats') {
     var docActifCourant = docActifActuel();

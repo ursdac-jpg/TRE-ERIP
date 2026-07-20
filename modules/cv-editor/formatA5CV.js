@@ -108,13 +108,23 @@ function _dnTrierFormationsParNiveauDecroissant(formations) {
 }
 
 // ---- Troncature "propre" (coupe au dernier espace, pas au milieu d'un mot) ----
+// TACHE (retour utilisateur : "j'ai des mots coupés et remplacés par les
+// ...." en format Essentiel -- bug réel trouvé) : le seuil "dernierEspace
+// > 40" empêchait de couper avant le caractère 40, même quand ça tombait
+// en plein milieu d'un mot -- pour un budget court (Essentiel : 90
+// caractères), le dernier espace utile peut très bien se trouver avant
+// cette limite. Coupe désormais TOUJOURS au dernier espace trouvé, quelle
+// que soit sa position -- si ça donne un résultat court, c'est voulu
+// ("si il n'y a pas de place, on ne les met pas, mais on ne les casse
+// pas") -- ne coupe en plein mot que dans le cas extrême où aucun espace
+// n'existe du tout dans le texte tronqué (un seul mot géant).
 function _dnTronquerTexte(texte, maxCaracteres) {
   if (!texte) { return ''; }
   var t = String(texte).trim();
   if (t.length <= maxCaracteres) { return t; }
   var coupe = t.slice(0, maxCaracteres);
   var dernierEspace = coupe.lastIndexOf(' ');
-  return (dernierEspace > 40 ? coupe.slice(0, dernierEspace) : coupe) + '…';
+  return (dernierEspace > -1 ? coupe.slice(0, dernierEspace) : coupe) + '…';
 }
 
 // ============================================================
@@ -355,15 +365,20 @@ function _dnConstruireDocumentAvecOptions(docx, objetCV, modeleId, couleurId, fo
 //   (construireObjetCVPourExportA5, TOUJOURS applique) + page A5 reelle.
 // ============================================================
 function genererDocxNatifCVFormat(modeleId, couleurId, formatPage) {
-  // TACHE (moteur Composeur, V1/Beta -- architecture-moteur-cv.md §0.1) :
-  // point de contact UNIQUE avec le reste de l'application. Generation
-  // entierement separee (composeurMoteur.js et les autres fichiers
-  // composeur*.js) -- aucune des 14 lignes de logique existante
-  // ci-dessous n'est executee pour ce modele, aucune d'entre elles n'est
-  // modifiee non plus. formatPage/couleurId ignores pour l'instant (une
-  // seule presentation, un seul theme en V1 -- voir composeurTheme.js).
+  // TACHE (retour utilisateur : "A4 Détaillé et A4 Essentiel sont
+  // identiques pour ce modèle") : formatPage n'était jamais transmis --
+  // le Composeur produisait donc toujours la même chose, quel que soit
+  // le format choisi. Desormais transmis (theme et variantes de
+  // composants restent a leur valeur par defaut en V1, seul formatPage
+  // change quelque chose pour l'instant).
+  // TACHE (Theme Engine, étape B2 -- sélecteur manuel de thème) :
+  // couleurId sert désormais d'identifiant de thème pour ce modèle
+  // précis (construirePaletteCouleurs() l'affiche comme tel dès que
+  // modeleActif === 'composeur', voir app.js) -- jamais un nouveau canal
+  // parallèle. Repli sur Sobre déjà garanti par composeurObtenirTheme()
+  // si couleurId est absent ou ne correspond à aucun thème connu.
   if (modeleId === 'composeur') {
-    return genererDocxComposeur(dossier);
+    return genererDocxComposeur(dossier, {}, couleurId, formatPage);
   }
 
   var promesseObjet;

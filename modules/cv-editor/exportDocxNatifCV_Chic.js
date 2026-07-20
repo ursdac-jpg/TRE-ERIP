@@ -84,7 +84,7 @@ function _dnConstruireChic(docx, objetCV, opts) {
   var savoirEtre = (objetCV.competences && objetCV.competences.savoirEtre) || [];
   var toutesCompetences = savoirFaire.concat(savoirEtre);
   if (toutesCompetences.length) {
-    sidebar.push(bandeauSombre('Compétences'));
+    sidebar.push(bandeauSombre('Compétences professionnelles'));
     toutesCompetences.forEach(function (c) { sidebar.push(puce(c)); });
   }
   var langues = objetCV.langues || [];
@@ -98,6 +98,11 @@ function _dnConstruireChic(docx, objetCV, opts) {
   if (loisirsTexte) {
     sidebar.push(bandeauSombre("Centres d'intérêt"));
     sidebar.push(texte(loisirsTexte));
+  }
+  var competencesPersonnellesChic = objetCV.competencesPersonnelles || [];
+  if (competencesPersonnellesChic.length) {
+    sidebar.push(bandeauSombre('Compétences personnelles'));
+    competencesPersonnellesChic.forEach(function (c) { sidebar.push(texte(c.competence)); });
   }
 
   // ============================================================

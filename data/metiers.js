@@ -2577,10 +2577,17 @@ function ouvrirChoixPreparationAccueil() {
 
   var overlay = ouvrirFenetreERIP({
     titre: 'Préparer ma candidature',
+    // TACHE (retour utilisateur : "je ne veux pas sur 2 lignes mais 1
+    // ligne") : 520px (taille par défaut) ne laissait pas assez de place
+    // pour 3 tuiles côte à côte -- passée à "large" (700px, déjà une
+    // taille prévue ailleurs dans l'app, pas une nouvelle valeur inventée).
+    taille: 'large',
     contenuHTML:
-      '<div class="d-flex gap-3 justify-content-center flex-wrap">' +
-      tuile('btnChoixEntretienAccueil', 'bi-mic', 'Préparer un entretien') +
+      '<div class="d-flex gap-3 justify-content-center flex-nowrap">' +
+      // TACHE (retour utilisateur : nouvel ordre demandé explicitement)
+      tuile('btnChoixDecouverteAccueil', 'bi-lightbulb', 'Découvrir mes compétences') +
       tuile('btnChoixLettreAccueil', 'bi-pen', 'Co-construire ma lettre') +
+      tuile('btnChoixEntretienAccueil', 'bi-mic', 'Préparer un entretien') +
       '</div>'
   });
 
@@ -2595,6 +2602,16 @@ function ouvrirChoixPreparationAccueil() {
   document.getElementById('btnChoixLettreAccueil').addEventListener('click', function () {
     fermerFenetreERIP();
     if (typeof ouvrirDepotLettreV1 === 'function') { ouvrirDepotLettreV1(); }
+  });
+  // TACHE (branchement minimal, module Découverte et valorisation des
+  // compétences) : point d'entrée UNIQUE du module (decouverteMoteur.js)
+  // -- jamais un appel direct à ouvrirDecouverteCompetences() ou à un
+  // autre fichier du module depuis ici, exactement comme pour les 2
+  // autres tuiles qui passent chacune par leur propre point d'entrée
+  // établi (ouvrirParcoursEntretien, ouvrirDepotLettreV1).
+  document.getElementById('btnChoixDecouverteAccueil').addEventListener('click', function () {
+    fermerFenetreERIP();
+    if (typeof demarrerDecouverteCompetences === 'function') { demarrerDecouverteCompetences(); }
   });
 }
 
@@ -2627,11 +2644,20 @@ function ouvrirChoixAssistantLettreV1(documentPrepare) {
       '<p class="text-muted small">Cliquez sur un assistant ci-dessous : l’application prépare et copie le prompt ' +
       'pour vous, puis ouvre l’assistant. Vous n’avez rien à taper.</p>' +
       (estTexte
-        ? '<div class="mb-3">' +
-          '<button type="button" id="btnTelechargerCvLettreV1" class="btn btn-outline-primary btn-sm">' +
-          '&#128229; Télécharger mon CV</button>' +
-          '<p class="small text-muted mt-1 mb-0">L’assistant vous demandera votre CV pendant l’échange : glissez ' +
-          'ce fichier téléchargé directement dans la conversation à ce moment-là.</p></div>'
+        // TACHE (retour utilisateur : "ca marche pas -- au moment de coller
+        // le CV, le presse-papiers contenait encore le prompt") : bug de
+        // sequencement identifie -- "Copier mon CV" ETAIT sur CET ecran,
+        // mais cliquer ensuite sur un assistant recopie le PROMPT dans le
+        // presse-papiers (juste en dessous), ecrasant le CV avant meme que
+        // la personne ait pu le coller dans la conversation. Retire d'ici
+        // -- le bouton "Copier mon CV" vit desormais sur l'ecran suivant
+        // (ouvrirRecuperationLettreV1, affiche des l'assistant ouvert, plus
+        // rien ne peut plus ecraser le presse-papiers entre le clic et le
+        // collage). Simple texte explicatif ici, plus de bouton.
+        ? '<div class="mb-3 small text-muted">' +
+          'L’assistant vous demandera votre CV pendant l’échange. Une fois l’assistant ouvert, revenez sur cet ' +
+          'onglet ERIP : un bouton "Copier mon CV" vous y attendra, juste avant de retourner coller (Ctrl+V) dans ' +
+          'la conversation.</div>'
         : estImage
           ? '<div class="mb-3 small" style="background:#F0F9FF;border-radius:8px;padding:0.6rem 0.8rem;">' +
             '&#128206; Votre CV protégé a été téléchargé sur votre poste. L’assistant vous le demandera pendant ' +
@@ -2642,28 +2668,15 @@ function ouvrirChoixAssistantLettreV1(documentPrepare) {
         return '<button type="button" class="btn btn-primary" data-assistant-lettre-v1="' + a.id + '">' + a.nom + '</button>';
       }).join('') +
       '</div>' +
-      // TACHE (chantier "Videos d'accompagnement") : point d'attention
-      // preserve tel quel -- ICI, les deux branches (texte ET image)
-      // utilisent le MEME geste reel : telecharger puis glisser un fichier
-      // dans la conversation. Le geste pertinent est donc "export-ia-image"
-      // (qui represente en realite "glisser un fichier telecharge", pas
-      // strictement une image) dans LES DEUX cas.
-      (estTexte || estImage
+      // TACHE (chantier "Videos d'accompagnement") : la branche texte
+      // utilise desormais un copier-coller (comme le reste de
+      // l'application), plus un fichier a glisser -- la video pertinente
+      // n'est donc plus "export-ia-image" pour ce cas, uniquement pour le
+      // cas image (fichier reellement incontournable, glisser reste le geste).
+      (estImage
         ? '<div class="text-center mt-3">' + htmlDeclencheurDemoVideo('export-ia-image') + '</div>'
         : '')
   });
-
-  var btnTelechargerCv = document.getElementById('btnTelechargerCvLettreV1');
-  if (btnTelechargerCv) {
-    btnTelechargerCv.addEventListener('click', function () {
-      var btn = this;
-      var texteOriginal = btn.textContent;
-      var blob = new Blob([(documentPrepare && documentPrepare.valeur) || ''], { type: 'text/plain;charset=utf-8' });
-      telechargerDocumentSecurise(blob, 'cv-verifie.txt');
-      btn.textContent = '✅ Téléchargé';
-      setTimeout(function () { btn.textContent = texteOriginal; }, 2000);
-    });
-  }
 
   document.querySelectorAll('#fenetreERIP [data-assistant-lettre-v1]').forEach(function (bouton) {
     bouton.addEventListener('click', function () {
@@ -2671,9 +2684,30 @@ function ouvrirChoixAssistantLettreV1(documentPrepare) {
       if (!assistant) { return; }
       var promptTexte = (typeof promptsExternesCharges !== 'undefined' && promptsExternesCharges['lettre-v1']) ||
         (typeof promptParDefaut === 'function' ? promptParDefaut('lettre-v1') : '');
+      // TACHE (retour utilisateur : "comment adapter le prompt si c'est
+      // image ou texte ?") : le prompt (prompts/lettre-v1.md) contient 2
+      // jetons -- {INSTRUCTION_TRANSMISSION_CV} (phrase longue, section
+      // "Mot de demarrage") et {INSTRUCTION_BLOCAGE_CV} (message affiche
+      // si la personne ecrit autre chose que "Start") -- remplaces ici
+      // selon le type reel de document depose, pour ne jamais proposer une
+      // option impossible (coller du texte pour un CV scanne, par ex.).
+      // Repli generique (double option) si le type est inconnu.
+      if (estTexte) {
+        promptTexte = promptTexte
+          .replace(/\{INSTRUCTION_TRANSMISSION_CV\}/g, 'en collant directement le texte de son CV dans cette conversation (Ctrl+V)')
+          .replace(/\{INSTRUCTION_BLOCAGE_CV\}/g, 'Collez d\u2019abord le texte de votre CV dans la conversation (Ctrl+V)');
+      } else if (estImage) {
+        promptTexte = promptTexte
+          .replace(/\{INSTRUCTION_TRANSMISSION_CV\}/g, 'en déposant le fichier de son CV dans cette conversation')
+          .replace(/\{INSTRUCTION_BLOCAGE_CV\}/g, 'Déposez d\u2019abord le fichier de votre CV dans la conversation');
+      } else {
+        promptTexte = promptTexte
+          .replace(/\{INSTRUCTION_TRANSMISSION_CV\}/g, 'en le collant directement en texte, ou en déposant le fichier si la plateforme le permet')
+          .replace(/\{INSTRUCTION_BLOCAGE_CV\}/g, 'Collez d\u2019abord le texte de votre CV dans la conversation (ou déposez le fichier si la plateforme le permet)');
+      }
       navigator.clipboard.writeText(promptTexte).catch(function () {});
       window.open(assistant.url, '_blank');
-      ouvrirRecuperationLettreV1(estImage);
+      ouvrirRecuperationLettreV1(estImage, estTexte ? ((documentPrepare && documentPrepare.valeur) || '') : null);
     });
   });
 }
@@ -2696,10 +2730,29 @@ function fermerRecuperationLettreV1() {
 // pour piloter l'affichage du bloc Astuce, sans quoi cette fonction n'avait
 // aucun moyen de savoir si le document depose etait une image/PDF (voir
 // ouvrirChoixAssistantLettreV1(), seul appelant, mis a jour en consequence).
-function ouvrirRecuperationLettreV1(estImage) {
+function ouvrirRecuperationLettreV1(estImage, texteCV) {
+  // TACHE (retour utilisateur : bug de sequencement -- "Copier mon CV"
+  // deplace depuis ouvrirChoixAssistantLettreV1, voir son commentaire) :
+  // affiche EN MEME TEMPS que l'onglet de l'assistant s'ouvre (voir son
+  // appelant) -- la personne colle d'abord le prompt dans l'assistant,
+  // PUIS revient sur cet onglet ERIP pour copier son CV maintenant, juste
+  // avant de retourner le coller. Plus aucune autre action ERIP entre les
+  // deux ne vient recopier quoi que ce soit dans le presse-papiers.
+  var htmlCopierCv = texteCV
+    ? '<div class="mb-3 p-2 text-center" style="background:#EFF6FF;border-radius:8px;">' +
+      // TACHE (retour utilisateur : "mettre le bouton 'Copier mon CV' en
+      // plus grand, visible") : btn-outline-primary btn-sm -> btn-primary
+      // (plein, plus contrastant sur le fond bleu clair de l'encart) taille
+      // standard, avec un peu de padding supplementaire.
+      '<button type="button" id="btnCopierCvLettreV1" class="btn btn-primary" style="padding:0.6rem 1.4rem;font-size:1.05rem;font-weight:700;">' +
+      '&#128203; Copier mon CV</button>' +
+      '<p class="small text-muted mt-2 mb-0">Cliquez ici, puis retournez dans la conversation avec l’assistant : ' +
+      'cliquez dans la zone de conversation, faites <span class="cle-pulse">Ctrl + V</span>, puis validez.</p></div>'
+    : '';
   var overlay = ouvrirFenetreERIP({
     titre: '&#9997;&#65039; En attente de votre lettre de motivation',
     contenuHTML:
+      htmlCopierCv +
       '<p class="text-muted small">Une fois votre lettre finalisée avec l’assistant IA, copiez sa toute dernière ' +
       'réponse (celle qui contient la lettre complète), puis revenez ici.</p>' +
       htmlCollageInstantane('LettreV1',
@@ -2716,6 +2769,29 @@ function ouvrirRecuperationLettreV1(estImage) {
 
   document.getElementById('btnTermineLettreV1').addEventListener('click', fermerFenetreERIP);
   var message = document.getElementById('messageRecuperationLettreV1');
+
+  var btnCopierCv = document.getElementById('btnCopierCvLettreV1');
+  if (btnCopierCv) {
+    btnCopierCv.addEventListener('click', function () {
+      var btn = this;
+      var texteOriginal = btn.innerHTML;
+      function confirmerCopie() {
+        btn.textContent = '✅ Copié';
+        setTimeout(function () { btn.innerHTML = texteOriginal; }, 2000);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texteCV).then(confirmerCopie).catch(function () {
+          var z = document.createElement('textarea');
+          z.value = texteCV;
+          document.body.appendChild(z);
+          z.select();
+          document.execCommand('copy');
+          z.remove();
+          confirmerCopie();
+        });
+      }
+    });
+  }
 
   activerCollageInstantane({
     idZoneAuto: 'zoneCollageAutoLettreV1', idZoneApercu: 'zoneApercuCollageLettreV1',
