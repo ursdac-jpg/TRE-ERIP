@@ -53,6 +53,29 @@
        exportDocxNatifCV_NouveauxModeles.js et coloriationDocxNatifCV.js
        (reutilise leurs fonctions et constantes). -->
   <script src="modules/cv-editor/formatA5CV.js" charset="UTF-8"></script>
+  <!-- Moteur Composeur (Bêta) — voir architecture-moteur-cv.md. Systeme
+       independant des modeles ci-dessus (isolation, §0.1 du contrat
+       d'architecture) : point de contact unique = l'interception ajoutee
+       en tete de genererDocxNatifCVFormat() (formatA5CV.js, charge juste
+       au-dessus) + l'entree 'composeur' dans MODELES_CV_DISPONIBLES
+       (modelesDisponibles.js). Ordre ci-dessous = ordre des couches
+       (① a ⑤), simple convention de lecture (declarations de fonctions,
+       resolues au moment de l'appel, pas du chargement). -->
+  <script src="modules/cv-composeur/composeurProfil.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurComposants.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurRegles.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurComposition.js" charset="UTF-8"></script>
+  <!-- TACHE (contrat composeur-strategies-cv-v2.md, étape 2) : nouvelle
+       couche, ajoutée en cohabitation avec l'existant -- dépend de
+       calculerScoresStrategies() (decouverteStrategie.js, chargé plus
+       bas dans ce fichier), mais la résolution ne se fait qu'au moment
+       de l'appel (jamais au chargement), donc l'ordre exact entre les
+       deux fichiers n'a pas d'importance -- déjà vérifié pour plusieurs
+       autres cas similaires dans ce projet. -->
+  <script src="modules/cv-composeur/composeurStrategies.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurTheme.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurRender.js" charset="UTF-8"></script>
+  <script src="modules/cv-composeur/composeurMoteur.js" charset="UTF-8"></script>
   <!-- TACHE (Mini CV (A5), mise en page dediee) : structure propre (photo
        centree, 2 colonnes compactes), plus une reduction du modele A4
        choisi -- doit charger avant ou apres formatA5CV.js (peu importe,
@@ -100,6 +123,23 @@
   <!-- TACHE (filet de secours etendu a la lettre et l'entretien) : meme
        principe que exportBlocsTexteCV.js. -->
   <script src="modules/cv-editor/exportBlocsTexteLettreEntretien.js" charset="UTF-8"></script>
+  <!-- Module « Découverte et valorisation des compétences » — voir
+       module-decouverte-valorisation-competences.md et
+       moteur-ia-raisonnement.md. Système indépendant, même principe
+       d'isolation que le Composeur (Bêta) : point de contact unique =
+       la tuile ajoutée dans la Boîte à outils (ouvrirChoixPreparationAccueil,
+       modules/cv-editor/... non, metiers.js) qui appelle
+       demarrerDecouverteCompetences() (decouverteMoteur.js), point
+       d'entrée UNIQUE du module. Ordre ci-dessous : du plus stable
+       (structures de données) au plus mouvant (interface), même
+       logique que le reste de l'application. -->
+  <script src="modules/decouverte-competences/decouverteClassification.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteAnalyse.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteRaffinement.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteStrategie.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteMapping.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteParcours.js" charset="UTF-8"></script>
+  <script src="modules/decouverte-competences/decouverteMoteur.js" charset="UTF-8"></script>
   <script src="js/app.js" charset="UTF-8"></script>
 
 </body>
