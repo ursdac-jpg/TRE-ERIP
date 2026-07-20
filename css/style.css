@@ -3,18 +3,113 @@
    Un seul fichier de styles. Charge par index.html.
    ============================================================ */
 
+/* TACHE (retour utilisateur : "je veux aussi des modes : mode sombre,
+   une variante de couleurs et un mode daltonien") : système de variables
+   CSS, 3 réglages indépendants et combinables (pas des "modes" exclusifs) :
+   - [data-theme="sombre"] sur <html> : palette sombre
+   - [data-accent="orange"] sur <html> : couleur d'accent orange au lieu
+     du bleu par défaut
+   - [data-daltonien="1"] sur <html> : succès/erreur passent du vert/rouge
+     (le classique problème du daltonisme rouge-vert) à une paire validée
+     scientifiquement pour rester distinguable quel que soit le type de
+     daltonisme (palette Okabe-Ito : vert-bleuté / vermillon, jamais un
+     bleu/orange improvisé qui pourrait se confondre avec l'accent).
+   Les 3 attributs se combinent librement (ex. sombre + orange + daltonien
+   en même temps). Seules les couleurs les plus utilisées de l'app sont
+   converties en variables (celles qui structurent visuellement chaque
+   écran) ; les teintes ponctuelles et rares (badges d'avertissement
+   spécifiques, etc.) restent en dur -- risque de régression trop élevé à
+   vouloir convertir les ~200 occurrences une par une pour un gain visuel
+   marginal sur celles-ci. */
+:root {
+  --bg-page: #f0f4fa;
+  --bg-card: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-hover: #edf4ff;
+  --border: #e2e8f0;
+  --border-strong: #d5dbe4;
+  --text-strong: #0b1a33;
+  --text-muted: #4a5b6e;
+  --text-soft: #3a4a5e;
+  --accent: #0d6efd;
+  --accent-hover: #0a58ca;
+  --accent-bg-subtle: #eef2fd;
+  --success: #198754;
+  --success-strong: #157347;
+  --success-bg-subtle: #d1f4de;
+  --danger: #dc3545;
+  --danger-bg-subtle: #fdeaea;
+}
+[data-theme="sombre"] {
+  --bg-page: #12161f;
+  --bg-card: #1b212c;
+  --bg-subtle: #222834;
+  --bg-hover: #2a3444;
+  --border: #313a4a;
+  --border-strong: #3d4759;
+  --text-strong: #e8edf5;
+  --text-muted: #a8b3c4;
+  --text-soft: #c3ccd9;
+  --accent: #4d94ff;
+  --accent-hover: #6ba5ff;
+  --accent-bg-subtle: #1e2940;
+  --success-bg-subtle: #17301f;
+  --danger-bg-subtle: #3a1f1f;
+}
+[data-accent="orange"] {
+  --accent: #e6720d;
+  --accent-hover: #c25e08;
+  --accent-bg-subtle: #fdf0e4;
+}
+[data-theme="sombre"][data-accent="orange"] {
+  --accent: #ff9a3d;
+  --accent-hover: #ffb066;
+  --accent-bg-subtle: #3a2a1a;
+}
+[data-accent="vert"] {
+  --accent: #15803d;
+  --accent-hover: #116631;
+  --accent-bg-subtle: #e6f4ea;
+}
+[data-theme="sombre"][data-accent="vert"] {
+  --accent: #4ade80;
+  --accent-hover: #6ee89a;
+  --accent-bg-subtle: #1a3324;
+}
+[data-daltonien="1"] {
+  --success: #009E73;
+  --success-strong: #00805d;
+  --success-bg-subtle: #d8f0e8;
+  --danger: #D55E00;
+  --danger-bg-subtle: #fdebe0;
+}
+[data-theme="sombre"][data-daltonien="1"] {
+  --success: #35c79a;
+  --success-strong: #2aa683;
+  --success-bg-subtle: #163027;
+  --danger: #ff8a42;
+  --danger-bg-subtle: #3a2617;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: #f0f4fa;
+  background: var(--bg-page);
+  color: var(--text-strong);
   font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+  /* TACHE (retour utilisateur : "quel est le style le plus lisible ?
+     l'interligne n'était fixé que sur certains blocs précis (fenêtres
+     modales, paragraphes d'accordéon), pas partout ailleurs -- fixé ici
+     au niveau global pour que ce confort de lecture s'applique
+     uniformément, notamment utile pour le public visé par ERIP. */
+  line-height: 1.55;
 }
 
 #app {
   max-width: 100%;
   padding: 2rem 3rem;
   min-height: 100vh;
-  background: white;
+  background: var(--bg-card);
 }
 
 /* ===== BARRE DE PROGRESSION CLIQUABLE ===== */
@@ -25,6 +120,45 @@ body {
   margin-bottom: 40px;
   flex-wrap: wrap;
   font-size: 1.1rem;
+}
+
+/* TACHE (retour utilisateur : "un petit sélecteur, à gauche, en haut, un
+   peu plus bas de la barre de navigation... l'icone doit être présente
+   tout le long, sur toutes les pages") : position fixe (jamais affectee
+   par le defilement ni par le contenu de la page en cours). */
+#btnPreferencesAffichage {
+  position: fixed; top: 90px; left: 20px; z-index: 1050;
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-strong);
+  background: var(--bg-card); color: var(--text-strong); font-size: 1.3rem;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+#btnPreferencesAffichage:hover { background: var(--bg-hover); }
+/* TACHE (retour utilisateur : "l'oeil est à peine visible en mode
+   sombre") : l'ombre portee (pensee pour un fond clair) ne cree aucun
+   relief sur un fond deja sombre -- bordure plus marquee a la place. */
+[data-theme="sombre"] #btnPreferencesAffichage { border: 2px solid var(--border-strong); box-shadow: none; }
+#panneauPreferencesAffichage {
+  position: fixed; top: 140px; left: 20px; z-index: 1050; width: 240px;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 0.6rem;
+  padding: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+}
+#panneauPreferencesAffichage h6 { margin-bottom: 0.8rem; color: var(--text-strong); }
+.pref-affichage-groupe { margin-bottom: 0.9rem; }
+.pref-affichage-groupe:last-child { margin-bottom: 0; }
+.pref-affichage-label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+.pref-affichage-groupe button {
+  border: 1px solid var(--border-strong); background: var(--bg-subtle); color: var(--text-strong);
+  border-radius: 0.4rem; padding: 0.3rem 0.6rem; font-size: 0.85rem; margin-right: 0.4rem; cursor: pointer;
+}
+.pref-affichage-groupe button.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* TACHE (retour utilisateur : adaptation aux écrans plus petits) : sur un
+   écran étroit, le bouton fixe et son panneau remontent et se resserrent
+   pour ne jamais chevaucher le contenu de la page (progression, titre) --
+   même seuil que les autres ajustements "petit écran" déjà existants. */
+@media (max-width: 768px) {
+  #btnPreferencesAffichage { top: 8px; left: 8px; width: 38px; height: 38px; font-size: 1.1rem; }
+  #panneauPreferencesAffichage { top: 52px; left: 8px; width: 200px; padding: 0.8rem; }
 }
 
 /* barre superieure : progression a gauche, actions globales a droite */
@@ -52,27 +186,27 @@ body {
   padding: 1rem;
 }
 .modal-boite {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 1.2rem;
   padding: 1.8rem 2rem;
   max-width: 480px;
   width: 100%;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
-.modal-boite h3 { font-size: 1.4rem; font-weight: 800; color: #0b1a33; margin-bottom: 0.6rem; }
-.modal-boite p { color: #3a4a5e; margin-bottom: 1.4rem; line-height: 1.5; }
+.modal-boite h3 { font-size: 1.4rem; font-weight: 800; color: var(--text-strong); margin-bottom: 0.6rem; }
+.modal-boite p { color: var(--text-soft); margin-bottom: 1.4rem; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; flex-wrap: wrap; }
-.import-option { display: block; margin: 0.5rem 0; cursor: pointer; font-weight: 600; color: #0b1a33; }
+.import-option { display: block; margin: 0.5rem 0; cursor: pointer; font-weight: 600; color: var(--text-strong); }
 .import-option input { margin-right: 0.5rem; }
 
 /* etape en cours */
 .progression .etape.active {
   padding: 10px 24px;
   border-radius: 40px;
-  background: #0d6efd;
+  background: var(--accent);
   color: white;
   font-weight: 700;
-  border: 2px solid #0d6efd;
+  border: 2px solid var(--accent);
   box-shadow: 0 4px 14px rgba(13, 110, 253, 0.35);
 }
 
@@ -80,15 +214,15 @@ body {
 .progression .etape.visited {
   padding: 10px 24px;
   border-radius: 40px;
-  background: #d5e5ff;
-  color: #0b3d91;
-  border: 2px solid #9dc2ff;
+  background: var(--accent-bg-subtle);
+  color: var(--accent);
+  border: 2px solid var(--accent);
   cursor: pointer;
   text-decoration: none;
   transition: 0.15s;
 }
 .progression .etape.visited:hover {
-  background: #b9d5ff;
+  background: var(--bg-hover);
   transform: translateY(-2px);
 }
 
@@ -96,21 +230,21 @@ body {
 .progression .etape.future {
   padding: 10px 24px;
   border-radius: 40px;
-  background: #eef1f6;
-  color: #9aa7b6;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   border: 2px solid transparent;
   cursor: not-allowed;
 }
 
 /* ===== TITRES ===== */
-h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
-.sousTitre { font-size: 1.2rem; color: #3a4a5e; max-width: 760px; margin: 0 auto 1.5rem; }
+h1 { font-size: 2.8rem; font-weight: 900; color: var(--text-strong); }
+.sousTitre { font-size: 1.2rem; color: var(--text-soft); max-width: 760px; margin: 0 auto 1.5rem; }
 
 /* titre de categorie (Question 1 : Personnes / Objets / Lieux) */
 .categorie-titre {
   font-size: 1.3rem;
   font-weight: 700;
-  color: #0b1a33;
+  color: var(--text-strong);
   text-align: center;
   margin: 1.8rem 0 0.4rem;
 }
@@ -178,8 +312,8 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   margin: 2rem 0;
 }
 .carte {
-  background: white;
-  border: 3px solid #e2e8f0;
+  background: var(--bg-card);
+  border: 3px solid var(--border);
   border-radius: 1.5rem;
   padding: 1.6rem 1.2rem;
   min-width: 190px;
@@ -189,12 +323,12 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   cursor: pointer;
   transition: 0.25s;
 }
-.carte:hover { transform: translateY(-6px); border-color: #0d6efd; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-.carte.active-card { border-color: #0d6efd; background: #edf4ff; box-shadow: 0 0 0 4px rgba(13,110,253,0.18); }
-.carte i { font-size: 2.6rem; color: #0d6efd; display: block; margin-bottom: 0.5rem; }
+.carte:hover { transform: translateY(-6px); border-color: var(--accent); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+.carte.active-card { border-color: var(--accent); background: var(--bg-hover); box-shadow: 0 0 0 4px rgba(13,110,253,0.18); }
+.carte i { font-size: 2.6rem; color: var(--accent); display: block; margin-bottom: 0.5rem; }
 .carte h3 { font-size: 1.25rem; font-weight: 700; margin: 0.5rem 0; }
 .carte h5 { font-size: 1.05rem; font-weight: 600; margin: 0.4rem 0 0; }
-.carte p { font-size: 0.95rem; color: #4a5b6e; }
+.carte p { font-size: 0.95rem; color: var(--text-muted); }
 
 /* TACHE (complement, ecrans 3-4-5-6 : Experience/Actions/Environnement/
    Valeurs) : hauteur minimale reservee (la page ne s'effondre plus en
@@ -229,13 +363,29 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    principales (qui restent totalement inchangees, dans leur propre bloc
    .objectifs-accueil ci-dessus). Le decalage reste modere : les deux lignes
    ne se touchent jamais et ne se chevauchent jamais. */
+/* TACHE (retour utilisateur : "je veux la même disposition sur un grand et
+   un petit écran, c'est possible ?") : l'ancienne version utilisait une
+   marge NEGATIVE fixe (-2.2rem) sur la zone suivante pour la "remonter"
+   visuellement -- une technique fragile par nature, puisqu'elle tire le
+   bloc suivant vers le HAUT d'une valeur fixe, sans savoir à l'avance la
+   hauteur réelle du bloc précédent (qui varie avec la largeur d'écran :
+   plus de retour à la ligne dans le texte des cartes = cartes plus
+   hautes). Remplacé par un ajustement positif scopé UNIQUEMENT à ce
+   contexte (.objectifs-accueil, jamais .objectifs ailleurs dans l'app) :
+   on resserre l'espace du côté du bloc du DESSUS plutôt que de tirer le
+   bloc du dessous par une valeur négative -- le même regroupement visuel
+   serré, mais qui fonctionne à l'identique quelle que soit la largeur
+   d'écran, sans plus jamais dépendre d'une hauteur supposée. Les 2 media
+   queries qui compensaient ce hack (1024px et 1025-1536px) ne sont donc
+   plus necessaires pour ce point precis. */
+.objectifs-accueil { margin-bottom: 0.5rem; }
 .zone-ateliers-entretien {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin-top: -2.2rem;
+  margin-top: 0.8rem;
   margin-bottom: 1.5rem;
 }
 .carte-erip {
@@ -272,14 +422,14 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   width: 100%;
   padding: 1rem 1.5rem;
   border-radius: 2rem;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border);
   font-size: 1rem;
   text-align: center;
   box-shadow: 0 4px 14px rgba(0,0,0,0.05);
 }
 .zone-recherche-erip-large input:focus {
   outline: none;
-  border-color: #0d6efd;
+  border-color: var(--accent);
   box-shadow: 0 4px 16px rgba(13,110,253,0.18);
 }
 /* Resultats : liste superposee au-dessus de toute la page (haut z-index),
@@ -291,7 +441,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   bottom: 100%;
   top: auto;
   margin-bottom: 0.6rem;
-  background: white;
+  background: var(--bg-card);
   border-radius: 1.2rem;
   box-shadow: 0 20px 60px rgba(0,0,0,0.25);
   padding: 1.2rem;
@@ -314,41 +464,41 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 
 /* TACHE 33A : resultats de l'Explorateur, groupes par categorie */
 .groupe-resultats-erip { margin: 1.5rem 0; }
-.groupe-resultats-erip h4 { font-size: 1.1rem; color: #0b1a33; margin-bottom: 0.8rem; }
+.groupe-resultats-erip h4 { font-size: 1.1rem; color: var(--text-strong); margin-bottom: 0.8rem; }
 .grille-resultats-erip { display: flex; flex-wrap: wrap; gap: 1rem; }
 .carte-resultat-erip {
-  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 1rem;
+  background: var(--bg-subtle); border: 2px solid var(--border); border-radius: 1rem;
   padding: 1rem 1.2rem; min-width: 220px; max-width: 300px; flex: 1 0 220px;
 }
-.carte-resultat-erip h5 { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; color: #0b1a33; }
+.carte-resultat-erip h5 { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; color: var(--text-strong); }
 .carte-resultat-texte {
   display: flex; align-items: center; justify-content: center;
-  min-width: 140px; max-width: none; flex: 0 1 auto; font-weight: 600; color: #0d6efd;
-  background: #edf4ff; border-color: #cfe0fb;
+  min-width: 140px; max-width: none; flex: 0 1 auto; font-weight: 600; color: var(--accent);
+  background: var(--bg-hover); border-color: #cfe0fb;
 }
 
 /* TACHE (recherche assistant) : elements de resultat cliquables (metier,
    competence) ouvrant le parcours guide. */
 .carte-resultat-cliquable { cursor: pointer; transition: 0.15s; }
-.carte-resultat-cliquable:hover { border-color: #0d6efd; box-shadow: 0 4px 12px rgba(13,110,253,0.15); }
+.carte-resultat-cliquable:hover { border-color: var(--accent); box-shadow: 0 4px 12px rgba(13,110,253,0.15); }
 
 .ligne-metier-associe {
   display: flex; align-items: center; justify-content: space-between;
-  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.8rem;
-  padding: 0.6rem 1rem; margin-bottom: 0.5rem; cursor: pointer; font-weight: 600; color: #0b1a33;
+  background: var(--bg-subtle); border: 2px solid var(--border); border-radius: 0.8rem;
+  padding: 0.6rem 1rem; margin-bottom: 0.5rem; cursor: pointer; font-weight: 600; color: var(--text-strong);
 }
-.ligne-metier-associe:hover { border-color: #0d6efd; background: #edf4ff; }
-.ligne-metier-associe a { color: #0d6efd; text-decoration: none; }
+.ligne-metier-associe:hover { border-color: var(--accent); background: var(--bg-hover); }
+.ligne-metier-associe a { color: var(--accent); text-decoration: none; }
 
 .pastilles-parcours-guide { margin: 0.8rem 0; }
 .pastille-parcours {
   display: block; padding: 0.7rem 1rem; margin-bottom: 0.5rem; border-radius: 0.8rem;
-  border: 2px solid #e2e8f0; cursor: pointer; font-weight: 600; color: #0b1a33; transition: 0.15s;
+  border: 2px solid var(--border); cursor: pointer; font-weight: 600; color: var(--text-strong); transition: 0.15s;
 }
-.pastille-parcours:hover { border-color: #0d6efd; background: #f8fafc; }
+.pastille-parcours:hover { border-color: var(--accent); background: var(--bg-subtle); }
 .pastille-parcours input { margin-right: 0.5rem; }
 .carte-erip:hover { color: inherit; }
-.carte-erip-action { font-size: 0.9rem; font-weight: 700; color: #0d6efd; margin-top: 0.8rem; }
+.carte-erip-action { font-size: 0.9rem; font-weight: 700; color: var(--accent); margin-top: 0.8rem; }
 
 /* ===== BOUTONS ===== */
 .btn-lg { padding: 0.6rem 2rem !important; font-size: 1.05rem !important; border-radius: 40px !important; }
@@ -367,7 +517,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 /* ===== MESSAGES ===== */
 .message-competences {
   background: #eef6ff;
-  border-left: 6px solid #0d6efd;
+  border-left: 6px solid var(--accent);
   padding: 1rem 1.5rem;
   border-radius: 1rem;
   margin: 1.5rem 0;
@@ -384,11 +534,11 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 /* ===== OUTILS ===== */
 .outils-grid { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 1.5rem 0; }
 .outil-item {
-  background: #f8fafc; border-radius: 1.5rem; padding: 1.2rem 1.5rem; min-width: 160px;
-  text-align: center; border: 2px solid #e2e8f0; cursor: pointer; transition: 0.2s;
+  background: var(--bg-subtle); border-radius: 1.5rem; padding: 1.2rem 1.5rem; min-width: 160px;
+  text-align: center; border: 2px solid var(--border); cursor: pointer; transition: 0.2s;
 }
-.outil-item:hover { background: #edf4ff; border-color: #0d6efd; }
-.outil-item i { font-size: 2.2rem; color: #0d6efd; display: block; margin-bottom: 0.3rem; }
+.outil-item:hover { background: var(--bg-hover); border-color: var(--accent); }
+.outil-item i { font-size: 2.2rem; color: var(--accent); display: block; margin-bottom: 0.3rem; }
 
 /* TACHE (complement, page Action) : les 3 cartes IA (Créer votre CV, Lettre
    de motivation, Préparer un entretien) légèrement agrandies par rapport aux
@@ -421,7 +571,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   align-items: center;
   gap: 0.4rem;
   font-weight: 600;
-  color: #0b1a33;
+  color: var(--text-strong);
   cursor: pointer;
 }
 .type-cv-option input { margin: 0; }
@@ -430,14 +580,14 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    Experiences et savoir-faire personnels). Prepare a l'avance, sans impact
    visuel avant son branchement effectif (etapes 4/5/6). */
 .catalogue-categorie { margin-bottom: 1rem; }
-.catalogue-categorie h6 { font-weight: 700; color: #0b1a33; margin-bottom: 0.5rem; }
-.catalogue-case { display: block; margin: 0.3rem 0; cursor: pointer; color: #3a4a5e; }
+.catalogue-categorie h6 { font-weight: 700; color: var(--text-strong); margin-bottom: 0.5rem; }
+.catalogue-case { display: block; margin: 0.3rem 0; cursor: pointer; color: var(--text-soft); }
 .catalogue-case input { margin-right: 0.5rem; }
 .pastilles-detail { display: flex; flex-direction: column; gap: 0.6rem; }
 .pastille-detail-bloc { max-width: 420px; }
 
 /* ===== SECTION CV ===== */
-.cv-section { background: #f8fafc; border-radius: 1.5rem; padding: 1.5rem; margin: 1.5rem 0; border: 2px solid #e2e8f0; }
+.cv-section { background: var(--bg-subtle); border-radius: 1.5rem; padding: 1.5rem; margin: 1.5rem 0; border: 2px solid var(--border); }
 
 /* TACHE (retour utilisateur : ecran plus compact) : reduit l'espace interne
    des 2 blocs "Vos principaux ..." (selection) et "Catalogue" des ecrans
@@ -461,7 +611,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    ci-dessus reserve la place necessaire pour ne rien recouvrir). */
 .barre-navigation-fixe {
   position: fixed; left: 0; right: 0; bottom: 0;
-  background: white; padding: 1rem 3rem; box-shadow: 0 -4px 12px rgba(11,26,51,0.08);
+  background: var(--bg-card); padding: 1rem 3rem; box-shadow: 0 -4px 12px rgba(11,26,51,0.08);
   z-index: 500;
 }
 .rangee-mon-projet { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: flex-start; }
@@ -493,7 +643,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .bloc-identite-compact h5 { margin-bottom: 0.6rem; font-size: 1rem; }
 .bloc-identite-compact .pastille { padding: 0.3rem 0.85rem; font-size: 0.82rem; }
 .bloc-identite-compact input { font-size: 0.85rem; }
-.bloc-identite-compact hr { border-color: #e2e8f0; }
+.bloc-identite-compact hr { border-color: var(--border); }
 
 /* Bouton discret mais qui attire l'oeil (leger halo pulsant), invite a
    comprendre l'usage des informations d'identite avant de les saisir. */
@@ -507,19 +657,19 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.45); }
   50% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
 }
-.cv-item { background: white; border-radius: 0.8rem; padding: 0.5rem 1rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0; }
-.remove-item { color: #dc3545; cursor: pointer; font-weight: 700; }
+.cv-item { background: var(--bg-card); border-radius: 0.8rem; padding: 0.5rem 1rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
+.remove-item { color: var(--danger); cursor: pointer; font-weight: 700; }
 .tag-metier { display: inline-block; background: #e9ecef; border-radius: 30px; padding: 0.2rem 0.8rem; margin: 0.2rem 0.4rem 0.2rem 0; }
-.tag-metier .remove-tag { margin-left: 0.5rem; cursor: pointer; color: #dc3545; }
+.tag-metier .remove-tag { margin-left: 0.5rem; cursor: pointer; color: var(--danger); }
 
 /* TACHE 47 : composant generique accordeon (replie par defaut), reutilisable */
-.accordeon { background: #f8fafc; border-radius: 1.2rem; border: 2px solid #e2e8f0; padding: 1rem 1.2rem; margin: 1.2rem 0; }
+.accordeon { background: var(--bg-subtle); border-radius: 1.2rem; border: 2px solid var(--border); padding: 1rem 1.2rem; margin: 1.2rem 0; }
 /* TACHE (retour utilisateur : "petit v peu visible, je veux un fond vert
    léger sur les blocs deja valides pour les distinguer des autres") : cette
    classe existait deja dans le HTML (voir blocAccordeon() dans app.js) mais
    n'avait jamais recu de style -- aucune difference visuelle avec un
    accordeon non valide jusqu'ici. */
-.accordeon.accordeon-deja-visitee { background: #eef9f2; border-color: #bfe6cc; }
+.accordeon.accordeon-deja-visitee { background: var(--success-bg-subtle); border-color: #bfe6cc; }
 /* TACHE (retour utilisateur : "je ferme juste la pyramide sans avoir
    continué -- je veux un message sur fond jaune, même style que le vert,
    pour indiquer où la personne s'est arrêtée") : variante jaune du fond et
@@ -539,18 +689,18 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .accordeon-actions-coin { display: flex; justify-content: flex-end; margin-bottom: 0.6rem; }
 .accordeon-entete {
   background: none; border: none; width: 100%; display: flex; justify-content: space-between;
-  align-items: center; padding: 0; cursor: pointer; font-size: 1rem; color: #0b1a33; text-align: left;
+  align-items: center; padding: 0; cursor: pointer; font-size: 1rem; color: var(--text-strong); text-align: left;
 }
 .accordeon-titre-groupe { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 /* TACHE (retour utilisateur) : remplace l'ancien "✔" minuscule, quasi
    invisible -- message explicite, a la fois etat ET action possible. */
 .accordeon-badge-valide {
   display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.8rem; font-weight: 700; color: #157347;
-  background: #d1f4de; border-radius: 20px; padding: 0.25rem 0.7rem;
+  font-size: 0.8rem; font-weight: 700; color: var(--success-strong);
+  background: var(--success-bg-subtle); border-radius: 20px; padding: 0.25rem 0.7rem;
   white-space: nowrap;
 }
-.accordeon-fleche { color: #0d6efd; font-size: 0.85rem; }
+.accordeon-fleche { color: var(--accent); font-size: 0.85rem; }
 .accordeon-intro { margin: 0.5rem 0 0; }
 .accordeon.ouvert .accordeon-intro { margin-bottom: 0.5rem; }
 .accordeon-corps { margin-top: 0.5rem; }
@@ -564,7 +714,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .bloc-erip { padding: 1.4rem 1.6rem; }
 /* TACHE (retour utilisateur : "les contours des bandeaux je les veux plus
    foncés, pour bien comprendre que ce sont des blocs séparés") : le contour
-   par defaut (.cv-section, #e2e8f0) est tres clair et donne l'impression
+   par defaut (.cv-section, var(--border)) est tres clair et donne l'impression
    d'un seul bloc continu. Fonce specifiquement sur Mon Projet -- l'ecran ou
    le probleme a ete signale (grille de 6 bandeaux cote a cote). */
 .grille-mon-projet .cv-section { border-color: #9fb0c3; }
@@ -573,7 +723,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    deja dans le HTML (voir blocERIP() dans app.js) mais n'avait jamais recu
    de style. Specificite superieure a la regle ci-dessus (3 classes) pour
    gagner sur le contour fonce de Mon Projet une fois le bloc complet. */
-.cv-section.bloc-erip.bloc-erip-complet-fond { border-color: #198754; }
+.cv-section.bloc-erip.bloc-erip-complet-fond { border-color: var(--success); }
 .bloc-erip-entete {
   display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; cursor: pointer;
   padding: 0.5rem 0; min-height: 2.6rem;
@@ -588,22 +738,22 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    s'applique donc par defaut a toutes les pages, MAIS "Mon Projet" (ci-
    dessous, scope .grille-mon-projet) la re-agrandit -- l'inversion demandee
    ne visait QUE l'ecran Potentiel, pas Mon Projet. */
-.bloc-erip-entete h5 { margin: 0; flex: 1; font-weight: 700; color: #0b1a33; font-size: 1.05rem; }
+.bloc-erip-entete h5 { margin: 0; flex: 1; font-weight: 700; color: var(--text-strong); font-size: 1.05rem; }
 .bloc-erip-compteur {
-  font-size: 0.95rem; font-weight: 700; color: #4a5b6e; background: #eef1f6;
+  font-size: 0.95rem; font-weight: 700; color: var(--text-muted); background: #eef1f6;
   border-radius: 20px; padding: 0.3rem 0.9rem;
 }
-.bloc-erip-fleche { color: #0d6efd; font-size: 1.1rem; }
+.bloc-erip-fleche { color: var(--accent); font-size: 1.1rem; }
 .bloc-erip-complet { font-size: 1.05rem; }
 /* TACHE (retour utilisateur : "0/4 : le 0 en rouge ; 1/4, 2/4, 3/4 : le 1/2/3
    en orange ; 4/4 : le tout en vert et un peu plus grand -- le denominateur
    reste toujours la couleur actuelle sauf une fois complet") : classes
    generees cote JS (voir blocERIP() dans app.js) mais jamais stylees
    jusqu'ici -- le compteur s'affichait donc entierement en texte neutre. */
-.bloc-erip-compteur-zero { color: #dc3545; font-weight: 800; }
+.bloc-erip-compteur-zero { color: var(--danger); font-weight: 800; }
 .bloc-erip-compteur-partiel { color: #fd7e14; font-weight: 800; }
 .bloc-erip-compteur-cible { font-weight: 600; }
-.bloc-erip-compteur-complet { color: #198754; font-weight: 800; font-size: 1.15em; }
+.bloc-erip-compteur-complet { color: var(--success); font-weight: 800; font-size: 1.15em; }
 /* TACHE (retour utilisateur : "titres de Mon projet trop petits") : scope a
    .grille-mon-projet (conteneur propre a la page Mon Projet, voir
    pageProjet() dans app.js) -- redonne aux titres de bandeau leur taille
@@ -615,7 +765,18 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    clairement intermediaire entre les titres de pyramide (1.2rem) et le
    titre de page, pour que la hierarchie visuelle reste lisible sans
    ecraser "Mon projet" au-dessus. */
-.grille-mon-projet .bloc-erip-entete h5 { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+/* TACHE (retour utilisateur : "un peu plus petites, ça fatigue les yeux
+   aussi grandes") : reduction de 20% (1.5rem -> 1.2rem), sur la meme
+   base que les 2 ajustements precedents ci-dessus. */
+.grille-mon-projet .bloc-erip-entete h5 { font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+/* TACHE (retour utilisateur : "un emplacement pour mettre une vidéo... pour
+   expliquer aux gens comment il faut faire ici") : simple encart réservé,
+   discret (pas de vidéo à afficher pour l'instant), centré sous le
+   sous-titre de la page. */
+.encart-video-mon-projet {
+  max-width: 640px; margin: 0 auto 1.2rem; padding: 1.8rem 1rem; text-align: center;
+  background: #f4f6fa; border: 1px dashed #c7d0dc; border-radius: 0.6rem;
+}
 /* TACHE (retour utilisateur : "un message grand et visible sur chaque
    bandeau quand ils ont fini, qui invite à compléter les autres") : le HTML
    existait deja (bloc-erip-message-complet, voir blocERIP() dans app.js)
@@ -627,7 +788,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    bandeau complet (.bloc-erip-complet-fond) reste vert lui aussi, comme
    demande ("je garde le contour vert"). Seul CE message change. */
 .bloc-erip-message-complet {
-  background: #eaf2fd; border: 2px solid #0d6efd; border-radius: 0.8rem;
+  background: #eaf2fd; border: 2px solid var(--accent); border-radius: 0.8rem;
   padding: 0.6rem 0.9rem; margin: 0 0 0.9rem;
   font-size: 0.9rem; font-weight: 700; color: #0b3d91;
 }
@@ -654,7 +815,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    fond (pas seulement le contour) -- un signal d'incitation discret,
    permanent tant que le document n'a pas ete telecharge. */
 @keyframes allumageDouxBleu {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.35); background-color: #eef2fd; }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.35); background-color: var(--accent-bg-subtle); }
   50% { box-shadow: 0 0 0 8px rgba(13, 110, 253, 0); background-color: #dbe6fb; }
 }
 .pastille-export-docx-incitation {
@@ -671,7 +832,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(13, 110, 253, 0); }
 }
 .cle-pulse {
-  display: inline-block; background: #0d6efd; color: #fff; font-weight: 800;
+  display: inline-block; background: var(--accent); color: #fff; font-weight: 800;
   font-size: 1.05em; padding: 0.15rem 0.65rem; border-radius: 0.4rem; margin: 0 0.15rem;
   animation: pulseToucheClavier 1.3s ease-in-out infinite;
 }
@@ -680,28 +841,28 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    visible en haut de la page Potentiel. */
 .banniere-metier-cible {
   position: relative;
-  background: #eef1f6; border: 2px solid #d5dbe4; border-radius: 1rem;
+  background: #eef1f6; border: 2px solid var(--border-strong); border-radius: 1rem;
   padding: 0.9rem 1.3rem; margin: 1rem 0 1.5rem;
 }
 /* TACHE (retour utilisateur : inversion des polices) : reprend l'ancienne
    apparence de .bloc-erip-entete h5 (grand, gras, majuscules) -- voir
    commentaire au-dessus de .bloc-erip-entete h5. S'applique a "Domaine
    cible" et "Metier cible", qui partagent cette meme classe. */
-.banniere-metier-cible-titre { font-weight: 800; color: #0b1a33; font-size: 2.1rem; text-transform: uppercase; letter-spacing: 0.02em; }
+.banniere-metier-cible-titre { font-weight: 800; color: var(--text-strong); font-size: 2.1rem; text-transform: uppercase; letter-spacing: 0.02em; }
 .banniere-metier-cible-actif {
-  background: #e7f1fd; border-color: #0d6efd;
+  background: #e7f1fd; border-color: var(--accent);
 }
-.banniere-metier-cible-actif .pastille.actif { background: #0d6efd; border-color: #0d6efd; }
+.banniere-metier-cible-actif .pastille.actif { background: var(--accent); border-color: var(--accent); }
 
 /* Message de confirmation (metier ou domaine cible) -- ton positif. */
 .banniere-metier-cible-max {
-  color: #157347; font-weight: 600;
+  color: var(--success-strong); font-weight: 600;
 }
 
 /* TACHE (complement) : texte de confirmation du metier cible, agrandi pour
    etre bien visible juste sous la zone de recherche. */
 .banniere-metier-cible-confirmation {
-  font-size: 1rem; color: #0b1a33;
+  font-size: 1rem; color: var(--text-strong);
 }
 
 .banniere-metier-cible-hors-repertoire { margin-top: 0.8rem; }
@@ -710,11 +871,11 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    fois qu'un metier ou un secteur a ete choisi -- reprend la confirmation du
    bandeau "Metier(s) cible(s)" dans un encart separe, bien visible. */
 .banniere-je-postule {
-  background: #eaf7f0; border: 2px solid #198754; border-radius: 1rem;
+  background: var(--success-bg-subtle); border: 2px solid var(--success); border-radius: 1rem;
   padding: 1.1rem 1.4rem; margin: 0 0 1.5rem;
 }
 .banniere-je-postule-titre {
-  font-weight: 700; font-size: 1.2rem; color: #157347; margin-bottom: 0.4rem;
+  font-weight: 700; font-size: 1.2rem; color: var(--success-strong); margin-bottom: 0.4rem;
 }
 
 /* TACHE (complement) : zone de recherche du metier cible, volontairement
@@ -723,18 +884,18 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .banniere-metier-cible-recherche input {
   font-size: 1.05rem;
   padding: 0.65rem 1rem;
-  border: 2px solid #0d6efd;
+  border: 2px solid var(--accent);
   border-radius: 0.8rem;
 }
 .banniere-metier-cible-recherche input:focus {
   box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
-  border-color: #0a58ca;
+  border-color: var(--accent-hover);
 }
 .bloc-erip-reset {
-  background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem;
+  background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem;
   padding: 0.1rem 0.3rem; border-radius: 50%; line-height: 1;
 }
-.bloc-erip-reset:hover { background: #fdeaea; }
+.bloc-erip-reset:hover { background: var(--danger-bg-subtle); }
 /* TACHE (point 5, refonte Mon projet) : bloc plie -> le resume suit toujours
    l'en-tete (complement demande), donc la marge normale est conservee. */
 .bloc-erip-ferme .resume-bloc-erip { margin-bottom: 0; }
@@ -746,14 +907,14 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    dans l'application, y compris a l'interieur des accordeons). */
 .resume-bloc-erip .pastille.actif {
   font-size: 0.8rem; padding: 0.3rem 0.7rem;
-  background: #198754; border-color: #198754; color: white;
+  background: var(--success); border-color: var(--success); color: white;
 }
-.resume-bloc-erip .pastille.actif:hover { background: #157347; }
+.resume-bloc-erip .pastille.actif:hover { background: var(--success-strong); }
 /* TACHE (refonte Potentiel, Etape C) : pastilles de resume informatives
    (aucune suppression possible, ex. competences derivees automatiquement) --
    pas de curseur "cliquable" trompeur, sans effet de survol change. */
 .resume-bloc-erip .pastille-lecture { cursor: default; }
-.resume-bloc-erip .pastille-lecture:hover { background: #198754; }
+.resume-bloc-erip .pastille-lecture:hover { background: var(--success); }
 
 /* TACHE (correction/homogeneisation, page Potentiel) : composant unique pour
    un metier (resume Metiers recommandes, resume Autres pistes, "Voir tous
@@ -762,10 +923,10 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    visuellement, comme demande). */
 .metier-resume-chip {
   display: inline-flex; align-items: center; gap: 0.4rem;
-  background: #0d6efd; color: white; border-radius: 20px;
+  background: var(--accent); color: white; border-radius: 20px;
   padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 600;
 }
-.metier-resume-chip.metier-resume-cible { background: #0a58ca; box-shadow: 0 0 0 2px #eef1f6 inset; }
+.metier-resume-chip.metier-resume-cible { background: var(--accent-hover); box-shadow: 0 0 0 2px #eef1f6 inset; }
 .metier-resume-suppr { cursor: pointer; opacity: 0.85; }
 .metier-resume-suppr:hover { opacity: 1; }
 .metier-resume-nom { cursor: pointer; }
@@ -822,12 +983,12 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    au focus manquait d'elegance). */
 .choix-panneau-competence {
   display: block; width: 100%; text-align: left;
-  background: #f8fafc; border: 2px solid #d5dbe4; border-radius: 0.9rem;
-  padding: 0.75rem 1rem; font-weight: 600; color: #0b1a33;
+  background: var(--bg-subtle); border: 2px solid var(--border-strong); border-radius: 0.9rem;
+  padding: 0.75rem 1rem; font-weight: 600; color: var(--text-strong);
   cursor: pointer; transition: 0.15s;
 }
 .choix-panneau-competence:hover, .choix-panneau-competence:focus {
-  background: #edf4ff; border-color: #0d6efd; outline: none;
+  background: var(--bg-hover); border-color: var(--accent); outline: none;
 }
 
 /* Resultats de "Ajouter un metier" : clic direct, comme sur l'accueil.
@@ -841,12 +1002,12 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   box-shadow: 0 1px 3px rgba(11, 26, 51, 0.08);
   cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
 }
-.option-metier-ajout-nom { font-size: 1.05rem; font-weight: 600; color: #0b1a33; }
+.option-metier-ajout-nom { font-size: 1.05rem; font-weight: 600; color: var(--text-strong); }
 .option-metier-ajout-nom mark { background: #ffe08a; color: inherit; padding: 0 0.15em; border-radius: 0.2em; }
 .option-metier-ajout-rome { margin-left: 0.4rem; text-decoration: none; }
 .option-metier-ajout:hover { background: #e3edff; border-color: #a9c4f5; cursor: pointer; }
 
-.accordeon-erip { border-top: 1px solid #e2e8f0; }
+.accordeon-erip { border-top: 1px solid var(--border); }
 
 /* TACHE (homogeneite Mon projet) : a l'interieur des accordeons, toutes les
    options cliquables (pastilles rondes ET permis-cat circulaires) adoptent
@@ -873,7 +1034,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .accordeon-erip:first-of-type { border-top: none; }
 .accordeon-erip-entete {
   background: none; border: none; width: 100%; display: flex; justify-content: space-between;
-  align-items: center; padding: 0.9rem 0.2rem; cursor: pointer; font-size: 1.2rem; font-weight: 600; color: #0b1a33; text-align: left;
+  align-items: center; padding: 0.9rem 0.2rem; cursor: pointer; font-size: 1.2rem; font-weight: 600; color: var(--text-strong); text-align: left;
   min-height: 2.4rem;
 }
 .accordeon-erip-icone { font-size: 1.15rem; cursor: help; }
@@ -885,7 +1046,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   width: 1.3rem; height: 1.3rem; border-radius: 50%; font-size: 0.85rem; font-weight: 700;
   background: #e9ecef; color: #adb5bd; flex-shrink: 0;
 }
-.accordeon-erip-check.complet { background: #d1f4de; color: #157347; }
+.accordeon-erip-check.complet { background: var(--success-bg-subtle); color: var(--success-strong); }
 .accordeon-erip-corps { padding: 0 0 0.9rem; font-size: 1.02rem; }
 
 /* TACHE (refonte onglets, ecran "Verifiez les informations importees") :
@@ -901,11 +1062,11 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    bouton encadre (au lieu d'un simple trait de soulignement sur l'actif,
    facilement manque) -- incite davantage au clic. */
 .onglet-validation-import-btn {
-  background: #f8fafc; border: 2px solid #d5dbe4; border-radius: 0.6rem;
-  padding: 0.5rem 0.9rem; font-size: 0.92rem; font-weight: 600; color: #4a5b6e; cursor: pointer;
+  background: var(--bg-subtle); border: 2px solid var(--border-strong); border-radius: 0.6rem;
+  padding: 0.5rem 0.9rem; font-size: 0.92rem; font-weight: 600; color: var(--text-muted); cursor: pointer;
 }
-.onglet-validation-import-btn:hover { color: #0d6efd; border-color: #0d6efd; background: #eef2fd; }
-.onglet-validation-import-btn.actif { color: #fff; background: #0d6efd; border-color: #0d6efd; }
+.onglet-validation-import-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg-subtle); }
+.onglet-validation-import-btn.actif { color: #fff; background: var(--accent); border-color: var(--accent); }
 .onglet-validation-import-panel { display: none; }
 .onglet-validation-import-panel.actif { display: block; }
 /* TACHE (retour utilisateur : "je les veux sur 2 lignes et pas sur 3") :
@@ -941,15 +1102,15 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    brut sans aucune mise en forme. Cartes carrees cliquables, la version
    active nettement mise en evidence. */
 .carte-version-lettre {
-  border: 2px solid #d5dbe4; border-radius: 0.8rem; padding: 0.8rem 1rem;
-  cursor: pointer; background: #f8fafc; flex: 1 1 200px; min-width: 180px; max-width: 260px;
+  border: 2px solid var(--border-strong); border-radius: 0.8rem; padding: 0.8rem 1rem;
+  cursor: pointer; background: var(--bg-subtle); flex: 1 1 200px; min-width: 180px; max-width: 260px;
   transition: 0.15s;
 }
-.carte-version-lettre:hover { border-color: #0d6efd; background: #eef2fd; }
+.carte-version-lettre:hover { border-color: var(--accent); background: var(--accent-bg-subtle); }
 .carte-version-lettre-active {
-  border-color: #0d6efd; background: #eef2fd; box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+  border-color: var(--accent); background: var(--accent-bg-subtle); box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
 }
-.carte-version-lettre-active .fw-bold { color: #0d6efd; }
+.carte-version-lettre-active .fw-bold { color: var(--accent); }
 
 /* TACHE (retour utilisateur : "Écran 3" -- choisir/réordonner les
    propositions IA) : pastille de rang + case a cocher + texte editable +
@@ -962,7 +1123,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .reco-item-experience { align-items: stretch; }
 .reco-rang {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 1.6rem; height: 1.6rem; border-radius: 50%; background: #eef1f6; color: #4a5b6e;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%; background: #eef1f6; color: var(--text-muted);
   font-weight: 700; font-size: 0.85rem; margin-top: 0.15rem;
 }
 .reco-item .reco-case { margin-top: 0.5rem; flex-shrink: 0; }
@@ -970,13 +1131,13 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .reco-fleches { display: flex; flex-direction: column; gap: 0.15rem; flex-shrink: 0; }
 .reco-fleche {
   background: #eef1f6; border: none; border-radius: 0.35rem; width: 1.7rem; height: 1.7rem;
-  color: #0d6efd; cursor: pointer; font-size: 0.75rem; line-height: 1;
+  color: var(--accent); cursor: pointer; font-size: 0.75rem; line-height: 1;
 }
 .reco-fleche:disabled { color: #c3ccd6; cursor: default; }
 .reco-fleche:hover:not(:disabled) { background: #dbe6fb; }
 
 .confirmation-reset-bloc {
-  background: #fff5f5; border: 2px solid #f8d7da; border-radius: 0.8rem; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;
+  background: var(--danger-bg-subtle); border: 2px solid #f8d7da; border-radius: 0.8rem; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;
 }
 
 /* ===== PERMIS (cases cliquables) ===== */
@@ -985,16 +1146,16 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   border-radius: 50%; border: 2px solid #cbd5e1; margin: 0 0.4rem 0.4rem 0;
   font-weight: 700; cursor: pointer; transition: 0.15s; user-select: none;
 }
-.permis-cat.active { background: #0d6efd; color: white; border-color: #0d6efd; }
+.permis-cat.active { background: var(--accent); color: white; border-color: var(--accent); }
 
 .badge { font-size: 0.9rem; padding: 0.4rem 0.8rem; }
 .suggestion-loisirs .badge { cursor: pointer; }
-.suggestion-loisirs .badge:hover { background: #0d6efd; color: white; }
+.suggestion-loisirs .badge:hover { background: var(--accent); color: white; }
 
 /* ===== PASTILLES (choix multiple : contrat, temps de travail, disponibilite) ===== */
 .bloc-preferences {
-  background: #f8fafc;
-  border: 2px solid #e2e8f0;
+  background: var(--bg-subtle);
+  border: 2px solid var(--border);
   border-radius: 1.2rem;
   padding: 1.2rem 1.5rem;
 }
@@ -1004,19 +1165,19 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    quand ils manquent d'informations. L'outline ne modifie pas la mise en page,
    ce qui permet de l'appliquer a des blocs de styles differents. */
 .a-completer {
-  outline: 3px solid #dc3545;
+  outline: 3px solid var(--danger);
   outline-offset: 2px;
   border-radius: 1rem;
 }
 .label-fort {
   font-weight: 700;
-  color: #0b1a33;
+  color: var(--text-strong);
   display: flex;
   align-items: center;
   gap: 0.45rem;
   margin: 0.2rem 0 0.2rem;
 }
-.label-fort i { color: #0d6efd; font-size: 1.15rem; }
+.label-fort i { color: var(--accent); font-size: 1.15rem; }
 .pastilles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.5rem; }
 /* TACHE (retour utilisateur : pastilles collees, puis chaque bouton avec
    son propre texte explicatif) : conteneur en ligne (2 colonnes cote a
@@ -1035,8 +1196,8 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .pastille {
   display: inline-block;
   background: #e9ecef;
-  color: #3a4a5e;
-  border: 2px solid #d5dbe4;
+  color: var(--text-soft);
+  border: 2px solid var(--border-strong);
   border-radius: 30px;
   padding: 0.4rem 1.1rem;
   cursor: pointer;
@@ -1045,7 +1206,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   user-select: none;
 }
 .pastille:hover { background: #dce3ec; transform: translateY(-2px); }
-.pastille.actif { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+.pastille.actif { background: var(--accent); color: #fff; border-color: var(--accent); }
 /* TACHE (retour utilisateur : "le bouton aucune langue, je le veux en
    jaune clair, pas trop le cas actuellement") : variante dediee -- jaune
    clair au repos, jaune plus soutenu une fois selectionnee (etat "actif"),
@@ -1077,12 +1238,12 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .metiers-chips { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .metier-chip {
   display: inline-flex; align-items: center; gap: 0.4rem;
-  background: #eef1f6; color: #1f2d3d; border: 2px solid #d5dbe4;
+  background: #eef1f6; color: #1f2d3d; border: 2px solid var(--border-strong);
   border-radius: 30px; padding: 0.45rem 1rem; cursor: pointer; transition: 0.15s;
   font-weight: 600;
 }
 .metier-chip:hover { background: #e2e8f2; transform: translateY(-2px); }
-.metier-chip.metier-actif { background: #0d6efd; color: white; border-color: #0d6efd; }
+.metier-chip.metier-actif { background: var(--accent); color: white; border-color: var(--accent); }
 .metier-chip .rome-link { color: inherit; text-decoration: none; }
 .metier-chip.metier-actif .rome-link { color: #fff; }
 
@@ -1096,15 +1257,16 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 
 /* TACHE (adaptation ecran portable) : entre un ordinateur portable (souvent
    1024-1366px de large, parfois moins en fenetre non maximisee) et un ecran
-   fixe large, la disposition n'est pas la meme -- notamment les decalages
-   negatifs calibres pour un grand ecran (.zone-ateliers-entretien,
-   .zone-recherche-erip-large, ci-dessus) qui presument que le contenu au-
-   dessus tient sur une seule ligne. Sur un ecran plus etroit, ce contenu se
-   replie plus tot (flex-wrap) et ces decalages fixes provoqueraient un
-   chevauchement. Neutralises ici, et le confort general (marges, padding)
-   est resserre pour eviter le gaspillage d'espace sur un ecran plus petit. */
+   fixe large, la disposition n'est pas la meme -- notamment le decalage
+   negatif calibre pour un grand ecran (.zone-recherche-erip-large,
+   ci-dessus) qui presume que le contenu au-dessus tient sur une seule
+   ligne. Sur un ecran plus etroit, ce contenu se replie plus tot
+   (flex-wrap) et ce decalage fixe provoquerait un chevauchement. Neutralise
+   ici, et le confort general (marges, padding) est resserre pour eviter le
+   gaspillage d'espace sur un ecran plus petit. (.zone-ateliers-entretien
+   n'a plus besoin de ce correctif : voir plus haut, marge positive scopee
+   qui fonctionne desormais a toute largeur d'ecran.) */
 @media (max-width: 1024px) {
-  .zone-ateliers-entretien { margin-top: 0.75rem; }
   .zone-recherche-erip-large { margin-top: 0.75rem; }
   /* TACHE (complement) : sur un ecran de laptop, les libelles longs ("Passer
      a l'action", "Reveler mon potentiel"...) se repliaient sur 2 lignes a
@@ -1131,17 +1293,17 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   left: 1rem;
   bottom: 1rem;
   z-index: 1500;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #d5dbe4;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
   border-radius: 30px;
   padding: 0.45rem 0.9rem;
   font-size: 0.85rem;
-  color: #4a5b6e;
+  color: var(--text-muted);
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   transition: 0.15s;
 }
-.lien-confidentialite:hover { background: #fff; border-color: #0d6efd; color: #0d6efd; }
+.lien-confidentialite:hover { background: var(--bg-card); border-color: var(--accent); color: var(--accent); }
 
 /* ============================================================
    DESIGN SYSTEM ERIP — COMPOSANT "FENETRE ERIP"
@@ -1157,7 +1319,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 }
 .fenetre-erip-overlay.visible { background: rgba(11,26,51,0.55); }
 .fenetre-erip-boite {
-  background: white; border-radius: 1.5rem; max-width: 520px; width: 100%;
+  background: var(--bg-card); border-radius: 1.5rem; max-width: 520px; width: 100%;
   max-height: 85vh; overflow-y: auto; padding: 1.5rem;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   opacity: 0; transform: translateY(12px) scale(0.97);
@@ -1171,27 +1333,27 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
 .fenetre-erip-entete {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.8rem;
 }
-.fenetre-erip-titre { font-size: 1.2rem; font-weight: 800; color: #0b1a33; margin: 0; }
+.fenetre-erip-titre { font-size: 1.2rem; font-weight: 800; color: var(--text-strong); margin: 0; }
 .fenetre-erip-fermer {
-  border: 1px solid #ced4da; background: #fff; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--bg-card); border-radius: 50%;
   width: 32px; height: 32px; min-width: 32px; padding: 0; font-size: 0.9rem;
   color: #495057; cursor: pointer; flex-shrink: 0; line-height: 1;
 }
-.fenetre-erip-fermer:hover { background: #f1f3f5; color: #dc3545; border-color: #dc3545; }
-.fenetre-erip-corps p { color: #3a4a5e; line-height: 1.5; margin-bottom: 1rem; }
+.fenetre-erip-fermer:hover { background: #f1f3f5; color: var(--danger); border-color: var(--danger); }
+.fenetre-erip-corps p { color: var(--text-soft); line-height: 1.5; margin-bottom: 1rem; }
 .fenetre-erip-corps p:last-of-type { margin-bottom: 0.5rem; }
 
 /* ============================================================
    COMPOSANT "DEMO VIDEO" (chantier Videos d'accompagnement)
    Cadre a ratio fixe : la fenetre garde la meme silhouette du chargement a
    la lecture, quelle que soit la duree du chargement ou la resolution
-   reelle du fichier -- aucun saut visuel. Fond #0b1a33 : meme teinte que le
+   reelle du fichier -- aucun saut visuel. Fond var(--text-strong) : meme teinte que le
    fond assombri de l'overlay ERIP (rgba(11,26,51,...)), pour que l'etat de
    chargement/erreur s'integre visuellement plutot que de trancher.
    ============================================================ */
 .demo-video-cadre {
   position: relative; width: 100%; aspect-ratio: 16 / 9;
-  background: #0b1a33; border-radius: 12px; overflow: hidden;
+  background: var(--text-strong); border-radius: 12px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
 .demo-video-lecteur { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
@@ -1211,7 +1373,7 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    famille de bleu). */
 .demo-video-declencheur {
   display: inline-flex; align-items: center; gap: 8px;
-  background: #0d6efd; color: #fff; border: none; border-radius: 30px;
+  background: var(--accent); color: #fff; border: none; border-radius: 30px;
   padding: 0.55rem 1.2rem; font-weight: 600; font-size: 0.85rem; cursor: pointer;
   transition: 0.15s;
 }
@@ -1229,9 +1391,19 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
    cartes") : encart distinct plutot qu'un simple texte gras -- taille et
    fond suffisent a le faire remarquer, sans animation (voir commentaire
    dans app.js, pageSelectionCatalogue()). */
+/* TACHE (retour utilisateur : "la phrase sous le titre n'est pas assez
+   visible, on ne sait pas si c'est lié à aujourd'hui ou aux anciennes
+   expériences") : classe dédiée, jamais .sousTitre (partagée avec
+   d'autres écrans qui n'ont pas ce problème de visibilité) -- utilisée
+   uniquement dans le bandeau Catalogue des 4 écrans de sélection
+   (Expérience, Ce que vous faisiez, Environnement, Attentes). */
+.sous-titre-catalogue-agrandi {
+  font-size: 1.35rem; font-weight: 600; color: var(--text-strong); text-align: center;
+  max-width: 720px; margin: 0 auto 1rem;
+}
 .message-instruction-catalogue {
-  background: #eef2fd; border-radius: 0.6rem; padding: 0.6rem 0.9rem;
-  font-size: 1.05rem; font-weight: 700; color: #0b3d91; margin-bottom: 1rem;
+  background: var(--accent-bg-subtle); border-radius: 0.6rem; padding: 0.6rem 0.9rem;
+  font-size: 1.05rem; font-weight: 700; color: var(--accent); margin-bottom: 1rem;
 }
 
 /* TACHE 21A : ecran "Que faisiez-vous souvent ?" - onglets + recherche */
@@ -1239,15 +1411,15 @@ h1 { font-size: 2.8rem; font-weight: 900; color: #0b1a33; }
   display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 0.8rem;
 }
 .onglet-action {
-  background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 30px;
-  padding: 0.5rem 1.1rem; font-weight: 600; color: #4a5b6e; cursor: pointer; transition: 0.15s;
+  background: var(--bg-subtle); border: 2px solid var(--border); border-radius: 30px;
+  padding: 0.5rem 1.1rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: 0.15s;
 }
-.onglet-action:hover { background: #edf4ff; border-color: #0d6efd; color: #0d6efd; }
-.onglet-action.actif { background: #0d6efd; border-color: #0d6efd; color: white; }
+.onglet-action:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+.onglet-action.actif { background: var(--accent); border-color: var(--accent); color: white; }
 
 /* TACHE 21B : compteur de selection + animation legere d'apparition des cartes */
 .compteur-actions {
-  text-align: center; font-weight: 700; color: #0d6efd; font-size: 1.05rem; margin-bottom: 0.4rem;
+  text-align: center; font-weight: 700; color: var(--accent); font-size: 1.05rem; margin-bottom: 0.4rem;
 }
 @keyframes actionCarteApparition {
   from { opacity: 0; transform: scale(0.92); }

@@ -1780,7 +1780,11 @@ function construireMessageAime() {
 function afficherCompetencesDetectees(etape) {
   var comps = deduireCompetences();
   if (comps.length === 0) { return ''; }
-  var liste = '<strong>' + comps.map(function (c) { return '&#10004; ' + c; }).join(' &middot; ') + '</strong>';
+  // TACHE (retour utilisateur : "je les veux en couleur, une couleur qui
+  // les met en valeur") : vert #198754, déjà la couleur "succès/complet"
+  // utilisée ailleurs dans l'app (bordures de blocs terminés, badges) --
+  // cohérent avec le ✔ qui précède chaque compétence.
+  var liste = '<strong style="color:#198754;">' + comps.map(function (c) { return '&#10004; ' + c; }).join(' &middot; ') + '</strong>';
   var intro;
   if (etape === 'activites') { intro = 'L’assistant commence à mieux vous connaître.'; }
   else if (etape === 'actions') { intro = 'Grâce à vos réponses, votre profil s’enrichit.'; }
@@ -2131,7 +2135,15 @@ function ouvrirFenetreERIP(config) {
   document.body.appendChild(overlay);
   overlay._elementDeclencheurFenetreERIP = elementDeclencheur;
 
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermerFenetreERIP(); } });
+  // TACHE (retour utilisateur : "un clic ailleurs avec le pad c'est vite
+  // arrivé... je veux que la seule façon de quitter la fenêtre soit
+  // d'avoir tout fini, ou de cliquer sur la croix") : la fermeture au
+  // clic sur le fond assombri (en dehors de la boîte) est retirée --
+  // problématique notamment pour les personnes peu à l'aise avec un
+  // ordinateur, et pour les trackpads de portable où un clic accidentel
+  // en dehors arrive facilement. Seule la croix ferme désormais
+  // explicitement (Échap reste actif : geste clavier volontaire, jamais
+  // un clic accidentel).
   document.getElementById('fenetreERIPFermerBtn').addEventListener('click', fermerFenetreERIP);
 
   // Echap ferme la fenetre ; Tab reste confine a l'interieur (piege de
@@ -2459,8 +2471,8 @@ function pageActivites() {
   pageSelectionCatalogue({
     champ: 'activites', etape: 'activites',
     titre: '&#128101; Avec qui ou avec quoi travailliez-vous principalement ?',
-    sousTitre: 'Choisissez ce qui correspond le mieux à vos expériences.',
-    catalogue: CATALOGUE_PERSONNES_MATERIELS_LIEUX, limite: 9,
+    sousTitre: 'Repensez à vos expériences passées, professionnelles ou personnelles, et choisissez ce qui correspond le mieux.',
+    catalogue: CATALOGUE_PERSONNES_MATERIELS_LIEUX, limite: 12,
     // TACHE (retour utilisateur : "Vos principaux environnements" n'est
     // pas fidèle -- ici on ne choisit pas un environnement mais AVEC QUI
     // et AVEC QUOI on travaille) : renommé "Votre entourage de travail",
@@ -2552,34 +2564,23 @@ function pageSelectionCatalogue(config) {
     : '';
 
   var html = afficherProgression(config.etape) +
-    '<div class="text-center"><h1>' + config.titre + '</h1><p class="sousTitre">' + config.sousTitre + '</p></div>' +
+    '<div class="text-center"><h1>' + config.titre + '</h1></div>' +
     afficherCompetencesDetectees(config.etape) +
-    // TACHE (retour utilisateur : "inversion entre le bandeau de
-    // sélection et le catalogue -- le catalogue passe à la place de
-    // celui-ci") : le Catalogue (l'action a faire) vient desormais
-    // AVANT le recapitulatif de ce qui est deja choisi -- coherent pour
-    // les 4 pages qui partagent ce meme composant (Experience, Ce que
-    // vous faisiez, Environnement, Attentes).
+    // TACHE (retour utilisateur : "la phrase sous le titre n'est pas
+    // assez visible... on ne sait pas si c'est lié à aujourd'hui ou aux
+    // anciennes expériences") : le sous-titre (config.sousTitre) ne vit
+    // plus sous le H1 (trop discret, trop loin de l'action) -- déplacé
+    // ici, dans le bandeau Catalogue, agrandi (classe dédiée, jamais
+    // .sousTitre partagée avec d'autres écrans qui n'ont pas ce
+    // problème), juste avant le message d'instruction générique.
     '<div class="cv-section cv-section-compact mt-3"><h4>&#128218; Catalogue</h4>' +
-    // TACHE (retour utilisateur : "les personnes ont du mal à faire le
-    // lien entre le titre et ce qu'il faut faire -- pas évident que c'est
-    // une question qui les invite à choisir") : message d'instruction
-    // explicite juste au-dessus des cartes, au plus pres de l'action
-    // attendue (le sous-titre sous le H1, plus haut, ne suffisait pas).
-    // TACHE (retour utilisateur : "la barre de recherche a-t-elle sa
-    // place ? je n'ai vu personne l'utiliser") : retiree -- peu d'elements
-    // par categorie (6 a 9), deja tries par onglet, une recherche
-    // n'apportait rien de plus et alourdissait l'ecran juste au moment ou
-    // il fallait le simplifier.
-    // TACHE (retour utilisateur : "message trop petit, peu d'espace avec
-    // les cartes -- animation ? quel est ton avis ?") : agrandi et mis en
-    // encart distinct (fond teinte + espace) plutot qu'anime -- ce message
-    // revient sur 4 ecrans a chaque etape du parcours, une animation en
-    // permanence sur un texte repete finit par se fondre dans le decor.
-    // Icone 👇 (pointe vers le catalogue juste en dessous) plutot que 👉
-    // (pointait vers la droite, sans rapport avec la position des cartes).
+    '<p class="sous-titre-catalogue-agrandi">' + config.sousTitre + '</p>' +
+    // TACHE (retour utilisateur : "indique le nombre maximal de cartes
+    // dans ce message") : config.limite injecté directement dans le
+    // message générique déjà existant -- jamais une deuxième phrase
+    // séparée qui redirait la même chose.
     '<p class="message-instruction-catalogue">&#128071; Cliquez sur les cartes qui correspondent à votre situation ' +
-    '(plusieurs choix possibles).</p>' +
+    '(plusieurs choix possibles, ' + config.limite + ' maximum).</p>' +
     '<div class="onglets-actions">' + onglets + '</div>' +
     messageLimite +
     grilleCatalogue +
@@ -2636,7 +2637,7 @@ function pageActions() {
   pageSelectionCatalogue({
     champ: 'actions', etape: 'actions',
     titre: '&#11088; Que faisiez-vous souvent ?',
-    sousTitre: 'Choisissez les actions que vous réalisiez régulièrement.',
+    sousTitre: 'En repensant à vos expériences passées, choisissez les actions que vous réalisiez régulièrement.',
     catalogue: CATALOGUE_ACTIONS_PRO, limite: LIMITE_ACTIONS,
     titreSelection: 'Vos actions sélectionnées', iconeSelection: '&#9989;',
     precedent: 'activites', suivant: 'environnement', labelSuivant: null
@@ -2647,7 +2648,7 @@ function pageEnvironnement() {
   pageSelectionCatalogue({
     champ: 'environnement', etape: 'environnement',
     titre: '&#127757; Dans quel environnement travailliez-vous le plus souvent ?',
-    sousTitre: 'Choisissez les environnements qui correspondent le mieux à vos expériences.',
+    sousTitre: 'Toujours en pensant à vos expériences passées, choisissez les environnements qui vous correspondent le mieux.',
     catalogue: CATALOGUE_ENVIRONNEMENTS_TRAVAIL, limite: 9,
     titreSelection: 'Vos principaux environnements', iconeSelection: '&#11088;',
     precedent: 'actions', suivant: 'valeurs', labelSuivant: null
@@ -2745,8 +2746,8 @@ function pageValeurs() {
   pageSelectionCatalogue({
     champ: 'valeurs', etape: 'valeurs',
     titre: '&#9878;&#65039; Qu’est-ce qui est important pour vous dans un travail ?',
-    sousTitre: 'Choisissez ce qui compte le plus pour vous.',
-    catalogue: CATALOGUE_VALEURS_PROFESSIONNELLES, limite: 5,
+    sousTitre: 'Pensez cette fois à ce que vous recherchez aujourd’hui, et choisissez ce qui compte le plus pour vous.',
+    catalogue: CATALOGUE_VALEURS_PROFESSIONNELLES, limite: 6,
     titreSelection: 'Vos priorités', iconeSelection: '&#11088;',
     precedent: 'environnement', suivant: 'projet', labelSuivant: 'Continuer &#8594;'
   });
@@ -3053,13 +3054,16 @@ function contenuCandidature() {
     // TACHE (retour utilisateur : retour au texte libre simple) : plus de
     // widget (calendrier natif, menus Mois/Annee, quantite+unite) -- retour
     // a de simples champs texte avec un exemple de format en placeholder.
-    // Seule Structure reste obligatoire pour acceder a Potentiel (voir
-    // etatAccesRevelation()) ; Duree/Dates/Heures sont toutes facultatives.
+    // TACHE (retour utilisateur : "on peut déposer un CV/LM sans
+    // forcément avoir le nom de la structure -- si j'en ai un, il faut
+    // le mettre, sinon = général") : Structure n'est plus obligatoire
+    // pour accéder à Potentiel (voir etatAccesRevelation()) -- comme
+    // Durée/Dates/Heures, son absence signifie une candidature générale.
     return '<div id="zoneCandidatureChamps">' + boutonImport +
       '<p class="mb-2">Si vous connaissez déjà ces informations, renseignez-les : elles seront transmises à l’IA.</p>' +
       '<div class="mb-3"><label class="form-label small">Adresse internet (facultatif)</label>' +
       '<input type="url" class="form-control form-control-sm" id="immLien" placeholder="https://..." value="' + (im.lien || '') + '"></div>' +
-      '<div class="row g-2"><div class="col-md-12"><label class="form-label small">Nom de la structure</label>' +
+      '<div class="row g-2"><div class="col-md-12"><label class="form-label small">Nom de la structure (facultatif — laissez vide pour une candidature générale)</label>' +
       '<input type="text" class="form-control form-control-sm" id="immStructure" placeholder="Ex : Boulangerie Martin" value="' + (im.structure || '') + '"></div></div>' +
       '<div class="row g-2 mt-2">' +
       '<div class="col-md-4"><label class="form-label small">Durée (facultatif)</label>' +
@@ -3128,8 +3132,10 @@ function informationsCandidatureSuffisantes() {
     return !!(r && (r.lien || r.poste));
   }
   if (o === 'stage' || o === 'alternance' || o === 'pmsmp') {
-    var im = dossier[CLE_DETAILS[o]];
-    return !!(im && (im.lien || im.structure));
+    // TACHE (retour utilisateur : structure optionnelle, absence = candidature
+    // générale) : toujours suffisant pour ces 3 parcours désormais -- cohérent
+    // avec etatAccesRevelation() ci-dessus, jamais bloquant sur ce champ.
+    return true;
   }
   return true;   // aucun objectif de candidature en cours : rien a signaler
 }
@@ -3177,7 +3183,10 @@ function ouvrirImportG(groupe, oCourant) {
   document.body.appendChild(overlay);
   function fermer() { if (overlay.parentNode) { overlay.parentNode.removeChild(overlay); } }
   overlay.querySelector('[data-role="annuler"]').addEventListener('click', fermer);
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermer(); } });
+  // TACHE (retour utilisateur : plus de fermeture au clic sur le fond,
+  // voir ouvrirFenetreERIP() pour le raisonnement complet) : "Annuler"
+  // reste le moyen explicite de fermer cette fenêtre, équivalent à la
+  // croix ailleurs dans l'app.
   overlay.querySelector('[data-role="importer"]').addEventListener('click', function () {
     var sel = overlay.querySelector('input[name="importSrc"]:checked');
     if (sel) {
@@ -3451,6 +3460,18 @@ function wireFormation(rerender) {
     champIntituleNiveau.addEventListener('input', function () {
       if (brouillonFormationEnCours) { brouillonFormationEnCours.intitule = this.value; }
     });
+    // TACHE (retour utilisateur : "la 1ère lettre du diplôme en
+    // majuscule") : appliqué à la perte de focus (blur), jamais à chaque
+    // frappe -- corriger la casse pendant que la personne tape encore
+    // déplacerait le curseur et gênerait la saisie.
+    champIntituleNiveau.addEventListener('blur', function () {
+      if (!this.value) { return; }
+      var corrige = this.value.charAt(0).toUpperCase() + this.value.slice(1);
+      if (corrige !== this.value) {
+        this.value = corrige;
+        if (brouillonFormationEnCours) { brouillonFormationEnCours.intitule = corrige; }
+      }
+    });
     // TACHE (retour utilisateur : navigation au clavier entre les champs) :
     // Entree dans "Intitule" -> passe au champ "Annee", sans soumettre quoi
     // que ce soit (preventDefault, pas de formulaire HTML natif ici de toute
@@ -3642,6 +3663,12 @@ function pageProjet() {
   var html = afficherProgression('projet') +
     '<div class="text-center"><h1>&#128203; Mon projet</h1>' +
     '<p class="sousTitre">Les informations qui personnaliseront votre candidature.</p></div>' +
+    // TACHE (retour utilisateur : "un emplacement pour mettre une vidéo...
+    // pour expliquer aux gens comment il faut faire ici") : encart
+    // réservé, prêt à recevoir un lien ou un code d'intégration plus
+    // tard (pas de vidéo pour l'instant) -- positionné juste après le
+    // sous-titre, avant les blocs, décision explicite ("encore mieux").
+    '<div class="encart-video-mon-projet"><p class="text-muted small mb-0">&#127916; Emplacement réservé pour une vidéo explicative.</p></div>' +
     '<div class="grille-mon-projet">' +
     // TACHE (retour utilisateur : reorganisation Mon Projet, 3+3) : gauche
     // (Vous / Experiences et savoir-faire personnels / Complements) et
@@ -3689,14 +3716,14 @@ function pageProjet() {
 // avec un message explicite. Stage/alternance/pmsmp n'ont pas cette question
 // (voir modeRechercheEffectif()) : jamais bloques par ces regles.
 function etatAccesRevelation() {
-  // TACHE (retour utilisateur : seule restriction = nom de la structure) :
-  // stage/alternance/pmsmp ne bloquent plus que sur le nom de la structure --
-  // dates/duree/heures restent facultatives, jamais bloquantes.
+  // TACHE (retour utilisateur : "on peut déposer des CV et des LM sans
+  // forcément avoir le nom de la structure... si j'ai un nom, il faut le
+  // mettre, sinon = général") : stage/alternance/pmsmp ne bloquent plus
+  // du tout sur le nom de la structure -- une structure précisée reste
+  // prise en compte partout où elle l'était déjà (texte pour l'IA,
+  // résumé du bloc), son absence signifie simplement une candidature
+  // générale pour ce parcours, jamais un blocage de progression.
   if (dossier.objectif === 'stage' || dossier.objectif === 'alternance' || dossier.objectif === 'pmsmp') {
-    var im = dossier[CLE_DETAILS[dossier.objectif]] || {};
-    if (!im.structure) {
-      return { accessible: false, message: 'Indiquez le nom de la structure, dans le bloc Candidature, pour pouvoir continuer.' };
-    }
     return { accessible: true };
   }
   if (!dossier.modeRecherche) {
@@ -4939,17 +4966,17 @@ var CONFIG_BLOC_PROFIL = {
   },
   sousSections: [
     {
-      id: 'savoirEtre', titre: 'Vos savoir-être',
+      id: 'savoirEtre', titre: 'Vos savoir-être', couleurTitre: '#198754',
       complet: function () { return savoirEtreActuels().length > 0; },
       contenuHTML: function () { return contenuListeCompetences(savoirEtreActuels(), 'bg-success'); }
     },
     {
-      id: 'savoirFaire', titre: 'Vos savoir-faire',
+      id: 'savoirFaire', titre: 'Vos savoir-faire', couleurTitre: '#0d6efd',
       complet: function () { return savoirFaireActuels().length > 0; },
       contenuHTML: function () { return contenuListeCompetences(savoirFaireActuels(), 'bg-primary'); }
     },
     {
-      id: 'savoirs', titre: 'Vos savoirs',
+      id: 'savoirs', titre: 'Vos savoirs', couleurTitre: '#0dcaf0',
       complet: function () { return obtenirSavoirs().length > 0; },
       contenuHTML: function () { return contenuListeCompetences(obtenirSavoirs(), 'bg-info'); }
     }
@@ -5900,6 +5927,9 @@ function etatOuvertureSousSection(blocId, sousId, complet) {
 // la fois (comme un accordeon, mais au niveau des cartes elles-memes). "Vous"
 // ouvert par defaut au premier chargement, pour ne pas arriver sur une page
 // entierement repliee.
+// TACHE (retour utilisateur : après réflexion, "Vous" doit rester ouvert
+// à l'arrivée comme avant -- la vidéo étant positionnée au-dessus des
+// blocs, son ouverture ne gêne plus sa visibilité).
 var etatBlocERIPOuvert = 'vous';
 var etatConfirmationReset = {}; // { [blocId]: true } tant que la confirmation est affichee
 // TACHE (retour utilisateur : "quand j'ai fini un bandeau, je veux que le
@@ -6103,11 +6133,17 @@ function blocERIP(config) {
     // clic sans donner l'impression d'un probleme (pas rouge).
     var estComplet = !!s.complet();
     var ouvert = enEvidence || etatOuvertureSousSection(config.id, s.id, estComplet);
+    // TACHE (retour utilisateur : mode daltonien -- "les deux" : couleur
+    // ET repère non dépendant de la couleur) : le même symbole "✓" était
+    // affiché dans les deux états, seule sa couleur/son fond changeaient
+    // -- un cercle vide (○, incomplet) devient désormais un vrai
+    // symbole différent d'une coche (✓, complet), une vraie forme
+    // distincte, pas seulement une teinte différente.
     var indicateurSousSection = '<span class="accordeon-erip-check' + (estComplet ? ' complet' : '') + '" ' +
-      'title="' + (estComplet ? 'Renseigné' : 'À compléter') + '">&#10003;</span>';
+      'title="' + (estComplet ? 'Renseigné' : 'À compléter') + '">' + (estComplet ? '&#10003;' : '&#9675;') + '</span>';
     return '<div class="accordeon-erip' + (ouvert ? ' ouvert' : '') + (enEvidence ? ' a-completer' : '') + '" id="' + idCorps + '">' +
       '<button type="button" class="accordeon-erip-entete" data-bloc-accordeon="' + config.id + '" data-sous-section="' + s.id + '">' +
-      '<span>&#9656; ' + s.titre + '</span>' +
+      '<span' + (s.couleurTitre ? ' style="color:' + s.couleurTitre + ';"' : '') + '>&#9656; ' + s.titre + '</span>' +
       '<span class="accordeon-erip-droite">' +
       (icone ? '<span class="accordeon-erip-icone" title="' + echapperAttribut(infoBulle) + '">' + icone + '</span>' : '') +
       indicateurSousSection +
@@ -7167,6 +7203,22 @@ function pageResultats() {
                   : '<button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnAllerPhotoIdentite">Ajouter ma photo</button>') +
                 '</div>'
               : '') +
+            // TACHE (retour utilisateur : "je veux avoir une option pour
+            // proposer le CV sans phrase d'accroche") : réglage
+            // d'affichage du document final -- même famille que
+            // modèle/couleur/format ci-dessus, jamais un choix de
+            // contenu (ne remplace pas l'onglet Accroche de l'écran IA,
+            // qui choisit LAQUELLE des 5 propositions garder -- ici,
+            // c'est "aucune du tout"). CV uniquement (ni lettre ni
+            // entretien, qui n'ont pas d'accroche) -- déjà dans le bloc
+            // docActif === 'cv' ci-dessus.
+            (docActif === 'cv'
+              ? '<div class="mt-2">' +
+                '<span class="pastille' + (etatApercuInline.cv.sansAccroche ? ' actif' : '') + '" id="pastilleSansAccrocheApercu" style="display:inline-block;">' +
+                (etatApercuInline.cv.sansAccroche ? '&#10004; ' : '') + 'Sans phrase d’accroche (profil)' +
+                '</span>' +
+                '</div>'
+              : '') +
             '</div>';
         })() +
         '</div>';
@@ -7385,8 +7437,12 @@ function genererBlobDocumentActif(type) {
         // ça revenait à ré-empaqueter un Blob déjà empaqueté, échec
         // silencieux à chaque fois, quel que soit le thème choisi.
         if (modele === 'composeur' && typeof genererDocxComposeur === 'function') {
-          return genererDocxComposeur(dossier, {}, couleur, etat.formatPage);
+          return genererDocxComposeur(dossier, {}, couleur, etat.formatPage, etat.sansAccroche);
         }
+        // TACHE (retour utilisateur : "sans accroche") : efface la copie
+        // locale "donnees" (déjà une reconstruction propre à cette
+        // génération, jamais dossier.profil lui-même).
+        if (etat.sansAccroche && donnees.profil) { donnees.profil = { profilIA: '', profilUtilisateur: '' }; }
         if (typeof _dnConstruireDocumentAvecOptions === 'function') {
           return chargerLibrairieDocxNatif().then(function (docx) {
             var document = _dnConstruireDocumentAvecOptions(docx, donnees, modele, couleur, etat.formatPage);
@@ -7605,6 +7661,22 @@ function brancherEvenementsResultats() {
       rechargerApercuInline('cv', etatApercuInline.cv.modele);
     });
   }
+  // TACHE (retour utilisateur : "le bouton ne pas inclure la phrase
+  // d'accroche, j'ai du mal à la voir -- fais-le en pastille") : plus
+  // visible qu'une case à cocher discrète, même style que les autres
+  // pastilles de l'app -- ce n'est pas un vrai contrôle de formulaire
+  // natif (un <span>, pas une case), donc la bascule visuelle (classe
+  // "actif" + coche) est gérée ici explicitement au clic, contrairement
+  // à une case à cocher qui se bascule elle-même nativement.
+  var pastilleSansAccrocheApercu = document.getElementById('pastilleSansAccrocheApercu');
+  if (pastilleSansAccrocheApercu) {
+    pastilleSansAccrocheApercu.addEventListener('click', function () {
+      etatApercuInline.cv.sansAccroche = !etatApercuInline.cv.sansAccroche;
+      this.classList.toggle('actif', etatApercuInline.cv.sansAccroche);
+      this.innerHTML = (etatApercuInline.cv.sansAccroche ? '&#10004; ' : '') + 'Sans phrase d’accroche (profil)';
+      rechargerApercuInline('cv', etatApercuInline.cv.modele);
+    });
+  }
   var btnRetirerPhotoApercu = document.getElementById('btnRetirerPhotoApercu');
   if (btnRetirerPhotoApercu) {
     btnRetirerPhotoApercu.addEventListener('click', function () {
@@ -7671,6 +7743,7 @@ function brancherEvenementsResultats() {
       var type = docActifActuel();
       ouvrirFenetreAssistantIA({
         nomAssistant: assistant.nom,
+        idAssistant: assistant.id,
         urlAssistant: assistant.url,
         construireTexteACopier: function () {
           return promptCache(type, texteProfilEffectif(type));
@@ -8124,12 +8197,31 @@ function ouvrirFenetreAssistantIA(config) {
     return '<li>' + etape.replace(/\{ASSISTANT\}/g, config.nomAssistant) + '</li>';
   }).join('');
 
+  // TACHE (retour utilisateur : "parfois les prompts ont du mal à
+  // s'appliquer correctement avec Gemini et Perplexity, pour le JSON") :
+  // comportement connu, pas un bug côté application -- Perplexity est un
+  // moteur de recherche avec réponses sourcées, il a tendance à vouloir
+  // ajouter des citations même quand on lui demande explicitement de ne
+  // produire que du JSON. Gemini a tendance à envelopper sa réponse dans
+  // un bloc de code Markdown ou une phrase d'introduction, malgré la
+  // consigne contraire. Repère pratique affiché uniquement pour ces 2
+  // assistants précis, pas une solution magique (le parseur de
+  // l'application absorbe déjà la plupart des cas -- guillemets
+  // typographiques, texte avant/après -- mais pas une citation insérée
+  // A L'INTERIEUR même du JSON).
+  var conseilsParAssistant = {
+    perplexity: 'Perplexity a tendance à ajouter des sources ou des citations, même dans une réponse censée être uniquement du JSON. Avant de coller, vérifiez qu’aucune mention de ce type ne s’est glissée dans le texte.',
+    gemini: 'Gemini enveloppe parfois sa réponse dans un bloc de code ou ajoute une courte phrase avant le JSON, malgré la consigne contraire. Cela ne pose généralement pas de problème, mais si le collage échoue, vérifiez qu’aucun texte superflu n’entoure le JSON.'
+  };
+  var conseilAssistant = conseilsParAssistant[config.idAssistant];
+
   var overlay = ouvrirFenetreERIP({
     titre: 'Avant de continuer vers ' + config.nomAssistant,
     contenuHTML:
       '<p class="small">Vous allez être redirigé(e) vers le site externe de <strong>' + config.nomAssistant + '</strong>. ' +
       'Rien de compliqué : voici exactement ce qui va se passer.</p>' +
       '<ol class="small ps-3 mb-3">' + etapesHTML + '</ol>' +
+      (conseilAssistant ? '<p class="small" style="background:#FFF8E6;border-radius:6px;padding:0.6rem 0.8rem;">&#128161; ' + conseilAssistant + '</p>' : '') +
       '<div class="d-flex justify-content-end mt-3">' +
       '<button type="button" id="validerAssistantIABtn" class="btn btn-primary">Je comprends, continuer</button>' +
       '</div>'
@@ -8391,7 +8483,13 @@ function texteProfil(type) {
     if (im.duree) { infos.push('durée : ' + im.duree); }
     if (im.dates) { infos.push('dates : ' + im.dates); }
     if (im.heures) { infos.push('heures/semaine : ' + im.heures); }
-    if (infos.length) { candidature += '- ' + (dossier.objectif === 'pmsmp' ? 'Immersion (PMSMP)' : (dossier.objectif === 'stage' ? 'Stage' : 'Alternance')) + ' : ' + infos.join(', ') + '\n'; }
+    var nomParcours = dossier.objectif === 'pmsmp' ? 'Immersion (PMSMP)' : (dossier.objectif === 'stage' ? 'Stage' : 'Alternance');
+    // TACHE (retour utilisateur : "si j'ai un nom pour la structure, il
+    // faut le mettre, sinon = général") : même si aucun champ n'est
+    // renseigné, l'IA doit savoir qu'il s'agit d'une recherche de
+    // stage/alternance/immersion, en candidature générale -- jamais
+    // silencieusement omis.
+    candidature += '- ' + nomParcours + ' : ' + (infos.length ? infos.join(', ') : 'candidature générale, aucune structure précise visée') + '\n';
     if (im.dispo && im.dispo.length) { candidature += '- Disponibilités : ' + im.dispo.join(', ') + '\n'; }
   }
   // TACHE (verification bout en bout : bloc Candidature -> IA) : le bloc
@@ -11557,7 +11655,7 @@ var etatApercuInline = {
   // TACHE (format A5) : formatPage (deja present dans cet objet) reutilise
   // tel quel -- 'A4' = format complet (comportement inchange), 'A5' =
   // contenu recadre + page reduite (CV uniquement pour l'instant).
-  cv: { modele: null, modeleA5: 'portrait', couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' },
+  cv: { modele: null, modeleA5: 'portrait', couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4', sansAccroche: false },
   lettre: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' },
   entretien: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' }
 };
@@ -12589,6 +12687,78 @@ BASE_CONNAISSANCES_ERIP.certifications = CATALOGUE_CERTIFICATIONS;
 // Note : "dossier" est une variable globale partagee avec data/metiers.js
 // (les deux fichiers sont des scripts classiques, pas des modules).
 
+// TACHE (retour utilisateur : "je veux aussi des modes : mode sombre, une
+// variante de couleurs et un mode daltonien... mémorisé d'une visite à
+// l'autre... l'icone doit être présente tout le long, sur toutes les
+// pages") : préférences d'affichage pures (thème/accent/daltonien) --
+// stockage INDEPENDANT de dossier/sauvegarderSession() a dessein :
+// réinitialiser une candidature ne doit jamais effacer ce réglage, qui
+// n'a rien à voir avec les données de candidature elles-mêmes.
+var CLE_PREFERENCES_AFFICHAGE = 'erip_preferences_affichage';
+
+function preferencesAffichageActuelles() {
+  var defaut = { theme: 'clair', accent: 'bleu', daltonien: '0' };
+  try {
+    var brut = localStorage.getItem(CLE_PREFERENCES_AFFICHAGE);
+    if (!brut) { return defaut; }
+    var lu = JSON.parse(brut);
+    return {
+      theme: (lu.theme === 'sombre') ? 'sombre' : 'clair',
+      accent: (lu.accent === 'orange' || lu.accent === 'vert') ? lu.accent : 'bleu',
+      daltonien: (lu.daltonien === '1') ? '1' : '0'
+    };
+  } catch (e) { return defaut; }
+}
+
+function appliquerPreferencesAffichage(prefs) {
+  var racine = document.documentElement;
+  if (prefs.theme === 'sombre') { racine.setAttribute('data-theme', 'sombre'); } else { racine.removeAttribute('data-theme'); }
+  if (prefs.accent === 'orange' || prefs.accent === 'vert') { racine.setAttribute('data-accent', prefs.accent); } else { racine.removeAttribute('data-accent'); }
+  if (prefs.daltonien === '1') { racine.setAttribute('data-daltonien', '1'); } else { racine.removeAttribute('data-daltonien'); }
+  try { localStorage.setItem(CLE_PREFERENCES_AFFICHAGE, JSON.stringify(prefs)); } catch (e) { /* stockage indisponible -- le reglage reste actif pour la session en cours, simplement pas memorise */ }
+  var panneau = document.getElementById('panneauPreferencesAffichage');
+  if (!panneau) { return; }
+  panneau.querySelectorAll('[data-pref-theme]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefTheme === prefs.theme); });
+  panneau.querySelectorAll('[data-pref-accent]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefAccent === prefs.accent); });
+  panneau.querySelectorAll('[data-pref-daltonien]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefDaltonien === prefs.daltonien); });
+}
+
+function initPreferencesAffichage() {
+  var prefs = preferencesAffichageActuelles();
+  appliquerPreferencesAffichage(prefs);
+
+  var bouton = document.getElementById('btnPreferencesAffichage');
+  var panneau = document.getElementById('panneauPreferencesAffichage');
+  if (!bouton || !panneau) { return; }
+
+  bouton.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panneau.hidden = !panneau.hidden;
+  });
+  // Ferme le panneau au clic ailleurs sur la page, jamais au clic a
+  // l'interieur du panneau lui-meme (sinon impossible de choisir une
+  // option sans le refermer aussitot).
+  document.addEventListener('click', function (e) {
+    if (!panneau.hidden && !panneau.contains(e.target) && e.target !== bouton) { panneau.hidden = true; }
+  });
+
+  panneau.querySelectorAll('[data-pref-theme]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = preferencesAffichageActuelles(); p.theme = this.dataset.prefTheme; appliquerPreferencesAffichage(p);
+    });
+  });
+  panneau.querySelectorAll('[data-pref-accent]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = preferencesAffichageActuelles(); p.accent = this.dataset.prefAccent; appliquerPreferencesAffichage(p);
+    });
+  });
+  panneau.querySelectorAll('[data-pref-daltonien]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = preferencesAffichageActuelles(); p.daltonien = this.dataset.prefDaltonien; appliquerPreferencesAffichage(p);
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   naviguerVers('cv');
   // TACHE (prompts externes) : lance le chargement en arriere-plan des 3
@@ -12596,4 +12766,5 @@ document.addEventListener('DOMContentLoaded', function () {
   // les clics ulterieurs sur "Creer votre CV"/"Lettre de motivation"/
   // "Preparer un entretien" (voir promptCache()/chargerPromptsExternes()).
   chargerPromptsExternes();
+  initPreferencesAffichage();
 });

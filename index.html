@@ -16,6 +16,33 @@
 
   <div id="app"></div>
 
+  <!-- TACHE (retour utilisateur : "je veux aussi des modes : mode sombre,
+       une variante de couleurs et un mode daltonien... l'icone doit être
+       présente tout le long, sur toutes les pages") : en dehors de #app
+       (jamais régénéré par le rendu JS des pages), pour rester visible
+       quel que soit l'écran affiché. Câblé une seule fois au chargement
+       (voir app.js, initPreferencesAffichage()). -->
+  <button type="button" id="btnPreferencesAffichage" aria-label="Préférences d'affichage" title="Préférences d'affichage">&#128065;</button>
+  <div id="panneauPreferencesAffichage" hidden>
+    <h6>&#128065; Affichage</h6>
+    <div class="pref-affichage-groupe">
+      <span class="pref-affichage-label">Thème</span>
+      <button type="button" data-pref-theme="clair">Clair</button>
+      <button type="button" data-pref-theme="sombre">Sombre</button>
+    </div>
+    <div class="pref-affichage-groupe">
+      <span class="pref-affichage-label">Couleur d'accent</span>
+      <button type="button" data-pref-accent="bleu">Bleu</button>
+      <button type="button" data-pref-accent="orange">Orange</button>
+      <button type="button" data-pref-accent="vert">Vert</button>
+    </div>
+    <div class="pref-affichage-groupe">
+      <span class="pref-affichage-label">Mode daltonien</span>
+      <button type="button" data-pref-daltonien="0">Désactivé</button>
+      <button type="button" data-pref-daltonien="1">Activé</button>
+    </div>
+  </div>
+
   <!-- Ordre important : du plus stable (donnees + moteur) au plus mouvant (interface) -->
   <!-- charset UTF-8 explicite : garantit un affichage correct des accents en ouverture locale -->
   <script src="data/metiers.js" charset="UTF-8"></script>

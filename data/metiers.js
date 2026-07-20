@@ -954,11 +954,10 @@ function ouvrirFenetreCompetence(competence) {
 
   document.body.appendChild(fenetre);
 
-  // Fermeture : croix, clic sur le fond, touche Echap
+  // Fermeture : croix, touche Echap (plus de clic sur le fond -- retour
+  // utilisateur : un clic accidentel a cote, notamment au trackpad, ne
+  // doit plus fermer la fenetre).
   document.getElementById('fermerCompetenceBtn').addEventListener('click', fermerFenetreCompetence);
-  fenetre.addEventListener('click', function (e) {
-    if (e.target === fenetre) { fermerFenetreCompetence(); }
-  });
   document.addEventListener('keydown', function echap(e) {
     if (e.key === 'Escape') {
       fermerFenetreCompetence();
@@ -1319,7 +1318,9 @@ function ouvrirAssistantDepotCV(mode, options) {
   fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
     'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
   document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerAssistantDepotCV(); } });
+  // TACHE (retour utilisateur : plus de fermeture au clic sur le fond) :
+  // la croix (fermerAssistantDepotCVBtn, plus bas) reste le seul moyen
+  // explicite de fermer, en plus de la fin naturelle du parcours.
 
   function etapeSuivanteWizard() {
     fermerAssistantDepotCV();
@@ -2211,7 +2212,8 @@ function ouvrirGrandEditeurMasquage(etatPartage, img, onFermeture) {
     overlay.remove();
     if (typeof onFermeture === 'function') { onFermeture(); }
   }
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) { fermer(); } });
+  // TACHE (retour utilisateur : plus de fermeture au clic sur le fond) :
+  // la croix (btnFermerGrandEditeur) reste le seul moyen explicite de fermer.
   document.getElementById('btnFermerGrandEditeur').addEventListener('click', fermer);
   var redessinerGrand = initialiserCanvasEditeur(document.getElementById('canvasGrandEditeurCV'), img, etatPartage, largeurMax);
   // TACHE (retour utilisateur : rotation dans la grande vue) : meme
