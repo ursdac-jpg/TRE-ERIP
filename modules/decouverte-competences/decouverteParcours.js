@@ -98,7 +98,9 @@ function ouvrirDecouverteCompetences() {
   fenetre.style.cssText = 'position:fixed;inset:0;background:rgba(11,26,51,0.55);' +
     'display:flex;align-items:center;justify-content:center;z-index:2000;padding:1rem;';
   document.body.appendChild(fenetre);
-  fenetre.addEventListener('click', function (e) { if (e.target === fenetre) { fermerDecouverteCompetences(); } });
+  // TACHE (retour utilisateur : plus de fermeture au clic sur le fond) :
+  // la croix (fermerDecouverteBtn, plus bas) reste le seul moyen
+  // explicite de fermer, en plus de la fin naturelle du parcours.
 
   function afficherEtape(numero) {
     etat.etapeCourante = numero;
@@ -286,7 +288,14 @@ function ouvrirDecouverteCompetences() {
           pastilleChoisie(dossier.metierCible, 'data-changer-metier="1"') + '<div class="mb-3"></div>';
 
         if (etat.modeRecherche === 'stage') {
-          colonneGauche += '<p class="fw-semibold mb-2 mt-3">Avez-vous une structure d’accueil en tête ?</p>' +
+          // TACHE (retour utilisateur : "pour un CIP le mot structure ça
+          // lui parle, pour un bénéficiaire il ne sait pas de quoi il
+          // s'agit -- il faut en donner des exemples précis") : exemples
+          // concrets ajoutés entre parenthèses, la première fois que le
+          // mot apparaît dans cette question -- jamais un jargon
+          // professionnel non expliqué face à un public qui ne le
+          // maîtrise pas forcément.
+          colonneGauche += '<p class="fw-semibold mb-2 mt-3">Avez-vous une structure d’accueil en tête (une entreprise, une association, une exploitation agricole, chez un particulier...) ?</p>' +
             '<div class="cartes" style="margin:0.5rem 0;justify-content:flex-start;">' +
             carteChoix('stage-structure', 'oui', etat.stageAvecStructure === true, '', 'Oui, une structure précise') +
             carteChoix('stage-structure', 'non', etat.stageAvecStructure === false, '', 'Non, je cherche de façon générale') +
@@ -294,7 +303,7 @@ function ouvrirDecouverteCompetences() {
           if (etat.stageAvecStructure === true) {
             var rcs = dossier.rechercheCandidature || { entreprise: '', site: '', lienOffre: '' };
             colonneDroite += '<div class="mt-2">' +
-              '<input type="text" class="form-control form-control-sm mb-2" id="decouverteEntrepriseOffre" placeholder="Nom de la structure" value="' + echapperAttribut(rcs.entreprise) + '">' +
+              '<input type="text" class="form-control form-control-sm mb-2" id="decouverteEntrepriseOffre" placeholder="Nom de la structure (entreprise, association...)" value="' + echapperAttribut(rcs.entreprise) + '">' +
               '<input type="text" class="form-control form-control-sm mb-2" id="decouverteSiteOffre" placeholder="Site (facultatif)" value="' + echapperAttribut(rcs.site) + '">' +
               '<textarea class="form-control form-control-sm" id="decouverteLienOffre" rows="2" placeholder="Lien ou texte de l’offre de stage (facultatif)">' + echapperAttribut(rcs.lienOffre) + '</textarea>' +
               '</div>';

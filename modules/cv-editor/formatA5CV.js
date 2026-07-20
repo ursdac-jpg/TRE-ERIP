@@ -364,21 +364,15 @@ function _dnConstruireDocumentAvecOptions(docx, objetCV, modeleId, couleurId, fo
 // - formatPage === 'A5' : "Mini CV (A5)", contenu tres recadre
 //   (construireObjetCVPourExportA5, TOUJOURS applique) + page A5 reelle.
 // ============================================================
-function genererDocxNatifCVFormat(modeleId, couleurId, formatPage) {
-  // TACHE (retour utilisateur : "A4 Détaillé et A4 Essentiel sont
-  // identiques pour ce modèle") : formatPage n'était jamais transmis --
-  // le Composeur produisait donc toujours la même chose, quel que soit
-  // le format choisi. Desormais transmis (theme et variantes de
-  // composants restent a leur valeur par defaut en V1, seul formatPage
-  // change quelque chose pour l'instant).
-  // TACHE (Theme Engine, étape B2 -- sélecteur manuel de thème) :
-  // couleurId sert désormais d'identifiant de thème pour ce modèle
-  // précis (construirePaletteCouleurs() l'affiche comme tel dès que
-  // modeleActif === 'composeur', voir app.js) -- jamais un nouveau canal
-  // parallèle. Repli sur Sobre déjà garanti par composeurObtenirTheme()
-  // si couleurId est absent ou ne correspond à aucun thème connu.
+function genererDocxNatifCVFormat(modeleId, couleurId, formatPage, sansAccroche) {
+  // TACHE (retour utilisateur : "je veux avoir une option pour proposer
+  // le CV sans phrase d'accroche") : sansAccroche efface le profil/
+  // accroche UNIQUEMENT sur la copie locale objetCV (ci-dessous, dans le
+  // .then()) -- jamais dossier.profil lui-même, qui doit rester intact
+  // pour que la personne puisse réactiver l'accroche plus tard sans
+  // avoir à la retaper.
   if (modeleId === 'composeur') {
-    return genererDocxComposeur(dossier, {}, couleurId, formatPage);
+    return genererDocxComposeur(dossier, {}, couleurId, formatPage, sansAccroche);
   }
 
   var promesseObjet;
@@ -391,6 +385,7 @@ function genererDocxNatifCVFormat(modeleId, couleurId, formatPage) {
   }
 
   return promesseObjet.then(function (objetCV) {
+    if (sansAccroche && objetCV.profil) { objetCV.profil = { profilIA: '', profilUtilisateur: '' }; }
     return chargerLibrairieDocxNatif().then(function (docx) {
       var document = _dnConstruireDocumentAvecOptions(docx, objetCV, modeleId, couleurId, formatPage);
       if (!document) { throw new Error('Modele non couvert pour ce format.'); }

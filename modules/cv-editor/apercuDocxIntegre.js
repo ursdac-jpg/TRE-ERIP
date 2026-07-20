@@ -71,8 +71,12 @@ function _configApercuDocx(type) {
       // priorite si disponible -- gere lui-meme A4 (comportement inchange,
       // via construireObjetCVPourExport) et A5 (contenu recadre + page
       // reduite). Repli sur l'ancien chemin si le fichier n'est pas charge.
+      // TACHE (retour utilisateur : "sans accroche") : lu directement ici
+      // (etatApercuInline.cv, déjà accessible dans ce fichier) -- jamais
+      // ajouté à la signature générique de generer(), partagée avec
+      // lettre/entretien qui n'ont pas ce réglage.
       generer: function (modele, couleurId, formatPage) {
-        if (typeof genererDocxNatifCVFormat === 'function') { return genererDocxNatifCVFormat(modele, couleurId, formatPage); }
+        if (typeof genererDocxNatifCVFormat === 'function') { return genererDocxNatifCVFormat(modele, couleurId, formatPage, etatApercuInline.cv.sansAccroche); }
         var promesseObjet = (typeof construireObjetCVPourExport === 'function')
           ? construireObjetCVPourExport(modele)
           : Promise.resolve(normaliserDonneesCV(dossier));

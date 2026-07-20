@@ -18,7 +18,7 @@
    avec les 16 modèles historiques.
    ============================================================ */
 
-function genererDocxComposeur(dossierSource, variantesChoisies, idTheme, formatPage) {
+function genererDocxComposeur(dossierSource, variantesChoisies, idTheme, formatPage, sansAccroche) {
   var objetCVBrut = normaliserDonneesCV(dossierSource);
   // TACHE (retour utilisateur : "j'ai bien donné les dates mais je ne les
   // vois pas dans le CV") : bug majeur trouvé -- le Composeur ne passait
@@ -39,6 +39,10 @@ function genererDocxComposeur(dossierSource, variantesChoisies, idTheme, formatP
   var objetCV = (typeof appliquerMoteurDecisionCV === 'function')
     ? appliquerMoteurDecisionCV(objetCVBrut, recommandationsIACV, {})
     : objetCVBrut;
+  // TACHE (retour utilisateur : "sans accroche") : efface uniquement
+  // cette copie locale objetCV (déjà une reconstruction propre à cette
+  // génération, jamais dossierSource.profil lui-même).
+  if (sansAccroche && objetCV.profil) { objetCV.profil = { profilIA: '', profilUtilisateur: '' }; }
   var profil = composeurAnalyserProfil(objetCV, dossierSource.objectif);
   var decisions = composeurAppliquerRegles(profil);
   // TACHE (composeur-theme-engine-conception.md, décision tranchée) : le
