@@ -60,7 +60,14 @@ var CAPACITES_A5_CV = {
 // complete (l'objectif est des experiences plus COURTES, pas moins
 // nombreuses).
 var CAPACITES_A4_ESSENTIEL_CV = {
-  experiences: 8, formations: 3, langues: 4, certifications: 3,
+  // TACHE (retour utilisateur : "Essentiel autorise 8 expériences,
+  // Détaillé seulement 5 -- l'inverse de ce qu'on attendrait") : ramené à
+  // 4 (moins que les 5 de Détaillé, cohérent avec "on ne garde que les
+  // clés") -- chaque expérience reste affichée en une ligne condensée
+  // (mode compact, voir composeurComposition.js / exportDocxNatifCV.js),
+  // mais le NOMBRE d'expériences retenues doit lui aussi refléter un vrai
+  // resserrement, pas l'inverse.
+  experiences: 4, formations: 3, langues: 4, certifications: 3,
   loisirs: 3, engagements: 2, competences: 6
 };
 

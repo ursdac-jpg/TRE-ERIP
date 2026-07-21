@@ -33,6 +33,14 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
   var TEXTE = '1A1A1A';
   var ACCENT = opts.primaire || '1A1A1A';
   var identite = objetLettre.identite || {};
+  // TACHE (retour utilisateur : "la lettre ne doit pas dépasser une page,
+  // à la limite on joue sur la police") : tailles paramétrables (repli
+  // sur les valeurs d'origine si absentes, comportement inchangé pour
+  // tout appelant qui ne les précise pas) -- décidées par le seul appelant
+  // public (genererDocxNatifLettre(), plus bas) selon la longueur réelle
+  // du texte, jamais ici (cette fonction dessine, elle ne décide jamais).
+  var TAILLE_ENTETE = opts.tailleEnTete || 20;
+  var TAILLE_CORPS = opts.tailleCorps || 21;
   // TACHE (retour utilisateur : lettre modifiable, champs grises pour
   // l'identite) : quand une information (prenom/nom/telephone/e-mail)
   // manque -- cas frequent pour le parcours "Co-construire votre lettre
@@ -47,14 +55,14 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
   }
 
   function ligneExpediteur(texte) {
-    return new Paragraph({ spacing: { after: 20 }, children: [ new TextRun({ text: texte, size: 20, color: TEXTE, font: 'Georgia' }) ] });
+    return new Paragraph({ spacing: { after: 20 }, children: [ new TextRun({ text: texte, size: TAILLE_ENTETE, color: TEXTE, font: 'Georgia' }) ] });
   }
   // Meme principe que ligneExpediteur(), mais pour un champ pouvant etre
   // un placeholder gris (telephone, e-mail).
   function ligneExpediteurOuPlaceholder(valeur, libellePlaceholder) {
     var champ = champOuPlaceholder(valeur, libellePlaceholder);
     return new Paragraph({ spacing: { after: 20 }, children: [
-      new TextRun({ text: champ.texte, italics: champ.placeholder, size: 20, color: champ.placeholder ? GRIS_PLACEHOLDER : TEXTE, font: 'Georgia' })
+      new TextRun({ text: champ.texte, italics: champ.placeholder, size: TAILLE_ENTETE, color: champ.placeholder ? GRIS_PLACEHOLDER : TEXTE, font: 'Georgia' })
     ] });
   }
 
@@ -68,9 +76,9 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
   var champPrenom = champOuPlaceholder(identite.prenom, '[Votre prénom]');
   var champNom = champOuPlaceholder(identite.nom, '[Votre nom]');
   enfants.push(new Paragraph({ spacing: { after: 20 }, children: [
-    new TextRun({ text: champPrenom.texte, bold: true, italics: champPrenom.placeholder, color: champPrenom.placeholder ? GRIS_PLACEHOLDER : ACCENT, size: 20, font: 'Georgia' }),
-    new TextRun({ text: ' ', bold: true, size: 20, font: 'Georgia' }),
-    new TextRun({ text: champNom.texte, bold: true, italics: champNom.placeholder, color: champNom.placeholder ? GRIS_PLACEHOLDER : ACCENT, size: 20, font: 'Georgia' })
+    new TextRun({ text: champPrenom.texte, bold: true, italics: champPrenom.placeholder, color: champPrenom.placeholder ? GRIS_PLACEHOLDER : ACCENT, size: TAILLE_ENTETE, font: 'Georgia' }),
+    new TextRun({ text: ' ', bold: true, size: TAILLE_ENTETE, font: 'Georgia' }),
+    new TextRun({ text: champNom.texte, bold: true, italics: champNom.placeholder, color: champNom.placeholder ? GRIS_PLACEHOLDER : ACCENT, size: TAILLE_ENTETE, font: 'Georgia' })
   ] }));
   if (identite.adresse) { enfants.push(ligneExpediteur(identite.adresse)); }
   if (identite.ville) { enfants.push(ligneExpediteur(identite.ville)); }
@@ -84,7 +92,7 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
   // Date (alignee a droite, convention courrier)
   enfants.push(new Paragraph({
     alignment: AlignmentType.RIGHT, spacing: { before: 300, after: 300 },
-    children: [ new TextRun({ text: objetLettre.date || '', size: 20, color: TEXTE, font: 'Georgia' }) ]
+    children: [ new TextRun({ text: objetLettre.date || '', size: TAILLE_ENTETE, color: TEXTE, font: 'Georgia' }) ]
   }));
 
   // Objet
@@ -92,8 +100,8 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
     enfants.push(new Paragraph({
       spacing: { after: 300 },
       children: [
-        new TextRun({ text: 'Objet : ', bold: true, size: 21, color: ACCENT, font: 'Georgia' }),
-        new TextRun({ text: objetLettre.objet, size: 21, color: TEXTE, font: 'Georgia' })
+        new TextRun({ text: 'Objet : ', bold: true, size: TAILLE_CORPS, color: ACCENT, font: 'Georgia' }),
+        new TextRun({ text: objetLettre.objet, size: TAILLE_CORPS, color: TEXTE, font: 'Georgia' })
       ]
     }));
   }
@@ -105,7 +113,7 @@ function _dnlConstruireSobre(docx, objetLettre, opts) {
   paragraphesTexte.forEach(function (p) {
     enfants.push(new Paragraph({
       spacing: { after: 200 }, alignment: AlignmentType.JUSTIFIED,
-      children: [ new TextRun({ text: p.trim(), size: 21, color: TEXTE, font: 'Georgia' }) ]
+      children: [ new TextRun({ text: p.trim(), size: TAILLE_CORPS, color: TEXTE, font: 'Georgia' }) ]
     }));
   });
 
@@ -118,9 +126,56 @@ var GENERATEURS_DOCX_NATIFS_LETTRE = {
   'sobre': function (docx, objetLettre, opts) { return _dnlConstruireSobre(docx, objetLettre, opts); }
 };
 
+// TACHE (retour utilisateur : "la lettre dépasse une page, au milieu je
+// n'ai plus le texte mais un mot qui n'est pas fini, des points, puis
+// plus rien -- je veux imposer une seule page, à la limite jouer sur la
+// police plutôt que couper le texte") : seuils vérifiés par test réel
+// (génération + conversion PDF + comptage de pages, pas des valeurs
+// devinées) -- avec l'en-tête réel de la lettre (identité, date, objet)
+// et un texte de remplissage réaliste :
+//   - jusqu'à ~4200 caractères : taille normale (10.5pt corps / 10pt
+//     en-tête, TAILLE_CORPS=21/TAILLE_ENTETE=20) tient sur une page.
+//   - jusqu'à ~5000 caractères : 9.5pt/9pt (19/18) suffit.
+//   - jusqu'à ~5500 caractères : 9pt/8.5pt (18/17) suffit.
+//   - au-delà (rare, un texte anormalement long) : même à la plus petite
+//     taille lisible, la coupe reste nécessaire -- _dnTronquerTexte()
+//     (formatA5CV.js) coupe alors proprement au dernier espace, jamais
+//     en plein mot, en tout dernier recours seulement, jamais en premier.
+// Ne s'applique qu'au format par défaut ('A4'/absent) : 'A4-essentiel'
+// et 'A5' ont déjà leur propre troncature dédiée, volontairement plus
+// courte (voir LONGUEURS_TEXTE_LETTRE plus haut) -- jamais les deux
+// mécanismes en même temps.
+var PALIERS_TAILLE_LETTRE = [
+  { longueurMax: 4200, tailleCorps: 21, tailleEnTete: 20 },
+  { longueurMax: 5000, tailleCorps: 19, tailleEnTete: 18 },
+  { longueurMax: 5500, tailleCorps: 18, tailleEnTete: 17 }
+];
+var LONGUEUR_MAX_ABSOLUE_LETTRE = 5500;
+
 function genererDocxNatifLettre(modeleId, objetLettre, opts) {
   var generateur = GENERATEURS_DOCX_NATIFS_LETTRE[modeleId];
   if (!generateur) { return Promise.reject(new Error('Pas de generateur Word natif pour ce modele de lettre.')); }
+  opts = opts || {};
+  if (!opts.formatPage || opts.formatPage === 'A4') {
+    var longueur = (objetLettre.texte || '').length;
+    var palier = PALIERS_TAILLE_LETTRE.filter(function (p) { return longueur <= p.longueurMax; })[0];
+    if (palier) {
+      opts = { primaire: opts.primaire, formatPage: opts.formatPage, tailleCorps: palier.tailleCorps, tailleEnTete: palier.tailleEnTete };
+    } else {
+      // Dernier recours seulement : meme a la plus petite taille lisible,
+      // le texte depasserait encore une page -- coupe propre (jamais en
+      // plein mot), pas de reduction de police supplementaire au-dela
+      // (une police plus petite que 8.5pt nuirait a la lisibilite).
+      var dernierPalier = PALIERS_TAILLE_LETTRE[PALIERS_TAILLE_LETTRE.length - 1];
+      var objetTronque = {};
+      Object.keys(objetLettre).forEach(function (cle) { objetTronque[cle] = objetLettre[cle]; });
+      objetTronque.texte = (typeof _dnTronquerTexte === 'function')
+        ? _dnTronquerTexte(objetLettre.texte, LONGUEUR_MAX_ABSOLUE_LETTRE)
+        : objetLettre.texte;
+      objetLettre = objetTronque;
+      opts = { primaire: opts.primaire, formatPage: opts.formatPage, tailleCorps: dernierPalier.tailleCorps, tailleEnTete: dernierPalier.tailleEnTete };
+    }
+  }
   return chargerLibrairieDocxNatif().then(function (docx) {
     var document = generateur(docx, objetLettre, opts);
     return docx.Packer.toBlob(document);

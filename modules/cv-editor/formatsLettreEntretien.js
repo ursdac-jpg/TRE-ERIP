@@ -35,7 +35,16 @@ function construireObjetLettrePourExportFormat(formatPage) {
   if (!limite) { return objetLettre; } // 'A4' (Détaillé) ou absent : texte complet, inchange
   var objetTronque = {};
   Object.keys(objetLettre).forEach(function (cle) { objetTronque[cle] = objetLettre[cle]; });
-  objetTronque.texte = _dnTronquerTexte(objetLettre.texte, limite);
+  // TACHE (retour utilisateur : "je veux qu'on demande à l'IA une vraie
+  // version courte, pas une coupure de la version longue") : utilise
+  // objetLettre.texteCourt (rédigé séparément par l'IA, voir lettre.md)
+  // quand il existe -- jamais une coupure dans ce cas. Ne retombe sur la
+  // troncature (coupe propre, voir _dnTronquerTexte) que si aucun texte
+  // court n'a été fourni (réponse IA antérieure à ce champ, ou lettre
+  // "Co-construire" qui ne passe pas par ce schéma).
+  objetTronque.texte = objetLettre.texteCourt
+    ? objetLettre.texteCourt
+    : _dnTronquerTexte(objetLettre.texte, limite);
   return objetTronque;
 }
 

@@ -41,6 +41,13 @@ function normaliserDonneesLettre(dossierSource) {
     },
     date: dateAujourdhui,
     objet: lettreIA.objet || '',
-    texte: lettreIA.texte || ''
+    texte: lettreIA.texte || '',
+    // TACHE (retour utilisateur : "A4 Essentiel" avec un vrai texte court
+    // rédigé par l'IA, pas une coupure) : transporté tel quel, vide si
+    // absent (réponses IA antérieures à ce champ, ou édition manuelle
+    // n'ayant jamais touché la version courte) -- voir
+    // construireObjetLettrePourExportFormat() (formatsLettreEntretien.js),
+    // qui l'utilise à la place de la troncature quand il est disponible.
+    texteCourt: lettreIA.texteCourt || ''
   };
 }
