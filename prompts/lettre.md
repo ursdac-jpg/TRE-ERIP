@@ -62,7 +62,8 @@ Ne jamais inventer une expérience, une motivation, un fait sur l'entreprise ou 
 
 1. Détermine ta stratégie (angle retenu, arguments sélectionnés) selon la méthode ci-dessus.
 2. Rédige 3 versions complètes et distinctes de la lettre, chacune avec un objet court et pertinent puis le corps entier (formule d'appel, développement, formule de politesse), prêtes à être affichées et imprimées telles quelles — pas des résumés, pas des fragments, la lettre elle-même à chaque fois. Les 3 versions doivent raconter la même histoire (mêmes faits, même candidature) mais avec un angle ou un ton réellement différent d'une version à l'autre — par exemple une plus factuelle et directe, une plus incarnée et personnelle, une plus centrée sur la cohérence du projet ou la reconversion selon le contexte — jamais trois fois la même lettre reformulée à l'identique. La personne choisira ensuite celle qui lui convient le mieux, et pourra la modifier librement.
-3. Avant de conclure, relis chacune de tes 3 versions comme le ferait un recruteur exigeant : répond-elle clairement aux trois questions (pourquoi cette personne, pourquoi cette entreprise ou ce secteur, pourquoi maintenant) ? Le vocabulaire est-il celui du secteur visé ? Tient-elle sur une seule page sans aucune phrase de remplissage ? Si un point peut encore être resserré ou renforcé, corrige-le avant de répondre plutôt que de livrer un premier jet perfectible.
+3. Pour **chacune** de ces 3 versions, rédige également une variante courte (`texteCourt`, dans le JSON plus bas) — destinée à un format resserré sur une page, visant environ 800 à 900 caractères. **Ce n'est jamais un extrait ou une coupure de la version longue** : c'est une lettre à part entière, avec sa propre formule d'appel, un développement condensé aux arguments les plus forts uniquement, et sa propre formule de politesse — cohérente et complète en elle-même, jamais une phrase interrompue ni une fin qui manque.
+4. Avant de conclure, relis chacune de tes 3 versions (longues et courtes) comme le ferait un recruteur exigeant : répond-elle clairement aux trois questions (pourquoi cette personne, pourquoi cette entreprise ou ce secteur, pourquoi maintenant) ? Le vocabulaire est-il celui du secteur visé ? Tient-elle sur une seule page sans aucune phrase de remplissage ? Si un point peut encore être resserré ou renforcé, corrige-le avant de répondre plutôt que de livrer un premier jet perfectible.
 
 ## Format de ta réponse
 
@@ -72,8 +73,8 @@ Termine ensuite IMPÉRATIVEMENT ta réponse par un bloc de code contenant unique
 
 ```json
 {"accroche": "...", "arguments": ["...", "..."], "versions": [
-  {"objet": "...", "texte": "..."},
-  {"objet": "...", "texte": "..."},
-  {"objet": "...", "texte": "..."}
+  {"objet": "...", "texte": "...", "texteCourt": "..."},
+  {"objet": "...", "texte": "...", "texteCourt": "..."},
+  {"objet": "...", "texte": "...", "texteCourt": "..."}
 ]}
 ```

@@ -2222,12 +2222,17 @@ function pageChoixCV() {
     // entretien (droite), remontees legerement, sans toucher les 3 cartes
     // principales ni se chevaucher entre elles.
     '<div class="zone-ateliers-entretien">' +
-      '<a href="https://www.linscription.com/pro/catalogue-missionlocale-r.php?P1=11241&P2=411" ' +
-        'target="_blank" rel="noopener" class="carte carte-erip"><i class="bi bi-mortarboard"></i>' +
-        '<h3>Ateliers &amp; visites d’entreprise</h3>' +
-        '<p>Découvrez gratuitement les ateliers thématiques et les visites d’entreprise proposés par l’ERIP du Bergeracois.</p>' +
-        '<p class="carte-erip-action">&#128073; Voir les prochaines dates &#8599;</p>' +
-      '</a>' +
+      // TACHE (retour utilisateur : "Vous hésitez encore ? Explorez
+      // d'autres pistes... comme un bouton, pas des cartes") : Ateliers
+      // ERIP a fusionné dans la fenêtre de ressources (voir
+      // ouvrirFenetreRessourcesExplorer()), plus une carte séparée ici --
+      // un simple bouton discret, cohérent avec la demande de ne pas
+      // alourdir la page d'accueil.
+      '<button type="button" id="btnRessourcesExplorerAccueil" class="carte carte-erip carte-ressources-explorer">' +
+        '<i class="bi bi-signpost-2"></i>' +
+        '<h3>Vous hésitez encore ?</h3>' +
+        '<p>Explorez d’autres pistes : ateliers, formations, immersions, autres métiers...</p>' +
+      '</button>' +
       '<div class="carte carte-entretien-direct" id="btnPreparationAccueil"><i class="bi bi-briefcase"></i>' +
         '<h3>Boîte à outils</h3>' +
         '<p>Préparez un entretien ou co-construisez votre lettre de motivation avec l’assistant IA.</p>' +
@@ -2281,6 +2286,17 @@ function pageChoixCV() {
       // engagement, meme sans passer par le CV.
       effacerSauvegarde();
       if (typeof ouvrirChoixPreparationAccueil === 'function') { ouvrirChoixPreparationAccueil(); }
+    });
+  }
+  // TACHE (retour utilisateur : "Vous hésitez encore ? Explorez d'autres
+  // pistes") : ouvrir cette fenêtre n'est PAS un engagement dans un
+  // parcours (contrairement aux 3 cartes principales et à la Boîte à
+  // outils, ci-dessus) -- jamais d'effacerSauvegarde() ici, la personne
+  // ne fait qu'explorer, elle n'a encore rien commencé.
+  var btnRessourcesExplorerAccueil = document.getElementById('btnRessourcesExplorerAccueil');
+  if (btnRessourcesExplorerAccueil) {
+    btnRessourcesExplorerAccueil.addEventListener('click', function () {
+      ouvrirFenetreRessourcesExplorer('Vous hésitez encore ? Voici de quoi explorer d’autres pistes.');
     });
   }
 
@@ -6089,7 +6105,7 @@ function blocERIP(config) {
       '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
       (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
       '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
-      '<span class="bloc-erip-compteur">' + texteCompteur + '</span>' +
+      '<span class="bloc-erip-compteur' + (blocComplet ? '' : ' bloc-erip-compteur-incomplet ' + classeCompteurCours) + '">' + texteCompteur + '</span>' +
       indicateurComplet +
       '<span class="bloc-erip-fleche">&#9660;</span>' +
       '</div>' +
@@ -6163,7 +6179,7 @@ function blocERIP(config) {
     '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
     (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
     '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
-    '<span class="bloc-erip-compteur">' + texteCompteur + '</span>' +
+    '<span class="bloc-erip-compteur' + (blocComplet ? '' : ' bloc-erip-compteur-incomplet ' + classeCompteurCours) + '">' + texteCompteur + '</span>' +
     indicateurComplet +
     '<span class="bloc-erip-fleche">&#9650;</span>' +
     '</div>' +
@@ -7159,24 +7175,21 @@ function pageResultats() {
         // pas un modele en particulier.
         (function () {
           var LIBELLES_MINI = { cv: 'Mini CV (A5)', lettre: 'Mini lettre (A5)', entretien: 'Fiche compacte (A5)' };
-          // TACHE (retour utilisateur : "A4 Essentiel" pas utile pour la
-          // lettre) : le CV garde ses 3 formats (A4 Détaillé/A4 Essentiel/
-          // Mini A5, inchange). La lettre n'a plus qu'un seul format
-          // possible : A4 Détaillé -- une lettre de motivation n'a pas
-          // besoin d'un format "allégé" séparé (elle tient déjà sur une
-          // page par construction, voir lettre.md). L'entretien, lui,
-          // n'a jamais eu qu'un seul format non plus (A4 Détaillé), pour
-          // les memes raisons qu'avant (document de préparation complet).
+          // TACHE (retour utilisateur : "je veux bien A4 Détaillé et A4
+          // Essentiel pour lettre et entretien, je n'ai pas besoin de
+          // A5") : les 3 types ont désormais A4 Détaillé + A4 Essentiel
+          // -- seul le CV garde en plus Mini (A5), qui reste réservé au
+          // CV uniquement (jamais proposé pour lettre/entretien).
           var boutonsFormat =
             '<button type="button" class="bouton-format-page-accordeon' + ((etatApercuInline[docActif].formatPage || 'A4') === 'A4' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A4">A4 Détaillé</button>';
+          boutonsFormat += '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A4-essentiel' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A4-essentiel">A4 Essentiel</button>';
           if (docActif === 'cv') {
-            boutonsFormat += '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A4-essentiel' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A4-essentiel">A4 Essentiel</button>';
             boutonsFormat += '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A5' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A5">' + LIBELLES_MINI[docActif] + '</button>';
           }
           var LIBELLES_EXPLICATION = {
             cv: 'A4 Essentiel : contenu allégé sur une page A4 normale. Mini CV (A5) : vraie demi-page, rubriques essentielles uniquement. Dans les deux cas, la sélection se fait automatiquement selon le métier visé.',
-            lettre: '',
-            entretien: ''
+            lettre: 'A4 Essentiel : une version courte, rédigée spécifiquement pour tenir largement sur une page, jamais une coupure de la version longue.',
+            entretien: 'A4 Essentiel : présentation resserrée et listes limitées aux points les plus importants.'
           };
           return '<div style="margin-top:1.1rem;padding-top:0.9rem;border-top:1px solid #E5E7EB;">' +
             '<h4 style="font-size:0.85rem;font-weight:700;margin-bottom:0.5rem;">&#128209; Format</h4>' +
@@ -7319,15 +7332,20 @@ function pageResultats() {
   // la meme chose, a l'interieur de la pyramide -- plus de doublon en
   // dehors du parcours.
 
-  // TACHE (migration "Ressources et liens utiles") : simple deplacement en
-  // bas de page, aucun changement fonctionnel.
-  var accordeonRessources = blocAccordeon('ressources', titreEtape('&#128218; Ressources et liens utiles'),
-    'Vous souhaitez poursuivre votre réflexion ou découvrir d’autres possibilités ? Cliquez ici pour accéder aux ressources complémentaires proposées.',
-    '<div class="outils-grid">' +
-    '<div class="outil-item" data-outil="pmsmp"><i class="bi bi-search"></i> &#128269; Trouver une immersion (PMSMP)</div>' +
-    '<div class="outil-item" data-outil="formation"><i class="bi bi-mortarboard"></i> &#127891; Trouver une formation</div>' +
-    '<div class="outil-item" data-outil="explorer"><i class="bi bi-compass"></i> &#129517; Explorer d’autres métiers</div>' +
-    '</div>');
+  // TACHE (retour utilisateur : "Vous hésitez encore ? Explorez d'autres
+  // pistes... appliquer aussi le principe bouton + fenêtre à la fin du
+  // parcours -- ça règle le problème de visibilité en plus d'harmoniser
+  // les deux endroits") : remplace l'accordéon (dernière pyramide d'une
+  // longue chaîne, peu visible) par le même bouton qu'à l'accueil, même
+  // mécanisme (ouvrirFenetreRessourcesExplorer()), seul le message
+  // d'intro change pour refléter le contexte ("et après ?" plutôt que
+  // "vous hésitez encore ?").
+  var boutonRessourcesFin =
+    '<button type="button" id="btnRessourcesExplorerFin" class="carte carte-erip carte-ressources-explorer mt-3" style="max-width:none;width:100%;">' +
+      '<i class="bi bi-signpost-2"></i>' +
+      '<h3>Et après ?</h3>' +
+      '<p>Voici de quoi poursuivre : ateliers, formations, immersions, autres métiers...</p>' +
+    '</button>';
 
   // TACHE (retour utilisateur) : une etape n'apparait qu'une fois atteinte
   // (etatAccordeon[id] a ete defini au moins une fois par avancerEtape() ou
@@ -7387,7 +7405,7 @@ function pageResultats() {
     // seulement en même temps que le bandeau Exporter") : etait toujours
     // affiche, quelle que soit l'avancee dans le parcours -- desormais
     // conditionne exactement comme "Exporter" (meme etapeAtteinte).
-    (etapeAtteinte('exporter-document') ? accordeonRessources : '') +
+    (etapeAtteinte('exporter-document') ? boutonRessourcesFin : '') +
     // TACHE (bouton "Merci bien, j'ai fini") : n'apparait que si le document
     // ACTUELLEMENT actif (docActif) a ete reellement enregistre par la
     // personne (telechargement Word ou texte) -- pas seulement atteint son
@@ -7684,6 +7702,12 @@ function brancherEvenementsResultats() {
       pageResultats();
     });
   }
+  var btnRessourcesExplorerFin = document.getElementById('btnRessourcesExplorerFin');
+  if (btnRessourcesExplorerFin) {
+    btnRessourcesExplorerFin.addEventListener('click', function () {
+      ouvrirFenetreRessourcesExplorer('Et après ? Voici de quoi poursuivre.');
+    });
+  }
   var btnContinuerApercu = document.getElementById('btnContinuerApercu');
   if (btnContinuerApercu) {
     btnContinuerApercu.addEventListener('click', function () {
@@ -7828,7 +7852,7 @@ function brancherEvenementsResultats() {
         // independante de chaque version, voir wireApercuVersionsLettre).
         dossier.ia.lettre.versions = resultatLettre.valeurs.versions;
         dossier.ia.lettre.versionActive = 0;
-        dossier.ia.lettre.lettre = { objet: resultatLettre.valeurs.versions[0].objet, texte: resultatLettre.valeurs.versions[0].texte };
+        dossier.ia.lettre.lettre = { objet: resultatLettre.valeurs.versions[0].objet, texte: resultatLettre.valeurs.versions[0].texte, texteCourt: resultatLettre.valeurs.versions[0].texteCourt || '' };
         messageImportIA.style.color = 'inherit';
         messageImportIA.innerHTML = genererResumeGeneriqueImportIA(
           { accroche: resultatLettre.valeurs.accroche, arguments: resultatLettre.valeurs.arguments, texteLettre: dossier.ia.lettre.lettre.texte },
@@ -7901,7 +7925,7 @@ function brancherEvenementsResultats() {
       var v = dossier.ia.lettre.versions[i];
       if (!v) { return; }
       dossier.ia.lettre.versionActive = i;
-      dossier.ia.lettre.lettre = { objet: v.objet, texte: v.texte };
+      dossier.ia.lettre.lettre = { objet: v.objet, texte: v.texte, texteCourt: v.texteCourt || '' };
       pageResultats();
     });
   });
@@ -7954,8 +7978,14 @@ function brancherEvenementsResultats() {
       document.getElementById('btnEnregistrerVersionLettre').addEventListener('click', function () {
         var nouvelObjet = document.getElementById('editionObjetLettre').value;
         var nouveauTexte = document.getElementById('editionTexteLettre').value;
-        dossier.ia.lettre.versions[i] = { objet: nouvelObjet, texte: nouveauTexte };
-        dossier.ia.lettre.lettre = { objet: nouvelObjet, texte: nouveauTexte };
+        // TACHE (retour utilisateur : "A4 Essentiel" avec un vrai texte
+        // court rédigé par l'IA) : l'édition manuelle ne touche que la
+        // version longue -- texteCourt (rédigé séparément par l'IA,
+        // jamais une coupure de la version longue) reste inchangé, pas
+        // écrasé silencieusement par une chaîne vide.
+        var texteCourtExistant = (dossier.ia.lettre.versions[i] || {}).texteCourt || '';
+        dossier.ia.lettre.versions[i] = { objet: nouvelObjet, texte: nouveauTexte, texteCourt: texteCourtExistant };
+        dossier.ia.lettre.lettre = { objet: nouvelObjet, texte: nouveauTexte, texteCourt: texteCourtExistant };
         fermerFenetreERIP();
         pageResultats();
       });
@@ -12687,6 +12717,114 @@ BASE_CONNAISSANCES_ERIP.certifications = CATALOGUE_CERTIFICATIONS;
 // Note : "dossier" est une variable globale partagee avec data/metiers.js
 // (les deux fichiers sont des scripts classiques, pas des modules).
 
+// TACHE (retour utilisateur : "Vous hésitez encore ? Explorez d'autres
+// pistes" -- fusion d'Ateliers ERIP avec les 3 cartes de ressources,
+// vision d'évolution vers la Nouvelle-Aquitaine) : structure PAR
+// DEPARTEMENT, volontairement pas limitée à "24 ou 87" en dur -- ajouter
+// un département plus tard (Gironde, Charente...) ne demandera qu'une
+// entrée de plus ici, jamais une réécriture de la logique qui suit. Les
+// 3 ressources nationales (valables pour tout le monde) restent
+// séparées, toujours affichées quel que soit le département.
+var RESSOURCES_NATIONALES = [
+  { id: 'pmsmp', icone: 'bi-search', emoji: '&#128269;', titre: 'Trouver une immersion (PMSMP)', url: 'https://immersion-facile.beta.gouv.fr/' },
+  { id: 'formation', icone: 'bi-mortarboard', emoji: '&#127891;', titre: 'Trouver une formation', url: 'https://rafael.cap-metiers.pro/recherche/accueil' },
+  { id: 'explorer', icone: 'bi-compass', emoji: '&#129517;', titre: 'Explorer d’autres métiers', url: 'https://www.parcoureo.fr/' }
+];
+var RESSOURCES_DEPARTEMENTS = {
+  '24': {
+    nom: 'Dordogne (24)',
+    lien: { icone: 'bi-mortarboard', emoji: '&#127891;', titre: 'Ateliers & visites d’entreprise (ERIP du Bergeracois)', url: 'https://www.linscription.com/pro/catalogue-missionlocale-r.php?P1=11241&P2=411' }
+  },
+  '87': {
+    nom: 'Haute-Vienne (87)',
+    lien: { icone: 'bi-geo-alt', emoji: '&#128205;', titre: 'Inkéo C&C - PCGI 87', url: 'https://sites.google.com/view/inkeocc/pcgi-87' }
+  }
+};
+var CLE_DEPARTEMENT_RESSOURCES = 'erip_departement_ressources';
+
+function departementRessourcesMemorise() {
+  try { return localStorage.getItem(CLE_DEPARTEMENT_RESSOURCES) || null; } catch (e) { return null; }
+}
+function memoriserDepartementRessources(valeur) {
+  try { localStorage.setItem(CLE_DEPARTEMENT_RESSOURCES, valeur); } catch (e) { /* pas grave, redemande simplement la prochaine fois */ }
+}
+
+function contenuCarteRessource(r) {
+  return '<div class="outil-item" data-outil-ressource="' + r.id + '" data-url="' + echapperAttribut(r.url) + '">' +
+    '<i class="bi ' + r.icone + '"></i> ' + r.emoji + ' ' + r.titre + '</div>';
+}
+
+// TACHE : point d'entree unique, utilise a l'identique depuis l'accueil et
+// depuis la fin du parcours -- seul messageIntro change selon le contexte
+// (deux besoins differents, voir echange precedent), jamais le contenu.
+function ouvrirFenetreRessourcesExplorer(messageIntro) {
+  var departementConnu = departementRessourcesMemorise();
+
+  function afficherChoixDepartement() {
+    var idsDepartements = Object.keys(RESSOURCES_DEPARTEMENTS);
+    var overlayChoix = ouvrirFenetreERIP({
+      titre: '&#128218; Ressources à explorer',
+      contenuHTML:
+        '<p class="small mb-3">Pour vous proposer aussi les ressources locales pertinentes, dans quel département êtes-vous ?</p>' +
+        '<div class="d-flex flex-column gap-2">' +
+        idsDepartements.map(function (id) {
+          return '<button type="button" class="btn btn-outline-secondary text-start" data-choix-departement="' + id + '">' + RESSOURCES_DEPARTEMENTS[id].nom + '</button>';
+        }).join('') +
+        '<button type="button" class="btn btn-outline-secondary text-start" data-choix-departement="ailleurs">Aucun des deux / ailleurs</button>' +
+        '</div>'
+    });
+    overlayChoix.querySelectorAll('[data-choix-departement]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var choix = this.dataset.choixDepartement;
+        memoriserDepartementRessources(choix);
+        fermerFenetreERIP();
+        afficherRessources(choix === 'ailleurs' ? null : choix);
+      });
+    });
+  }
+
+  function afficherRessources(departementId) {
+    var ressourcesDept = departementId && RESSOURCES_DEPARTEMENTS[departementId] ? [RESSOURCES_DEPARTEMENTS[departementId].lien] : [];
+    var toutes = RESSOURCES_NATIONALES.concat(ressourcesDept);
+    // TACHE (retour utilisateur : "je ne veux pas les cartes les unes sur
+    // les autres... côte à côte") : taille "large" (700px, deja prevue
+    // parmi les 3 tailles autorisees) -- la taille par defaut (520px)
+    // etait trop etroite pour que plusieurs cartes tiennent cote a cote.
+    var overlay = ouvrirFenetreERIP({
+      titre: '&#128218; Ressources à explorer',
+      taille: 'large',
+      contenuHTML:
+        '<p class="small mb-3">' + messageIntro + '</p>' +
+        '<div class="outils-grid">' + toutes.map(contenuCarteRessource).join('') + '</div>' +
+        // TACHE (retour utilisateur : "un bouton retour si je me suis
+        // trompé de chemin, actuellement je suis bloqué dedans") : une
+        // fois le département mémorisé, rien ne permettait jusqu'ici de
+        // le changer -- ce lien rouvre le choix de département, sans
+        // jamais fermer la fenêtre "dans le vide" (toujours un chemin
+        // pour revenir en arrière).
+        '<p class="text-center mt-3 mb-0"><span class="pastille" id="btnChangerDepartementRessources" style="display:inline-block;">&#8592; Changer de département</span></p>'
+    });
+    overlay.querySelectorAll('[data-outil-ressource]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        // TACHE (retour utilisateur : "ne pas fermer la fenêtre au clic")
+        // : reste ouverte, la personne peut explorer plusieurs ressources
+        // a la suite sans avoir a rouvrir la fenetre a chaque fois.
+        window.open(this.dataset.url, '_blank');
+      });
+    });
+    var btnChanger = overlay.querySelector('#btnChangerDepartementRessources');
+    if (btnChanger) {
+      btnChanger.addEventListener('click', function () {
+        fermerFenetreERIP();
+        afficherChoixDepartement();
+      });
+    }
+  }
+
+  if (departementConnu) { afficherRessources(departementConnu === 'ailleurs' ? null : departementConnu); return; }
+  afficherChoixDepartement();
+}
+
 // TACHE (retour utilisateur : "je veux aussi des modes : mode sombre, une
 // variante de couleurs et un mode daltonien... mémorisé d'une visite à
 // l'autre... l'icone doit être présente tout le long, sur toutes les
@@ -12696,8 +12834,10 @@ BASE_CONNAISSANCES_ERIP.certifications = CATALOGUE_CERTIFICATIONS;
 // n'a rien à voir avec les données de candidature elles-mêmes.
 var CLE_PREFERENCES_AFFICHAGE = 'erip_preferences_affichage';
 
+
+
 function preferencesAffichageActuelles() {
-  var defaut = { theme: 'clair', accent: 'bleu', daltonien: '0' };
+  var defaut = { theme: 'clair', accent: 'bleu', daltonien: '0', taille: 'normal', police: 'defaut' };
   try {
     var brut = localStorage.getItem(CLE_PREFERENCES_AFFICHAGE);
     if (!brut) { return defaut; }
@@ -12705,7 +12845,13 @@ function preferencesAffichageActuelles() {
     return {
       theme: (lu.theme === 'sombre') ? 'sombre' : 'clair',
       accent: (lu.accent === 'orange' || lu.accent === 'vert') ? lu.accent : 'bleu',
-      daltonien: (lu.daltonien === '1') ? '1' : '0'
+      daltonien: (lu.daltonien === '1') ? '1' : '0',
+      // TACHE (retour utilisateur : "taille de texte ajustable... choisir
+      // entre Arial, Times New Roman et un autre style") : meme principe
+      // de validation stricte que les 3 reglages precedents -- toute
+      // valeur inconnue retombe sur le defaut, jamais une exception.
+      taille: (lu.taille === 'grand' || lu.taille === 'tres-grand') ? lu.taille : 'normal',
+      police: (['arial', 'times', 'lisible'].indexOf(lu.police) !== -1) ? lu.police : 'defaut'
     };
   } catch (e) { return defaut; }
 }
@@ -12715,12 +12861,16 @@ function appliquerPreferencesAffichage(prefs) {
   if (prefs.theme === 'sombre') { racine.setAttribute('data-theme', 'sombre'); } else { racine.removeAttribute('data-theme'); }
   if (prefs.accent === 'orange' || prefs.accent === 'vert') { racine.setAttribute('data-accent', prefs.accent); } else { racine.removeAttribute('data-accent'); }
   if (prefs.daltonien === '1') { racine.setAttribute('data-daltonien', '1'); } else { racine.removeAttribute('data-daltonien'); }
+  if (prefs.taille === 'grand' || prefs.taille === 'tres-grand') { racine.setAttribute('data-taille', prefs.taille); } else { racine.removeAttribute('data-taille'); }
+  if (prefs.police !== 'defaut') { racine.setAttribute('data-police', prefs.police); } else { racine.removeAttribute('data-police'); }
   try { localStorage.setItem(CLE_PREFERENCES_AFFICHAGE, JSON.stringify(prefs)); } catch (e) { /* stockage indisponible -- le reglage reste actif pour la session en cours, simplement pas memorise */ }
   var panneau = document.getElementById('panneauPreferencesAffichage');
   if (!panneau) { return; }
   panneau.querySelectorAll('[data-pref-theme]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefTheme === prefs.theme); });
   panneau.querySelectorAll('[data-pref-accent]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefAccent === prefs.accent); });
   panneau.querySelectorAll('[data-pref-daltonien]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefDaltonien === prefs.daltonien); });
+  panneau.querySelectorAll('[data-pref-taille]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefTaille === prefs.taille); });
+  panneau.querySelectorAll('[data-pref-police]').forEach(function (b) { b.classList.toggle('actif', b.dataset.prefPolice === prefs.police); });
 }
 
 function initPreferencesAffichage() {
@@ -12755,6 +12905,16 @@ function initPreferencesAffichage() {
   panneau.querySelectorAll('[data-pref-daltonien]').forEach(function (b) {
     b.addEventListener('click', function () {
       var p = preferencesAffichageActuelles(); p.daltonien = this.dataset.prefDaltonien; appliquerPreferencesAffichage(p);
+    });
+  });
+  panneau.querySelectorAll('[data-pref-taille]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = preferencesAffichageActuelles(); p.taille = this.dataset.prefTaille; appliquerPreferencesAffichage(p);
+    });
+  });
+  panneau.querySelectorAll('[data-pref-police]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = preferencesAffichageActuelles(); p.police = this.dataset.prefPolice; appliquerPreferencesAffichage(p);
     });
   });
 }

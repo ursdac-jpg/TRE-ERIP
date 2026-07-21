@@ -39,6 +39,7 @@
   --success-bg-subtle: #d1f4de;
   --danger: #dc3545;
   --danger-bg-subtle: #fdeaea;
+  --police-app: 'Segoe UI', Roboto, system-ui, sans-serif;
 }
 [data-theme="sombre"] {
   --bg-page: #12161f;
@@ -91,12 +92,32 @@
   --danger-bg-subtle: #3a2617;
 }
 
+/* TACHE (retour utilisateur : "taille de texte ajustable... option pour la
+   lisibilité, choisir entre Arial, Times New Roman et un autre style") :
+   2 réglages supplémentaires, même principe que les 3 précédents --
+   indépendants, combinables avec eux.
+   - [data-taille="grand"] / [data-taille="tres-grand"] sur <html> : agrandit
+     tout le texte de l'app (le mode sombre/couleur/daltonien ne changent
+     jamais la taille, uniquement la couleur -- ces deux familles de
+     réglages restent totalement séparées).
+   - [data-police="arial"] / [data-police="times"] / [data-police="lisible"]
+     sur <html> : change la police de tout le texte. "Lisible" est une
+     police pensée spécifiquement pour la clarté à l'écran (Verdana,
+     souvent recommandée en cas de difficultés de lecture, notamment
+     troubles dyslexiques) -- un 3e choix réfléchi, pas juste "une police
+     de plus" au hasard. */
+[data-taille="grand"] { font-size: 112.5%; }
+[data-taille="tres-grand"] { font-size: 125%; }
+[data-police="arial"] { --police-app: Arial, Helvetica, sans-serif; }
+[data-police="times"] { --police-app: "Times New Roman", Times, serif; }
+[data-police="lisible"] { --police-app: Verdana, Geneva, sans-serif; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   background: var(--bg-page);
   color: var(--text-strong);
-  font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-family: var(--police-app);
   /* TACHE (retour utilisateur : "quel est le style le plus lisible ?
      l'interligne n'était fixé que sur certains blocs précis (fenêtres
      modales, paragraphes d'accordéon), pas partout ailleurs -- fixé ici
@@ -398,6 +419,15 @@ h1 { font-size: 2.8rem; font-weight: 900; color: var(--text-strong); }
   text-decoration: none;
   color: inherit;
 }
+/* TACHE (retour utilisateur : "Vous hésitez encore ?" -- un bouton, pas
+   une carte comme aujourd'hui) : <button> a des styles par defaut
+   (police, alignement) differents d'un <div>/<a> -- neutralises ici pour
+   qu'il se fonde exactement dans la meme famille visuelle que les autres
+   cartes de cette zone. */
+.carte-ressources-explorer { font-family: inherit; width: 100%; }
+.carte-ressources-explorer i { font-size: 2.6rem; color: var(--accent); display: block; margin-bottom: 0.5rem; }
+.carte-ressources-explorer h3 { font-size: 1.25rem; font-weight: 700; margin: 0.5rem 0; }
+.carte-ressources-explorer p { color: var(--text-muted); }
 
 /* TACHE 36 : carte d'acces direct au parcours "Preparer un entretien" */
 .carte-entretien-direct {
@@ -754,6 +784,37 @@ h1 { font-size: 2.8rem; font-weight: 900; color: var(--text-strong); }
 .bloc-erip-compteur-partiel { color: #fd7e14; font-weight: 800; }
 .bloc-erip-compteur-cible { font-weight: 600; }
 .bloc-erip-compteur-complet { color: var(--success); font-weight: 800; font-size: 1.15em; }
+
+/* TACHE (retour utilisateur : "les indicateurs 1/3, 0/4... pulse pour
+   attirer l'attention si c'est pas complet, seulement ces indicateurs,
+   et si c'est 4/4 il ne pulse plus") : uniquement le compteur lui-même
+   (jamais tout le bloc ni sa bordure, qui ont déjà leur propre signal
+   -- message et contour vert -- déjà jugés clairs). S'arrête
+   automatiquement dès que le bloc est complet : la classe
+   bloc-erip-compteur-incomplet n'est alors plus posée du tout (voir
+   app.js), pas seulement une animation coupée par CSS. */
+@keyframes pulseCompteurIncomplet {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+.bloc-erip-compteur-incomplet { display: inline-block; animation: pulseCompteurIncomplet 1.6s ease-in-out infinite; border-radius: 50%; }
+/* TACHE (retour utilisateur : "rajouter une lumière quand ils pulsent, si
+   l'indicateur est rouge un léger rouge, si orange un léger orange") :
+   lumière (box-shadow qui s'étend puis disparaît, même principe que
+   pulseInfoIdentite plus haut) combinée au zoom déjà en place -- une
+   seule teinte par état, cohérente avec la couleur déjà utilisée pour ce
+   compteur (bloc-erip-compteur-zero/-partiel), jamais une couleur
+   nouvelle inventée ici. */
+@keyframes pulseLumiereRouge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.35); }
+  50% { box-shadow: 0 0 8px 4px rgba(220, 53, 69, 0.35); }
+}
+@keyframes pulseLumiereOrange {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(253, 126, 20, 0.35); }
+  50% { box-shadow: 0 0 8px 4px rgba(253, 126, 20, 0.35); }
+}
+.bloc-erip-compteur-incomplet.bloc-erip-compteur-zero { animation-name: pulseCompteurIncomplet, pulseLumiereRouge; }
+.bloc-erip-compteur-incomplet.bloc-erip-compteur-partiel { animation-name: pulseCompteurIncomplet, pulseLumiereOrange; }
 /* TACHE (retour utilisateur : "titres de Mon projet trop petits") : scope a
    .grille-mon-projet (conteneur propre a la page Mon Projet, voir
    pageProjet() dans app.js) -- redonne aux titres de bandeau leur taille
