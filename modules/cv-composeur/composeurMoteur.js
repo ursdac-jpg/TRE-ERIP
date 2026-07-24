@@ -39,23 +39,123 @@ function genererDocxComposeur(dossierSource, variantesChoisies, idTheme, formatP
   var objetCV = (typeof appliquerMoteurDecisionCV === 'function')
     ? appliquerMoteurDecisionCV(objetCVBrut, recommandationsIACV, {})
     : objetCVBrut;
+
+  // TACHE (composeur-theme-engine-conception.md, décision tranchée) : le
+  // thème doit être résolu AVANT la composition -- inchangé.
+  // TACHE (Projet XXL) : idTheme peut désormais être soit une chaîne
+  // (comportement historique, inchangé pour Sobre/Institutionnel/
+  // Moderne -- toujours des chaînes), soit un thème DÉJÀ CONSTRUIT par
+  // composeurAppliquerReglagesProjetXXL() (composeurTheme.js), auquel
+  // cas il est utilisé tel quel, jamais redécodé par
+  // composeurObtenirTheme() (qui ne comprend que des identifiants texte
+  // et planterait sur un objet -- voir sa propre documentation).
+  var theme = (idTheme && typeof idTheme === 'object') ? idTheme : composeurObtenirTheme(idTheme);
+
+  // TACHE (bouton "Mettre en avant + regrouper", point 14 cv.md) :
+  // theme.regroupementActif vient de composeurResoudreThemeGeneration()
+  // (app.js), meme circuit que lettreJointe/optionDebordement -- jamais
+  // un parametre de fonction supplementaire ici. Applique APRES
+  // appliquerMoteurDecisionCV() (qui a deja selectionne/ordonne/complete
+  // objetCV.experiences), pour remplacer ensuite cette liste par
+  // [experience prioritaire + groupes] uniquement si l'IA a propose
+  // quelque chose d'exploitable -- comportement inchange sinon (repli
+  // silencieux sur objetCV.experiences tel quel).
+  if (theme && theme.regroupementActif) {
+    objetCV = composeurAppliquerRegroupementExperiences(objetCV, recommandationsIACV.regroupementExperiences);
+  }
+
   // TACHE (retour utilisateur : "sans accroche") : efface uniquement
   // cette copie locale objetCV (déjà une reconstruction propre à cette
   // génération, jamais dossierSource.profil lui-même).
-  if (sansAccroche && objetCV.profil) { objetCV.profil = { profilIA: '', profilUtilisateur: '' }; }
+  // TACHE (Projet XXL, règle "lettre jointe -> accroche retirée
+  // automatiquement", doc de conception) : theme.lettreJointe (Projet
+  // XXL uniquement -- absent et donc toujours "undefined"/falsy sur les
+  // 3 autres thèmes, donc sans le moindre effet sur eux) vaut comme un
+  // sansAccroche implicite si l'appelant ne l'a pas déjà précisé
+  // lui-même -- une seule règle appliquée ici, jamais deux logiques
+  // parallèles de retrait de l'accroche.
+  var sansAccropcheEffectif = sansAccroche || !!(theme && theme.lettreJointe);
+  if (sansAccropcheEffectif && objetCV.profil) { objetCV.profil = { profilIA: '', profilUtilisateur: '' }; }
+
   var profil = composeurAnalyserProfil(objetCV, dossierSource.objectif);
   var decisions = composeurAppliquerRegles(profil);
-  // TACHE (composeur-theme-engine-conception.md, décision tranchée) : le
-  // thème doit être résolu AVANT la composition -- nombreColonnes est
-  // désormais lu depuis theme.colonnes (composeurComposition.js), plus
-  // depuis la variante d'en-tête.
-  var theme = composeurObtenirTheme(idTheme);
   var composition = composeurComposer(objetCV, profil, decisions, variantesChoisies || {}, formatPage, theme);
 
   return chargerLibrairieDocxNatif().then(function (docx) {
     var document = composeurConstruireDocument(docx, objetCV, composition, theme);
     return docx.Packer.toBlob(document);
   });
+}
+
+// TACHE (bouton "Mettre en avant + regrouper", point 14 cv.md) : remplace
+// objetCV.experiences par [experience prioritaire (5 missions, pro ou
+// personnelle -- toujours affichee comme la 1ere experience du bloc
+// "Experience professionnelle", quel que soit son type reel, pour rester
+// simple et coherente avec ce qui a ete teste) + une pseudo-experience par
+// groupe (poste = metiers joints par une virgule, missions = texteRegroupe
+// en une seule ligne, jamais decoupee)]. Copie defensive de objetCV (jamais
+// modifie sur place), meme principe que le reste de ce moteur. Repli
+// silencieux sur objetCV inchange si rien d'exploitable n'a ete propose
+// par l'IA (aucune experience prioritaire ET aucun groupe) -- n'est
+// appelee que si theme.regroupementActif est vrai, mais reste prudente
+// meme dans ce cas (l'IA peut ne rien avoir propose pour ce profil).
+function composeurAppliquerRegroupementExperiences(objetCV, regroupementExperiences) {
+  var reg = regroupementExperiences || {};
+  var prio = reg.experiencePrioritaire || {};
+  var groupes = reg.groupes || [];
+
+  // TACHE (retour utilisateur : "Travaux polyvalents du bâtiment" --
+  // intitule fusionne invente par l'IA sur un profil a 4 metiers
+  // equivalents) : verifie que l'experience prioritaire correspond
+  // REELLEMENT a une experience du dossier -- jamais une confiance
+  // aveugle dans le texte de l'IA, meme principe que la validation deja
+  // faite pour illustrePar (app.js). Si le poste/intitule ne correspond
+  // a rien de reel, tout le regroupement est traite comme inexploitable
+  // pour cette generation -- repli sur objetCV inchange, jamais un CV
+  // affichant une experience prioritaire inventee.
+  var experiencesReelles = objetCV.experiences || [];
+  var experiencesPersoReelles = objetCV.experiencesPersonnelles || [];
+  var prioValideContreDossier = !!(
+    (prio.type === 'professionnelle' && prio.poste && experiencesReelles.some(function (e) {
+      return (e.poste && correspond(e.poste, prio.poste)) || (e.entreprise && prio.entreprise && correspond(e.entreprise, prio.entreprise));
+    })) ||
+    (prio.type === 'personnelle' && prio.intitule && experiencesPersoReelles.some(function (e) {
+      return e.intitule && correspond(e.intitule, prio.intitule);
+    }))
+  );
+
+  var aUneExperiencePrioritaire = prioValideContreDossier;
+  if (!aUneExperiencePrioritaire) { return objetCV; }
+
+  var experiencePrioritaireItem = aUneExperiencePrioritaire ? {
+    poste: prio.type === 'professionnelle' ? prio.poste : prio.intitule,
+    entreprise: prio.type === 'professionnelle' ? (prio.entreprise || '') : '',
+    lieu: '', dateDebut: '', dateFin: '',
+    missions: (prio.missions || []).join('\n'),
+    contrat: ''
+  } : null;
+
+  var groupesItems = groupes.map(function (g) {
+    return {
+      poste: (g.metiers || []).join(', '),
+      entreprise: '', lieu: '', dateDebut: '', dateFin: '',
+      missions: g.texteRegroupe || '',
+      contrat: ''
+    };
+  });
+
+  var copie = {};
+  Object.keys(objetCV).forEach(function (cle) { copie[cle] = objetCV[cle]; });
+  copie.experiences = (experiencePrioritaireItem ? [experiencePrioritaireItem] : []).concat(groupesItems);
+  // TACHE (bouton "Mettre en avant + regrouper") : indicateur lu par
+  // composeurComposition.js pour neutraliser SA propre troncature par
+  // nombre de lignes (lignesMaxParExperience, base sur le nombre
+  // d'"experiences" -- qui ne correspond plus au nombre reel d'experiences
+  // une fois regroupees). Le contenu est deja correctement dimensionne ici
+  // (5 missions pour la prioritaire, 1 ligne pour chaque groupe) : aucune
+  // troncature supplementaire n'est necessaire ni souhaitable.
+  copie._regroupementExperiencesApplique = true;
+  return copie;
 }
 
 // TACHE (retour utilisateur : "Ce modèle ne dispose pas encore d'un aperçu

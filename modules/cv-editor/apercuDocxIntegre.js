@@ -76,12 +76,26 @@ function _configApercuDocx(type) {
       // ajouté à la signature générique de generer(), partagée avec
       // lettre/entretien qui n'ont pas ce réglage.
       generer: function (modele, couleurId, formatPage) {
-        if (typeof genererDocxNatifCVFormat === 'function') { return genererDocxNatifCVFormat(modele, couleurId, formatPage, etatApercuInline.cv.sansAccroche); }
+        // TACHE (Projet XXL, correction : "l'aperçu en direct ne reflète
+        // probablement pas ces réglages avancés") : genererDocxNatifCVFormat()
+        // (formatA5CV.js) transmet couleurId TEL QUEL a genererDocxComposeur()
+        // pour modele==='composeur' (verifie directement dans formatA5CV.js --
+        // aucune manipulation de ce parametre de son cote) -- il suffit donc
+        // de resoudre ICI, AVANT l'appel, le theme reel via
+        // composeurResoudreThemeGeneration() (app.js, fonction PARTAGEE avec
+        // genererBlobDocumentActif() -- jamais deux logiques de construction
+        // du theme Projet XXL). Sans effet sur les 16 modeles classiques ni
+        // sur Sobre/Institutionnel/Moderne : la fonction retourne alors
+        // couleurId inchange (voir sa propre documentation, app.js).
+        var couleurEffective = (modele === 'composeur' && typeof composeurResoudreThemeGeneration === 'function')
+          ? composeurResoudreThemeGeneration(couleurId, (typeof etatApercuInline !== 'undefined' && etatApercuInline.cv) ? etatApercuInline.cv.reglagesProjetXXL : null)
+          : couleurId;
+        if (typeof genererDocxNatifCVFormat === 'function') { return genererDocxNatifCVFormat(modele, couleurEffective, formatPage, etatApercuInline.cv.sansAccroche); }
         var promesseObjet = (typeof construireObjetCVPourExport === 'function')
           ? construireObjetCVPourExport(modele)
           : Promise.resolve(normaliserDonneesCV(dossier));
         return promesseObjet.then(function (objetCV) {
-          if (typeof genererDocxNatifCVColore === 'function') { return genererDocxNatifCVColore(modele, objetCV, couleurId); }
+          if (typeof genererDocxNatifCVColore === 'function') { return genererDocxNatifCVColore(modele, objetCV, couleurEffective); }
           return genererDocxNatifCV(modele, objetCV);
         });
       }
@@ -228,20 +242,37 @@ function _reconstruireContenuPanneau(type, modeleActif, couleurActive, formatPag
         // propre mise en page fixe (voir accordeonApercuDoc, js/app.js,
         // meme principe applique ici) -- le carrousel de modeles A4 n'a
         // aucun effet dans ce cas, donc masque, remplace par un message.
-        (type === 'cv' && _formatPageActifPanneau === 'A5'
-          ? '<span class="small text-muted" style="white-space:nowrap;">Le Mini CV a sa propre mise en page fixe</span>'
-          : '<button type="button" id="apercu-docx-carrousel-gauche" aria-label="Modèles précédents" ' +
-            'style="flex:none;width:24px;height:24px;border-radius:50%;border:1px solid #E5E7EB;background:#FFFFFF;">&#8592;</button>' +
-            '<div id="apercu-docx-carrousel-modeles" style="display:flex;gap:0.35rem;overflow-x:auto;scroll-behavior:smooth;' +
-            'max-width:320px;padding:0.15rem;"><p class="small text-muted mb-0">…</p></div>' +
-            '<button type="button" id="apercu-docx-carrousel-droite" aria-label="Modèles suivants" ' +
-            'style="flex:none;width:24px;height:24px;border-radius:50%;border:1px solid #E5E7EB;background:#FFFFFF;">&#8594;</button>') +
+        // TACHE (retour utilisateur : "quand j'ouvre le grand aperçu,
+        // là-haut, j'ai les anciens modèles et le composeur aussi le
+        // dernier, il va falloir tout enlever") : Projet XXL étant
+        // désormais l'unique modèle de CV, ce carrousel (modèles
+        // classiques + Composeur) n'a plus lieu d'être pour le CV --
+        // Lettre/Entretien gardent leur carrousel, inchangé.
+        (type === 'cv'
+          ? ''
+          : (type === 'cv' && _formatPageActifPanneau === 'A5'
+            ? '<span class="small text-muted" style="white-space:nowrap;">Le Mini CV a sa propre mise en page fixe</span>'
+            : '<button type="button" id="apercu-docx-carrousel-gauche" aria-label="Modèles précédents" ' +
+              'style="flex:none;width:24px;height:24px;border-radius:50%;border:1px solid #E5E7EB;background:#FFFFFF;">&#8592;</button>' +
+              '<div id="apercu-docx-carrousel-modeles" style="display:flex;gap:0.35rem;overflow-x:auto;scroll-behavior:smooth;' +
+              'max-width:320px;padding:0.15rem;"><p class="small text-muted mb-0">…</p></div>' +
+              '<button type="button" id="apercu-docx-carrousel-droite" aria-label="Modèles suivants" ' +
+              'style="flex:none;width:24px;height:24px;border-radius:50%;border:1px solid #E5E7EB;background:#FFFFFF;">&#8594;</button>')) +
         '<div id="apercu-docx-pastilles" style="display:' + (supportecouleurs ? 'flex' : 'none') + ';gap:0.3rem;align-items:center;margin-left:0.4rem;"></div>' +
         (supporteFormatA5
           ? '<div id="apercu-docx-format-page" style="display:flex;gap:0.3rem;align-items:center;margin-left:0.4rem;">' +
             '<button type="button" class="bouton-format-page' + ((_formatPageActifPanneau === 'A4' || !_formatPageActifPanneau) ? ' bouton-format-page-active' : '') + '" data-format-page="A4">A4 Détaillé</button>' +
             '<button type="button" class="bouton-format-page' + (_formatPageActifPanneau === 'A4-essentiel' ? ' bouton-format-page-active' : '') + '" data-format-page="A4-essentiel">A4 Essentiel</button>' +
             '<button type="button" class="bouton-format-page' + (_formatPageActifPanneau === 'A5' ? ' bouton-format-page-active' : '') + '" data-format-page="A5">' + LIBELLES_MINI_PANNEAU[type] + '</button>' +
+            // TACHE (retour utilisateur : "il va falloir garder A4
+            // détaillé, A4 essentiel, mini CV et le CV intégral") :
+            // manquait entièrement du grand aperçu (jamais ajouté
+            // jusqu'ici, contrairement au petit accordéon) -- réservé au
+            // CV, Projet XXL étant désormais l'unique modèle qui le
+            // supporte.
+            (type === 'cv'
+              ? '<button type="button" class="bouton-format-page' + (_formatPageActifPanneau === 'A4-integral' ? ' bouton-format-page-active' : '') + '" data-format-page="A4-integral">CV Intégral</button>'
+              : '') +
             '</div>'
           : '') +
       '</div>' +
@@ -460,7 +491,15 @@ function _rafraichirApercuDocx(type, modele, zoneApercuOverride, zoneMessageOver
   zoneMessage.textContent = 'Génération de l\'aperçu…';
   zoneApercu.innerHTML = '';
 
-  Promise.all([config.generer(modele, couleurId, formatPage), chargerLibrairieDocxPreview()])
+  // TACHE (bouton ultime "1 page, lisible") : cette fonction ne retournait
+  // jamais sa chaine de promesses (fire-and-forget) -- aucun appelant
+  // n'en avait besoin jusqu'ici. Le "return" ajoute ici permet a un futur
+  // appelant d'attendre la fin REELLE du rendu (et donc de la mesure de
+  // pages, deja effectuee plus bas via miseAJourConstatDebordementProjetXXL)
+  // avant de decider s'il faut essayer un reglage plus agressif -- sans
+  // rien changer pour les appelants existants, qui ignorent deja cette
+  // valeur de retour (fire-and-forget reste un usage valide de ce return).
+  return Promise.all([config.generer(modele, couleurId, formatPage), chargerLibrairieDocxPreview()])
     .then(function (resultats) {
       var blob = resultats[0];
       var docxPreview = resultats[1];
@@ -474,6 +513,24 @@ function _rafraichirApercuDocx(type, modele, zoneApercuOverride, zoneMessageOver
       });
     })
     .then(function () {
+      // TACHE (Projet XXL, mecanisme A/B/C -- "C = un simple constat") :
+      // mesure REELLE du nombre de pages rendues par docx-preview, jamais
+      // une estimation cote code (impossible, voir composeurRegles.js
+      // §4.3) -- docx-preview (inWrapper:true, breakPages:true) rend
+      // chaque page comme un enfant DIRECT distinct de son enveloppe
+      // ("{className}-wrapper", voir plus bas) : compter ces enfants donne
+      // le nombre de pages reellement affichees, sans jamais avoir a
+      // deviner un format ou une taille. Uniquement pour le CV (seul type
+      // concerne par le mecanisme A/B/C, voir composeurComposition.js) --
+      // sans effet pour lettre/entretien (miseAJourConstatDebordementProjetXXL
+      // n'est jamais appelee pour ces 2 types).
+      if (type === 'cv' && modele === 'composeur' && typeof miseAJourConstatDebordementProjetXXL === 'function') {
+        var enveloppePourComptage = zoneApercu.querySelector('.apercu-docx-rendu-wrapper');
+        if (enveloppePourComptage && enveloppePourComptage.children && enveloppePourComptage.children.length > 0) {
+          miseAJourConstatDebordementProjetXXL(enveloppePourComptage.children.length);
+        }
+      }
+
       if (!reduireEchelle) { return; }
       // TACHE (correction bug : mauvais element mis a l'echelle) : docx-preview
       // nomme son enveloppe "{className}-wrapper" (ici "apercu-docx-rendu-wrapper",

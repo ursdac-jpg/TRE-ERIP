@@ -23,15 +23,26 @@
 
 // ---- Les 6 couleurs "de base" (10/10, intensite pleine) -- point de
 // depart pour generer les nuances, voir plus bas. ----
+// TACHE (retour utilisateur : "rajouter plus de couleurs -- rose,
+// marron, gris et turquoise") : 4 nouvelles bases ajoutees ici -- les 10
+// nuances de chacune sont generees AUTOMATIQUEMENT par le mecanisme deja
+// en place plus bas (_genererNuancesCouleur, ORDRE_COULEURS_CV.forEach),
+// jamais recalculees a la main. Purement additif : les 6 couleurs
+// existantes (bleu/vert/orange/rouge/violet/noir) et tout code qui les
+// reference par id restent strictement inchanges.
 var PALETTES_COULEURS_CV_BASE = {
-  bleu:   { nom: 'Bleu',   hex: '2563EB' },
-  vert:   { nom: 'Vert',   hex: '15803D' },
-  orange: { nom: 'Orange', hex: 'C2410C' },
-  rouge:  { nom: 'Rouge',  hex: 'B91C1C' },
-  violet: { nom: 'Violet', hex: '6D28D9' },
-  noir:   { nom: 'Noir',   hex: '18181B' }
+  bleu:      { nom: 'Bleu',      hex: '2563EB' },
+  vert:      { nom: 'Vert',      hex: '15803D' },
+  orange:    { nom: 'Orange',    hex: 'C2410C' },
+  rouge:     { nom: 'Rouge',     hex: 'B91C1C' },
+  violet:    { nom: 'Violet',    hex: '6D28D9' },
+  noir:      { nom: 'Noir',      hex: '18181B' },
+  rose:      { nom: 'Rose',      hex: 'BE185D' },
+  marron:    { nom: 'Marron',    hex: '78350F' },
+  gris:      { nom: 'Gris',      hex: '4B5563' },
+  turquoise: { nom: 'Turquoise', hex: '0E7490' }
 };
-var ORDRE_COULEURS_CV = ['bleu', 'vert', 'orange', 'rouge', 'violet', 'noir'];
+var ORDRE_COULEURS_CV = ['bleu', 'vert', 'orange', 'rouge', 'violet', 'noir', 'rose', 'marron', 'gris', 'turquoise'];
 var NB_NUANCES_CV = 10;
 
 // TACHE (retour utilisateur : 10 nuances par couleur) : melange un hex

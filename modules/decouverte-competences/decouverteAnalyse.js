@@ -87,7 +87,7 @@ function decouverteValiderCompetenceProposee(competenceBrute) {
 // rejeté pour autant : il reste affichable (la personne pourra toujours
 // déclencher un raffinement, doc1 §3.2), avec des tableaux vides plutôt
 // qu'une exception.
-function _decouverteValiderFragment(fragmentBrut) {
+function _decouverteValiderFragment(fragmentBrut, indexOriginal) {
   if (!fragmentBrut || typeof fragmentBrut !== 'object') { return null; }
 
   var texteBrut = (typeof fragmentBrut.texteBrut === 'string') ? fragmentBrut.texteBrut.trim() : '';
@@ -117,6 +117,16 @@ function _decouverteValiderFragment(fragmentBrut) {
 
   return {
     id: (typeof fragmentBrut.id === 'string' && fragmentBrut.id.trim()) || _decouverteGenererIdFragment(),
+    // TACHE (chantier "exp perso", Phase 1/3 : relier une question ciblée
+    // à SON fragment) : conserve la position d'origine dans le tableau
+    // "fragments" tel que renvoyé par l'IA -- c'est cet indice que
+    // "fragmentIndex" (sur chaque question ciblée, decouverte-competences.md)
+    // référence. "id" (ci-dessus) reste un identifiant technique
+    // indépendant, généré une fois pour toutes ; "indexOriginal" est ce
+    // qui permet de retrouver CE fragment précis à partir du JSON de
+    // l'IA, transporté ensuite par initialiserEtatFragment()
+    // (decouverteRaffinement.js) jusqu'au mapping final.
+    indexOriginal: indexOriginal,
     texteBrut: texteBrut,
     origine: _decouverteValiderOrigine(fragmentBrut.origine),
     propositions: propositions,
@@ -131,7 +141,7 @@ function _decouverteValiderFragment(fragmentBrut) {
 //     { "texteBrut": "...", "origine": "...", "propositions": ["...", ...],
 //       "competencesProposees": [ { "texte": "...", "categorie": "...", "preuve": ["...", ...] } ] }
 //   ],
-//   "questionsCiblees": ["...", ...]   // 0 à 3
+//   "questionsCiblees": [ { "texte": "...", "fragmentIndex": 0, "type": "date" }, ... ]   // 5 à 10
 // }
 //
 // Retourne TOUJOURS { succes, valeurs } ou { succes: false, erreur } --
@@ -154,7 +164,7 @@ function analyserReponseDecouverte(texteColle) {
   }
 
   var fragmentsBruts = Array.isArray(objetBrut.fragments) ? objetBrut.fragments : [];
-  var fragments = fragmentsBruts.map(_decouverteValiderFragment).filter(Boolean);
+  var fragments = fragmentsBruts.map(function (f, i) { return _decouverteValiderFragment(f, i); }).filter(Boolean);
 
   if (!fragments.length) {
     return {
@@ -163,21 +173,52 @@ function analyserReponseDecouverte(texteColle) {
     };
   }
 
+  // TACHE (chantier "exp perso", Phase 1) : questionsCiblees est
+  // désormais un tableau d'OBJETS {texte, fragmentIndex, type}
+  // (decouverte-competences.md) -- plus de simples chaînes. Validé champ
+  // par champ, même discipline que le reste de ce fichier (jamais de
+  // confiance aveugle) : "texte" doit être une chaîne non vide,
+  // "fragmentIndex" doit désigner un fragment RÉELLEMENT validé
+  // ci-dessus (sinon ramené à null -- une référence vers un fragment
+  // inexistant ne doit jamais silencieusement pointer ailleurs),
+  // "type" vaut "date" ou "texte" (repli sur "texte" si absent/invalide).
+  // Accepte encore une simple chaîne (ancien format, ou IA qui n'aurait
+  // pas suivi la nouvelle consigne) -- jamais un plantage, jamais un
+  // format perdu silencieusement.
+  var indexOriginauxValides = fragments.map(function (f) { return f.indexOriginal; });
   var questionsBrutes = Array.isArray(objetBrut.questionsCiblees) ? objetBrut.questionsCiblees : [];
-  // TACHE (doc1 §4 étape 7, doc2 §8) : jamais plus de 3 questions, même si
-  // l'IA en propose davantage par erreur -- le plafond est imposé ICI,
-  // point de passage unique, on ne fait pas confiance à l'IA pour le
-  // respecter d'elle-même.
-  // TACHE (retour utilisateur : "j'adore cette idée, je veux en avoir 5 en
-  // tout au lieu de 3") : plafond augmenté explicitement à la demande de
-  // l'utilisateur -- décision consciente de changer un chiffre déjà
-  // documenté dans les documents de conception gelés (doc1 §4 étape 7,
-  // doc2 §8), pas un oubli. Les documents devront être mis à jour en
-  // conséquence pour rester fidèles au code.
   var questionsCiblees = questionsBrutes
-    .filter(function (q) { return typeof q === 'string' && q.trim().length > 0; })
-    .map(function (q) { return q.trim(); })
-    .slice(0, 5);
+    .map(function (q) {
+      if (typeof q === 'string') {
+        var texteBrutQ = q.trim();
+        return texteBrutQ ? { texte: texteBrutQ, fragmentIndex: null, type: 'texte' } : null;
+      }
+      if (!q || typeof q !== 'object') { return null; }
+      var texte = (typeof q.texte === 'string') ? q.texte.trim() : '';
+      if (!texte) { return null; }
+      var fragmentIndex = (typeof q.fragmentIndex === 'number' && indexOriginauxValides.indexOf(q.fragmentIndex) !== -1)
+        ? q.fragmentIndex : null;
+      // TACHE (retour utilisateur : "j'ai répondu oui à la question
+      // formation/engagements, mais rien n'apparaît sur le CV") : 2
+      // nouveaux types reconnus, en plus de "date" -- "formation" et
+      // "engagement" (conditions 5 et 6, decouverte-competences.md) --
+      // permettent de router la réponse directement vers
+      // dossier.formations/engagements (finaliserEtNaviguerVersResultats,
+      // decouverteParcours.js), plutôt que de la laisser seulement partir
+      // en contexte non structuré vers l'IA. Repli sur "texte" pour toute
+      // valeur inconnue ou absente, jamais un plantage.
+      var TYPES_QUESTION_VALIDES = ['date', 'formation', 'engagement', 'texte'];
+      var type = (TYPES_QUESTION_VALIDES.indexOf(q.type) !== -1) ? q.type : 'texte';
+      return { texte: texte, fragmentIndex: fragmentIndex, type: type };
+    })
+    .filter(Boolean)
+    // TACHE (retour utilisateur : "j'adore cette idée, je veux en avoir 5
+    // en tout au lieu de 3"), puis (retour utilisateur : "je ne veux pas
+    // seulement 5 mais entre 5 et 10, jamais moins") : plafond relevé de
+    // 5 à 10 -- décision consciente, cohérente avec decouverte-competences.md
+    // (qui demandait "5 à 10" sans que ce plafond en dur ne le permette
+    // jusqu'ici, bug réel trouvé lors de ce chantier).
+    .slice(0, 10);
 
   // TACHE (retour utilisateur : "je veux qu'une question sur les dates/la
   // période soit impérative, cette information mérite de figurer dans le
@@ -186,34 +227,36 @@ function analyserReponseDecouverte(texteColle) {
   // porte déjà sur une période/des dates, ET qu'au moins un fragment
   // professionnel existe, une question de repli est ajoutée EN PRIORITÉ
   // (avant les autres), quitte à retirer la dernière question de l'IA
-  // pour respecter le plafond de 5.
-  var aUneExperiencePro = fragments.some(function (f) {
+  // pour respecter le plafond.
+  // TACHE (chantier "exp perso") : la détection repose désormais sur
+  // q.type === 'date' (fiable, l'IA l'indique explicitement) -- l'ancien
+  // repérage par mots-clés dans le texte de la question n'est plus
+  // nécessaire (il restait fragile, voir historique des bugs déjà
+  // rencontrés sur cette détection).
+  var premierFragmentPro = fragments.filter(function (f) {
     return f.origine === 'proDeclaree' || f.origine === 'proNonDeclaree';
-  });
-  // TACHE (retour utilisateur : "je n'ai pas eu la question sur les
-  // années pratiquées, pourtant une question mentionnait 'toute
-  // l'année'") : bug réel trouvé -- la détection cherchait juste les
-  // mots "période"/"année"/"date"/"quand" n'importe où dans la question,
-  // ce qui matchait à tort une question sur la présence à temps plein
-  // ("étiez-vous présent toute l'année"), qui ne demande PAS une plage de
-  // dates. Motifs resserrés : seules des formulations qui demandent
-  // explicitement UNE PLAGE ou UN MOMENT precis comptent désormais comme
-  // "déjà couvert" -- dans le doute, la question de repli est ajoutée
-  // plutôt qu'omise (cohérent avec le caractère impératif demandé).
-  var motifsDateExplicite = [
-    'quelle période', 'quelles périodes', 'quelle(s) période', 'quelle année', 'quelles années',
-    'quelle(s) année', 'quelle date', 'quelles dates', 'quelle(s) date', 'de quelle année',
-    'à quelle année', 'de quand', 'à quand', 'quand avez-vous', 'combien de temps', 'combien d’années',
-    'combien d\'années'
-  ];
-  var aDejaUneQuestionDate = questionsCiblees.some(function (q) {
-    var qn = q.toLowerCase();
-    return motifsDateExplicite.some(function (motif) { return qn.indexOf(motif) !== -1; });
-  });
-  if (aUneExperiencePro && !aDejaUneQuestionDate) {
-    questionsCiblees.unshift('Pendant quelle(s) période(s) (années, même approximatives) avez-vous exercé cette activité ?');
-    questionsCiblees = questionsCiblees.slice(0, 5);
+  })[0];
+  var aDejaUneQuestionDate = questionsCiblees.some(function (q) { return q.type === 'date'; });
+  if (premierFragmentPro && !aDejaUneQuestionDate) {
+    questionsCiblees.unshift({
+      texte: 'Pendant quelle(s) période(s) (années, même approximatives) avez-vous exercé cette activité ?',
+      fragmentIndex: premierFragmentPro.indexOriginal,
+      type: 'date'
+    });
+    questionsCiblees = questionsCiblees.slice(0, 10);
   }
 
-  return { succes: true, valeurs: { fragments: fragments, questionsCiblees: questionsCiblees } };
+  // TACHE (retour utilisateur : "ce message ne passe pas sur tous les
+  // IA" -- le récit brut original, avec son contexte personnel sensible
+  // intact, partait tel quel vers cv.md/lettre.md/entretien.md via
+  // dossier.informationsNonClassees, decouverteParcours.js) : reciteNettoye
+  // est une simple chaîne de texte, validée comme n'importe quel champ
+  // texte de ce fichier -- chaîne vide si absente/invalide, jamais un
+  // plantage. Le retrait effectif du contexte personnel est la
+  // responsabilité de l'IA (decouverte-competences.md), jamais reconstruit
+  // ici par mots-clés (même principe que le reste de ce fichier : valider
+  // la forme, jamais réinterpréter le fond).
+  var reciteNettoye = (typeof objetBrut.reciteNettoye === 'string') ? objetBrut.reciteNettoye.trim() : '';
+
+  return { succes: true, valeurs: { fragments: fragments, questionsCiblees: questionsCiblees, reciteNettoye: reciteNettoye } };
 }

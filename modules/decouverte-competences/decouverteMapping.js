@@ -49,6 +49,22 @@ var _DECOUVERTE_DESTINATION_PAR_ORIGINE = {
 // cohérent avec son rôle décrit au document 1 -- utile pour la
 // motivation en entretien, pas un savoir-faire/savoir-être à proprement
 // parler).
+// TACHE (retour utilisateur : bug réel constaté sur un CV généré --
+// "Goût pour le service aux personnes" et "Apprendre des nouvelles
+// choses" affichés à tort sous "Centres d'intérêt") : garde-fou côté
+// code, jamais une confiance aveugle dans le prompt (decouverte-
+// competences.md a déjà été renforcé sur ce point, mais un garde-fou
+// mécanique reste nécessaire, comme partout ailleurs dans ce module).
+// Détecte les formulations qui décrivent une DISPOSITION/qualité (jamais
+// le nom d'une activité) -- "Goût pour...", "Envie de...", "Capacité
+// à...", etc. -- quelle que soit la categorie assignée par l'IA.
+function _decouverteRessembleADisposition(texte) {
+  var t = (texte || '').trim();
+  var motifs = [/^go[uû]t pour/i, /^envie d[e']/i, /^capacit[ée] [aà]/i, /^aisance (avec|dans)/i,
+    /^sens (du|de|des|de la|de l')/i, /^apprendre /i, /^aptitude [aà]/i, /^plaisir (a|à|de)/i];
+  return motifs.some(function (regex) { return regex.test(t); });
+}
+
 function _decouverteChampDossierPourCategorie(categorie) {
   if (categorie === DECOUVERTE_CATEGORIES.TECHNIQUE || categorie === DECOUVERTE_CATEGORIES.TRANSFERABLE) { return 'savoirFaire'; }
   if (categorie === DECOUVERTE_CATEGORIES.SAVOIR_ETRE || categorie === DECOUVERTE_CATEGORIES.APTITUDE) { return 'savoirEtre'; }
@@ -215,12 +231,34 @@ function mapperFragmentsVersDossier(fragmentsValides, infosComplementairesParFra
         tracer('competencesPersonnelles[]', etatFragment.texteRetenu, 'iaEnrichissement', etatFragment.fragmentId);
       }
     } else {
-      misesAJour[destination].push(etatFragment.texteRetenu);
-      tracer(destination + '[]', etatFragment.texteRetenu, origineTexte, etatFragment.fragmentId);
+      // TACHE (retour utilisateur : "je veux bien que les expériences
+      // personnelles [engagements] aient des missions au même titre que
+      // l'expérience professionnelle, tirées de ce que la personne a
+      // dit, sous le même format et avec les mêmes règles") : missions
+      // construites EXACTEMENT comme pour les expériences pro
+      // (_decouverteConcatenerPreuve(_decouverteToutesLesPreuves(...)),
+      // même fonction, jamais un second mécanisme dupliqué) -- vide si
+      // aucune compétence validée n'a de preuve exploitable, jamais un
+      // champ manquant qui ferait planter le rendu.
+      var missionsEngagement = _decouverteConcatenerPreuve(_decouverteToutesLesPreuves(etatFragment.competencesValidees));
+      var engagement = {
+        texte: etatFragment.texteRetenu,
+        dateDebut: infosCompl.dateDebut || '',
+        dateFin: infosCompl.dateFin || '',
+        missions: missionsEngagement
+      };
+      misesAJour[destination].push(engagement);
+      tracer(destination + '[]', engagement, origineTexte, etatFragment.fragmentId);
     }
 
     (etatFragment.competencesValidees || []).forEach(function (competence) {
       var champ = _decouverteChampDossierPourCategorie(competence.categorie);
+      // TACHE (retour utilisateur : bug réel -- "Goût pour le service
+      // aux personnes"/"Apprendre des nouvelles choses" affichés à tort
+      // sous Centres d'intérêt) : reroute vers savoirEtre si le texte
+      // ressemble à une disposition/qualité, quelle que soit la
+      // categorie assignée par l'IA -- jamais un nom d'activité.
+      if (champ === 'loisirs' && _decouverteRessembleADisposition(competence.texte)) { champ = 'savoirEtre'; }
       tracer('(règle de catégorie -> champ)', champ, 'regleMetier', etatFragment.fragmentId, competence.id);
 
       var cible = (champ === 'loisirs') ? misesAJour.loisirs : misesAJour.competences[champ];
@@ -268,7 +306,18 @@ function appliquerMisesAJourDossier(dossierCible, misesAJour) {
 
   ['loisirs', 'engagements'].forEach(function (champ) {
     var existants = dossierCible[champ] || [];
-    var nouveaux = misesAJour[champ].filter(function (v) { return existants.indexOf(v) === -1; });
+    // TACHE (chantier "exp perso", Phase 4) : engagements contient
+    // désormais des objets {texte, dateDebut, dateFin} -- une comparaison
+    // par égalité stricte (indexOf) ne peut plus détecter un doublon
+    // entre deux objets distincts portant le même texte (chaque objet a
+    // sa propre référence). Comparaison par .texte pour engagements,
+    // inchangée (indexOf direct sur la chaîne) pour loisirs.
+    var nouveaux = misesAJour[champ].filter(function (v) {
+      if (champ === 'engagements') {
+        return !existants.some(function (e) { return e && e.texte === v.texte; });
+      }
+      return existants.indexOf(v) === -1;
+    });
     var fusionne = existants.concat(nouveaux);
     // TACHE (retour utilisateur : "Sport", "Randonnée", "Sports
     // collectifs" apparaissaient en double, déjà couverts par "sport,

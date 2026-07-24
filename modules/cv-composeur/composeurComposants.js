@@ -92,6 +92,29 @@ var COMPOSEUR_REGISTRE_COMPOSANTS = {
   },
   competencesPersonnelles: {
     liste: { id: 'liste', rubrique: 'competencesPersonnelles', colonnesCompatibles: ['principale', 'laterale'] }
+  },
+  // TACHE (retour utilisateur : "mélange loisirs/centre d'intérêt" --
+  // Projet XXL uniquement, voir composeurComposition.js/composeurRender.js) :
+  // rubrique EXCLUSIVE a Projet XXL, jamais injectee pour les 3 autres
+  // themes. colonnesCompatibles ne porte QUE 'principale' -- ce n'est
+  // plus un "centre d'interet", jamais deplacable en colonne laterale
+  // (contrairement a loisirsEngagements ci-dessus). Comme
+  // competencesPersonnelles, cette entree n'est pas lue aujourd'hui par
+  // composeurRender.js (dessine directement, sans passer par
+  // composeurObtenirComposant()) -- ajoutee ici uniquement pour la
+  // coherence du registre et si composeurRubriqueCompatibleColonne()
+  // est un jour appelee pour cette rubrique.
+  experiencesPersonnelles: {
+    liste: { id: 'liste', rubrique: 'experiencesPersonnelles', colonnesCompatibles: ['principale'] }
+  },
+  // TACHE (retour utilisateur : bug de contenu manquant, corrigé) :
+  // rubrique EXCLUSIVE aux 3 thèmes non-Projet XXL (voir composeurComposition.js
+  // -- intégrée à "Formation" pour Projet XXL, jamais sa propre rubrique
+  // pour ce thème). Comme experiencesPersonnelles/competencesPersonnelles,
+  // cette entrée n'est pas lue aujourd'hui par composeurRender.js (dessinée
+  // directement) -- ajoutée pour la cohérence du registre.
+  certifications: {
+    liste: { id: 'liste', rubrique: 'certifications', colonnesCompatibles: ['principale'] }
   }
 };
 

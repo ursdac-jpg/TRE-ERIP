@@ -68,6 +68,14 @@ function _decouverteTransitionner(etatFragment, nouvelEtat) {
 function initialiserEtatFragment(fragment) {
   return {
     fragmentId: fragment.id,
+    // TACHE (chantier "exp perso", Phase 3 : relier une question ciblée
+    // à SON fragment jusqu'au mapping final) : transporté tel quel
+    // depuis _decouverteValiderFragment() (decouverteAnalyse.js) --
+    // c'est ce qui permet, à la finalisation (decouverteParcours.js), de
+    // retrouver CE fragment (et donc son fragmentId réel) à partir du
+    // fragmentIndex porté par une question ciblée. Jamais recalculé ici,
+    // uniquement transmis.
+    indexOriginal: fragment.indexOriginal,
     etat: DECOUVERTE_ETATS_FRAGMENT.PROPOSITION_INITIALE,
     toursEffectues: 0,
     origine: fragment.origine,

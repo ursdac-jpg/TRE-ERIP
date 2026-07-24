@@ -676,7 +676,28 @@ function ouvrirDecouverteCompetences() {
           var msg = document.getElementById('messageImportDecouverte');
           if (!resultat.succes) { msg.style.color = '#b91c1c'; msg.textContent = '⚠️ ' + resultat.erreur; return; }
           etat.etatsFragments = resultat.valeurs.fragments.map(initialiserEtatFragment);
-          etat.questionsCiblees = resultat.valeurs.questionsCiblees;
+          // TACHE (retour utilisateur : "ce message ne passe pas sur tous
+          // les IA") : conserve la version nettoyée du récit (sans
+          // contexte personnel sensible, decouverte-competences.md),
+          // utilisée plus tard À LA PLACE du récit brut original -- voir
+          // finaliserEtNaviguerVersResultats() plus bas.
+          etat.reciteNettoye = resultat.valeurs.reciteNettoye || '';
+          // TACHE (chantier "exp perso", Phase 1 : relier chaque question
+          // ciblée à un fragment précis) : questionsCiblees passe d'une
+          // simple liste de chaînes à des objets {texte, fragmentIndex,
+          // type} (decouverte-competences.md, section "Questions
+          // ciblées"). Normalisé ici, point d'entrée unique -- accepte
+          // encore l'ancien format (chaîne brute) le temps que l'IA suive
+          // pleinement la nouvelle consigne, jamais un plantage si elle
+          // ne renvoie pas exactement la forme attendue.
+          etat.questionsCiblees = (resultat.valeurs.questionsCiblees || []).map(function (q) {
+            if (typeof q === 'string') { return { texte: q, fragmentIndex: null, type: 'texte' }; }
+            return {
+              texte: q.texte || '',
+              fragmentIndex: (typeof q.fragmentIndex === 'number') ? q.fragmentIndex : null,
+              type: (q.type === 'date') ? 'date' : 'texte'
+            };
+          });
           afficherEtape(6);
         });
       }
@@ -1040,20 +1061,174 @@ function ouvrirDecouverteCompetences() {
   }
 
   // ------------------------------------------------------------
-  // Étape 7 — Questions ciblées (0 à 3, absente si vide — gérée à l'appel)
+  // Étape 7 — Questions ciblées (5 à 10, absente si vide -- gérée à l'appel)
+  // TACHE (retour utilisateur : "je veux au moins 5 questions, jamais
+  // plus de 10" -- decouverte-competences.md, section "Questions
+  // ciblées") : plancher relevé de 0 à 5, plafond de 5 à 10. Le titre et
+  // le texte d'introduction ci-dessous sont mis à jour en conséquence --
+  // "deux ou trois précisions" ne correspondait déjà plus à la réalité
+  // (jusqu'à 5 questions étaient déjà possibles avant ce changement).
   // ------------------------------------------------------------
+  // TACHE (chantier "exp perso", Phase 2 : champ structuré pour les
+  // questions de type "date") : jamais un champ de texte libre pour une
+  // date (risque de faute de frappe/interprétation, retour utilisateur) --
+  // deux sélecteurs d'année (fin vide = "toujours en cours"), bornés de
+  // 1960 à l'année en cours calculée réellement (jamais une année en dur
+  // qui deviendrait fausse avec le temps).
+  function optionsAnnees(valeurSelectionnee, libellePremiereOption) {
+    var anneeCourante = new Date().getFullYear();
+    var options = '<option value="">' + libellePremiereOption + '</option>';
+    for (var annee = anneeCourante; annee >= 1960; annee--) {
+      options += '<option value="' + annee + '"' + (String(annee) === String(valeurSelectionnee) ? ' selected' : '') + '>' + annee + '</option>';
+    }
+    return options;
+  }
+
   function etapeQuestionsCiblees() {
     return {
-      titre: '❓ Encore deux ou trois précisions',
+      titre: '❓ Quelques précisions',
       contenuHTML:
         '<p class="text-muted small mb-3">Ces quelques précisions nous aident à mieux orienter votre profil.</p>' +
         etat.questionsCiblees.map(function (q, i) {
-          return '<div class="mb-3"><label class="form-label small fw-semibold">' + echapperAttribut(q) + '</label>' +
-            '<input type="text" class="form-control form-control-sm" id="reponseCiblee_' + i + '" value="' + echapperAttribut(etat.reponsesQuestionsCiblees[i] || '') + '"></div>';
-        }).join(''),
+          // TACHE (chantier "exp perso", Phase 2) : question de type
+          // "date" -- deux sélecteurs d'année, jamais un champ de texte
+          // libre pour ce cas précis (voir optionsAnnees ci-dessus).
+          // Réponse stockée sous forme d'objet {dateDebut, dateFin} dans
+          // etat.reponsesQuestionsCiblees[i] -- PAS une chaîne, à la
+          // différence des questions de type "texte" ci-dessous (voir
+          // finaliserEtNaviguerVersResultats(), qui gère les deux formes).
+          if (q.type === 'date') {
+            var reponseDate = (etat.reponsesQuestionsCiblees[i] && typeof etat.reponsesQuestionsCiblees[i] === 'object')
+              ? etat.reponsesQuestionsCiblees[i] : { dateDebut: '', dateFin: '' };
+            return '<div class="mb-3"><label class="form-label small fw-semibold">' + echapperAttribut(q.texte) + '</label>' +
+              '<div class="d-flex gap-2 align-items-center flex-wrap">' +
+              '<select class="form-select form-select-sm" style="width:auto;" id="reponseCibleeDebut_' + i + '">' +
+              optionsAnnees(reponseDate.dateDebut, 'Année de début') + '</select>' +
+              '<span class="small text-muted">à</span>' +
+              '<select class="form-select form-select-sm" style="width:auto;" id="reponseCibleeFin_' + i + '">' +
+              optionsAnnees(reponseDate.dateFin, 'Toujours en cours') + '</select>' +
+              '</div></div>';
+          }
+          // TACHE (retour utilisateur : "pour la formation... indiquer
+          // l'année, même format que les questions sur la durée du
+          // métier -- pareil pour tout ce qui est associatif, bénévole,
+          // expérience personnelle") : formation/engagement combinent
+          // désormais un champ texte (l'intitulé/la description, dans
+          // les mots de la personne) ET les mêmes 2 sélecteurs d'année
+          // que le type "date" -- jamais un champ de texte libre pour la
+          // date elle-même. Réponse stockée en {texte, dateDebut,
+          // dateFin} (voir finaliserEtNaviguerVersResultats()).
+          if (q.type === 'formation' || q.type === 'engagement') {
+            var reponseCombinee = (etat.reponsesQuestionsCiblees[i] && typeof etat.reponsesQuestionsCiblees[i] === 'object')
+              ? etat.reponsesQuestionsCiblees[i] : { texte: '', dateDebut: '', dateFin: '', niveau: '' };
+            // TACHE (retour utilisateur : "on peut aussi rajouter le
+            // niveau d'études... si jamais ils ont un niveau bac, cela
+            // devrait faire apparition dans le bloc Formation") :
+            // UNIQUEMENT pour "formation" (jamais "engagement", qui n'a
+            // pas cette notion) -- réutilise NIVEAUX_DIPLOME_SIMPLES
+            // (app.js), déjà utilisé par le formulaire Formation
+            // classique, jamais une liste dupliquée. Optionnel (aucun
+            // niveau présélectionné) -- une pastille de plus à cliquer,
+            // pas un champ obligatoire.
+            var pastillesNiveauQuestion = (q.type === 'formation')
+              ? '<div class="mb-2"><span class="small text-muted d-block mb-1">Niveau (optionnel)</span>' +
+                '<div class="pastilles">' + NIVEAUX_DIPLOME_SIMPLES.map(function (n) {
+                  var actif = (reponseCombinee.niveau === n.label) ? ' actif' : '';
+                  return '<span class="pastille' + actif + '" data-niveau-formation-question="' + echapperAttribut(n.label) + '" data-index-question="' + i + '">' + n.label + '</span>';
+                }).join('') + '</div></div>'
+              : '';
+            return '<div class="mb-3"><label class="form-label small fw-semibold">' + echapperAttribut(q.texte) + '</label>' +
+              '<input type="text" class="form-control form-control-sm mb-2" id="reponseCiblee_' + i + '" value="' + echapperAttribut(reponseCombinee.texte || '') + '">' +
+              pastillesNiveauQuestion +
+              '<div class="d-flex gap-2 align-items-center flex-wrap">' +
+              '<select class="form-select form-select-sm" style="width:auto;" id="reponseCibleeDebut_' + i + '">' +
+              optionsAnnees(reponseCombinee.dateDebut, 'Année de début') + '</select>' +
+              '<span class="small text-muted">à</span>' +
+              '<select class="form-select form-select-sm" style="width:auto;" id="reponseCibleeFin_' + i + '">' +
+              optionsAnnees(reponseCombinee.dateFin, 'Toujours en cours') + '</select>' +
+              '</div></div>';
+          }
+          return '<div class="mb-3"><label class="form-label small fw-semibold">' + echapperAttribut(q.texte) + '</label>' +
+            '<input type="text" class="form-control form-control-sm" id="reponseCiblee_' + i + '" value="' + echapperAttribut(typeof etat.reponsesQuestionsCiblees[i] === 'string' ? etat.reponsesQuestionsCiblees[i] : '') + '"></div>';
+        }).join('') +
+        // TACHE (retour utilisateur : "la fenêtre Votre stratégie... je
+        // n'ai pas besoin de cette fenêtre qui apparaît juste avant de
+        // pouvoir personnaliser le CV, j'ai déjà stratégie de contenu
+        // sur la page CV") : écran supprimé (voir plus bas, onContinuer
+        // enchaîne directement vers les résultats) -- ce simple
+        // conteneur d'erreur reprend le rôle de l'ancien
+        // "messageErreurGenerationDecouverte" (même id, jamais un
+        // deuxième mécanisme d'affichage d'erreur), au cas où la
+        // finalisation échouerait : la personne reste alors sur CET
+        // écran (étape 7), avec le message ici, plutôt que sur un écran
+        // qui n'existe plus.
+        '<div id="messageErreurGenerationDecouverte" class="small mt-3"></div>',
       peutContinuer: true,
       onAfficher: function () {
         etat.questionsCiblees.forEach(function (q, i) {
+          if (q.type === 'date') {
+            var selectDebut = document.getElementById('reponseCibleeDebut_' + i);
+            var selectFin = document.getElementById('reponseCibleeFin_' + i);
+            function majReponseDate() {
+              etat.reponsesQuestionsCiblees[i] = { dateDebut: selectDebut.value, dateFin: selectFin.value };
+            }
+            selectDebut.addEventListener('change', majReponseDate);
+            selectFin.addEventListener('change', majReponseDate);
+            return;
+          }
+          // TACHE (retour utilisateur : "formation/engagement -- même
+          // format que les questions de durée") : même principe que
+          // "date" ci-dessus, plus le champ texte (intitulé/description).
+          if (q.type === 'formation' || q.type === 'engagement') {
+            var champTexteCombine = document.getElementById('reponseCiblee_' + i);
+            var selectDebutCombine = document.getElementById('reponseCibleeDebut_' + i);
+            var selectFinCombine = document.getElementById('reponseCibleeFin_' + i);
+            function majReponseCombinee() {
+              var precedent = (etat.reponsesQuestionsCiblees[i] && typeof etat.reponsesQuestionsCiblees[i] === 'object')
+                ? etat.reponsesQuestionsCiblees[i] : {};
+              etat.reponsesQuestionsCiblees[i] = {
+                texte: champTexteCombine.value,
+                dateDebut: selectDebutCombine.value,
+                dateFin: selectFinCombine.value,
+                niveau: precedent.niveau || ''
+              };
+            }
+            champTexteCombine.addEventListener('input', majReponseCombinee);
+            selectDebutCombine.addEventListener('change', majReponseCombinee);
+            selectFinCombine.addEventListener('change', majReponseCombinee);
+            // TACHE (retour utilisateur : "aucune trace dans le CV" --
+            // piste trouvée en relisant le code : ce champ était le SEUL
+            // de cet écran sans gestionnaire de touche Entrée, contrairement
+            // à tous les autres (voir plus bas, "quand je tape sur Entrée
+            // je passe d'une zone de texte à une autre"). Une touche
+            // Entrée non interceptée dans un champ texte peut déclencher
+            // une soumission de formulaire native selon le contexte,
+            // perdant potentiellement la saisie avant même que
+            // majReponseCombinee() n'ait pu la capturer -- même
+            // comportement désormais ajouté ici, jamais laissé de côté.
+            champTexteCombine.addEventListener('keydown', function (e) {
+              if (e.key !== 'Enter') { return; }
+              e.preventDefault();
+              var suivant = document.getElementById('reponseCiblee_' + (i + 1));
+              if (suivant) { suivant.focus(); } else { document.getElementById('btnContinuerDecouverte').click(); }
+            });
+            // TACHE (retour utilisateur : "niveau d'études") : clic sur
+            // une pastille = bascule (reclique la même = désélectionne,
+            // jamais un niveau imposé). Uniquement présent pour
+            // "formation" (voir le rendu HTML ci-dessus), donc ce
+            // sélecteur ne trouve simplement rien pour "engagement".
+            document.querySelectorAll('[data-index-question="' + i + '"]').forEach(function (pastille) {
+              pastille.addEventListener('click', function () {
+                var niveauClique = this.dataset.niveauFormationQuestion;
+                var actuel = (etat.reponsesQuestionsCiblees[i] && typeof etat.reponsesQuestionsCiblees[i] === 'object')
+                  ? etat.reponsesQuestionsCiblees[i] : { texte: champTexteCombine.value, dateDebut: selectDebutCombine.value, dateFin: selectFinCombine.value, niveau: '' };
+                actuel.niveau = (actuel.niveau === niveauClique) ? '' : niveauClique;
+                etat.reponsesQuestionsCiblees[i] = actuel;
+                afficherEtape(7);
+              });
+            });
+            return;
+          }
           var champ = document.getElementById('reponseCiblee_' + i);
           champ.addEventListener('input', function () { etat.reponsesQuestionsCiblees[i] = this.value; });
           // TACHE (retour utilisateur : "quand je tape sur Entrée je passe
@@ -1067,137 +1242,686 @@ function ouvrirDecouverteCompetences() {
           });
         });
       },
-      onContinuer: function () { afficherEtape(8); }
+      // TACHE (retour utilisateur : "l'écran stratégie disparaît, mais
+      // pas le calcul lui-même") : calculerStrategieSiBesoin() -- même
+      // calcul qu'avant (executerStrategie(), inchangé), toujours
+      // silencieux désormais -- alimente encore dossier.
+      // typeCVRecommandeDecouverte (chantier délibérément laissé de
+      // côté, voir mémoire) sans jamais l'imposer ni le montrer à la
+      // personne. finaliserEtNaviguerVersResultats() reprend ensuite,
+      // à l'identique, tout ce que faisait l'ancien onContinuer de
+      // l'étape 8 (mapping, application au dossier, navigation) --
+      // jamais une seconde logique parallèle.
+      onContinuer: function () {
+        // TACHE (retour utilisateur : "je n'ai toujours rien du côté
+        // formation et engagement associatif malgré les questions...
+        // c'est trop aléatoire") : cette étape s'affiche désormais
+        // TOUJOURS -- son rôle dépasse largement la seule mobilité
+        // (Formations/diplômes/certifications, Engagement associatif,
+        // Savoir-faire personnel s'y ajoutent, jamais laissés au hasard
+        // d'une IA qui devrait détecter elle-même le manque). Chaque
+        // bloc reste individuellement Oui/Non -- répondre "Non" partout
+        // revient à ne rien ajouter, un clic "Continuer" suffit alors à
+        // passer à la suite exactement comme avant.
+        afficherEtape(8);
+      }
     };
   }
 
   // ------------------------------------------------------------
-  // Étape 8 — Stratégie et orientation
+  // TACHE (retour utilisateur : "je n'ai toujours rien du côté formation
+  // et engagement associatif malgré les questions... c'est trop
+  // aléatoire, on va faire un panneau structuré à la place, comme celui
+  // de mobilité, et on l'étend à toutes ces informations") : remplace le
+  // mécanisme fragile (l'IA devait elle-même détecter le manque et
+  // étiqueter sa question "type": "formation"/"engagement", jamais
+  // garanti) par un panneau TOUJOURS affiché, jamais conditionné à ce
+  // que l'IA ait ou non posé une question -- 4 blocs indépendants
+  // (Mobilité, Formations/diplômes/certifications, Engagement associatif,
+  // Savoir-faire personnel), chacun Oui/Non puis un clic, jamais une
+  // interprétation de texte libre pour les dates (mêmes sélecteurs
+  // d'année que partout ailleurs dans l'application). Écrit directement
+  // dans dossier.formations/engagements/experiencesPerso -- la même
+  // donnée, structurée de la même façon, quel que soit le parcours
+  // d'origine (Découverte ou manuel).
   // ------------------------------------------------------------
-  function etapeStrategie() {
-    if (!etat.strategie) {
-      var competencesValidees = [];
-      etat.etatsFragments.forEach(function (ef) { competencesValidees = competencesValidees.concat(ef.competencesValidees || []); });
-      var nbPro = etat.etatsFragments.filter(function (ef) { return ef.origine === 'proDeclaree' || ef.origine === 'proNonDeclaree'; }).length;
-      var nbPerso = etat.etatsFragments.length - nbPro;
-      var resultatStrategie = executerStrategie(competencesValidees, {
-        nombreExperiencesProfessionnelles: nbPro,
-        nombreExperiencesPersonnelles: nbPerso,
-        objectifReconversion: dossier.objectif === 'reconversion'
+  function etapeMobilite() {
+    // TACHE : un seul état local -- "valide" par bloc pilote le
+    // repli/badge (retour utilisateur : "je veux que l'onglet se ferme
+    // avec un message validé/à compléter"), jamais utilisé pour bloquer
+    // la navigation (peutContinuer reste toujours vrai, comme avant).
+    // TACHE (retour utilisateur : "Non apparaît déjà sélectionné avant
+    // même d'avoir cliqué") : bug réel trouvé -- actif:false servait à la
+    // fois de valeur de depart ("pas encore repondu") ET de reponse
+    // "Non" reelle, les deux etant indiscernables une fois affiches
+    // (`d.actif ? ... : ...` traite les deux cas identiquement). actif:
+    // null distingue desormais explicitement "pas encore repondu" de
+    // "a repondu Non" -- les boutons Oui/Non (plus bas) ne mettent en
+    // avant AUCUN des deux tant que la personne n'a pas reellement
+    // cliqué.
+    etat.infosComplementaires = etat.infosComplementaires || {
+      mobilite: { valide: false },
+      formation: { valide: false, actif: null, texte: '', niveau: '', dateDebut: '', dateFin: '' },
+      engagement: { valide: false, actif: null, texte: '', dateDebut: '', dateFin: '' },
+      savoirFairePerso: { valide: false, actif: null, texte: '', dateDebut: '', dateFin: '' }
+    };
+    var infos = etat.infosComplementaires;
+
+    // TACHE (retour utilisateur : "dans toutes les zones de texte je
+    // veux que la 1ère lettre soit en majuscule") : ne touche jamais le
+    // reste du mot -- appliqué au premier caractère à chaque frappe.
+    function cablerMajusculeAuto(champ) {
+      if (!champ) { return; }
+      champ.addEventListener('input', function () {
+        if (this.value) { this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1); }
       });
-      // TACHE (gestion centralisée des erreurs) : un échec ici ne bloque
-      // jamais le parcours -- la stratégie est un complément utile, pas
-      // une condition pour produire un CV (doc1 §10.5 : son absence ne
-      // devrait pas empêcher un document par ailleurs valorisable).
-      etat.strategie = resultatStrategie.succes
-        ? resultatStrategie.valeurs
-        : { metiersProposes: [], aucunMetierPertinent: true, typeCVRecommande: { type: DECOUVERTE_TYPES_CV.PAR_COMPETENCES, regle: 'repli-erreur-strategie' } };
-      etat.typeCVChoisi = etat.strategie.typeCVRecommande.type;
     }
 
-    var libellesType = { chronologique: 'Chronologique', mixte: 'Mixte', parCompetences: 'Par compétences' };
+    // TACHE (retour utilisateur : "une fois complété, l'onglet se ferme
+    // avec un badge validé/à compléter") : un seul gabarit, réutilisé
+    // par les 4 blocs -- replié (juste le titre + badge + "Modifier")
+    // une fois validé, sinon déplié avec son contenu complet.
+    // TACHE (retour utilisateur : "la pastille à compléter je la veux
+    // d'une couleur visible") : bg-warning (orange), bien plus visible
+    // que le gris précédent.
+    // TACHE (retour utilisateur : "un bouton valider pour chaque partie,
+    // sans condition -- rien saisi = non") : ajouté systématiquement en
+    // bas de chaque bloc non encore validé -- marque valide=true quel
+    // que soit l'état des champs (aucune vérification de contenu),
+    // exactement le même geste que la touche Entrée dans un champ texte.
+    // TACHE (retour utilisateur : "quand un exemple a été choisi, je
+    // veux le voir sous forme de pastille avec la possibilité de
+    // l'enlever grâce à une petite croix") : remplace les listes de
+    // texte "Déjà ajoutés : X, Y, Z" par de vraies pastilles cliquables,
+    // une fonction partagée pour les 4 cas (certifications, formations,
+    // engagements, savoir-faire personnel) -- jamais 4 rendus différents.
+    function pillsAvecCroix(cleDossier, extraireTexte) {
+      var liste = dossier[cleDossier] || [];
+      if (!liste.length) { return ''; }
+      return '<div class="mb-2">' + liste.map(function (item, i) {
+        var texte = extraireTexte(item);
+        return '<span class="pastille actif" style="display:inline-flex;align-items:center;gap:0.3rem;margin:0 0.3rem 0.3rem 0;">' +
+          echapperAttribut(texte) +
+          '<span style="cursor:pointer;font-weight:bold;" data-retirer-infocompl="' + cleDossier + '" data-index-infocompl="' + i + '" title="Retirer">✕</span></span>';
+      }).join('') + '</div>';
+    }
+
+    function enveloppeBloc(cle, titre, contenuInterieur) {
+      var estValide = infos[cle].valide;
+      var badge = estValide
+        ? ' <span class="badge bg-success">✅ Validé</span>'
+        : ' <span class="badge bg-warning text-dark">À compléter</span>';
+      if (estValide) {
+        return '<div class="mb-3 p-2 border rounded d-flex justify-content-between align-items-center">' +
+          '<span class="fw-semibold">' + titre + badge + '</span>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary" data-rouvrir-bloc="' + cle + '">Modifier</button>' +
+          '</div>';
+      }
+      return '<div class="mb-4 p-2 border rounded"><span class="d-block mb-2 fw-semibold">' + titre + badge + '</span>' + contenuInterieur +
+        '<button type="button" class="btn btn-sm btn-success mt-2" data-valider-bloc="' + cle + '">✅ Valider</button></div>';
+    }
+
+    // ---- Formations, diplômes et certifications : 3 sous-sections ----
+    // TACHE (retour utilisateur : "3 options : niveau d'études, avec la
+    // logique niveau d'abord puis intitulé -- certifications, texte +
+    // année + bouton parcourir la liste -- formations, même logique que
+    // certifications") : les 3 cohabitent, jamais un onglet exclusif --
+    // rien n'empêche de renseigner un niveau ET d'ajouter une
+    // certification ET une formation du catalogue.
+    function contenuBlocFormation() {
+      var d = infos.formation;
+      var sousNiveau =
+        '<div class="mb-3"><span class="d-block mb-2 fw-semibold small">Niveau d’études</span>' +
+        // TACHE (retour utilisateur : "clair, intelligible... pour
+        // l'instant c'est pas le cas") : bug réel trouvé -- aucune
+        // question n'était écrite ici, contrairement à "Avez-vous le
+        // permis ?" pour la Mobilité juste au-dessus. Les boutons
+        // Oui/Non répondaient à une question invisible.
+        '<p class="mb-2 small">Avez-vous un diplôme à mentionner ?</p>' +
+        '<div class="d-flex gap-2 mb-2">' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === true ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-oui="formation">Oui</button>' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === false ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-non="formation">Non</button>' +
+        '</div>' +
+        (d.actif
+          // TACHE (retour utilisateur : "d'abord que la personne
+          // choisisse son niveau et après avoir la zone de texte avec
+          // l'intitulé") : ordre inversé par rapport à avant -- pastilles
+          // de niveau EN PREMIER, champ intitulé ensuite.
+          ? '<div class="mt-2">' +
+            '<div class="pastilles mb-2">' + NIVEAUX_DIPLOME_SIMPLES.map(function (n) {
+              var actifNiveau = (d.niveau === n.label) ? ' actif' : '';
+              return '<span class="pastille' + actifNiveau + '" data-niveau-infocompl="' + echapperAttribut(n.label) + '" data-cle-infocompl="formation">' + n.label + '</span>';
+            }).join('') + '</div>' +
+            '<input type="text" class="form-control form-control-sm mb-2" id="infoComplTexte_formation" placeholder="Intitulé du diplôme ou de la formation" value="' + echapperAttribut(d.texte || '') + '">' +
+            // TACHE (retour utilisateur : "si j'ai Bac, je ne peux pas
+            // être toujours en cours -- on garde que l'année de début") :
+            // une formation/un diplôme a une année d'obtention, jamais
+            // une plage "en cours" -- une seule sélection, jamais deux.
+            '<select class="form-select form-select-sm" style="width:auto;" id="infoComplDebut_formation">' + optionsAnnees(d.dateDebut, 'Année d’obtention') + '</select>' +
+            '</div>'
+          : '') +
+        '</div>';
+
+      var sousCertifications =
+        '<div class="mb-3"><span class="d-block mb-2 fw-semibold small">Certifications</span>' +
+        pillsAvecCroix('certifications', function (c) { return c; }) +
+        '<div class="d-flex gap-2 align-items-center flex-wrap mb-1">' +
+        '<input type="text" class="form-control form-control-sm" style="max-width:240px;" id="infoComplTexteCertif" placeholder="Nom de la certification">' +
+        '<select class="form-select form-select-sm" style="width:auto;" id="infoComplAnneeCertif">' + optionsAnnees('', 'Année') + '</select>' +
+        '<button type="button" class="btn btn-sm btn-outline-primary" id="btnAjouterCertifTexteLibre">Ajouter</button>' +
+        '</div>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="btnParcourirCertifications">📖 Parcourir la liste</button>' +
+        '</div>';
+
+      var sousFormationsCatalogue =
+        '<div class="mb-1"><span class="d-block mb-2 fw-semibold small">Formations</span>' +
+        pillsAvecCroix('formations', function (f) { return f.intitule; }) +
+        '<div class="d-flex gap-2 align-items-center flex-wrap mb-1">' +
+        '<input type="text" class="form-control form-control-sm" style="max-width:240px;" id="infoComplTexteFormationLibre" placeholder="Nom de la formation">' +
+        '<select class="form-select form-select-sm" style="width:auto;" id="infoComplAnneeFormationLibre">' + optionsAnnees('', 'Année') + '</select>' +
+        '<button type="button" class="btn btn-sm btn-outline-primary" id="btnAjouterFormationTexteLibre">Ajouter</button>' +
+        '</div>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="btnParcourirFormations">📖 Parcourir la liste</button>' +
+        '</div>';
+
+      return sousNiveau + sousCertifications + sousFormationsCatalogue;
+    }
+
+    // TACHE (retour utilisateur : "Engagement associatif on va le
+    // modifier en simplement Engagement... je veux que les gens
+    // puissent voir c'est quoi précisément un engagement, c'est trop
+    // flou") : bouton "Voir des exemples" ouvrant le même catalogue que
+    // Mon Projet (CONFIG_ENGAGEMENTS), pour lever ce flou concrètement.
+    function contenuBlocEngagement() {
+      var d = infos.engagement;
+      var dejaLa = pillsAvecCroix('engagements', function (e) { return (typeof e === 'string' ? e : e.texte); });
+      return dejaLa +
+        '<div class="d-flex gap-2 flex-wrap mb-2">' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === true ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-oui="engagement">Oui</button>' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === false ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-non="engagement">Non</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="btnParcourirEngagements">📖 Voir des exemples</button>' +
+        '</div>' +
+        (d.actif
+          ? '<div class="mt-2">' +
+            '<input type="text" class="form-control form-control-sm mb-2" id="infoComplTexte_engagement" placeholder="Décrivez cet engagement" value="' + echapperAttribut(d.texte || '') + '">' +
+            '<div class="d-flex gap-2 align-items-center flex-wrap">' +
+            '<select class="form-select form-select-sm" style="width:auto;" id="infoComplDebut_engagement">' + optionsAnnees(d.dateDebut, 'Année de début') + '</select>' +
+            '<span class="small text-muted">à</span>' +
+            '<select class="form-select form-select-sm" style="width:auto;" id="infoComplFin_engagement">' + optionsAnnees(d.dateFin, 'Toujours en cours') + '</select>' +
+            '</div></div>'
+          : '');
+    }
+
+    // TACHE (retour utilisateur : "juste après les dates, un bouton pour
+    // explorer les options dedans et en choisir une ou plusieurs, qui
+    // seront envoyées à l'IA") : CONFIG_EXPERIENCES_PERSO (Mon Projet),
+    // multi-sélection déjà native à ce mécanisme -- alimente à la fois
+    // dossier.experiencesPerso ET l'IA (contexte), comme validé.
+    function contenuBlocSavoirFairePerso() {
+      var d = infos.savoirFairePerso;
+      var dejaLa = pillsAvecCroix('experiencesPerso', function (e) { return e.intitule; });
+      return dejaLa +
+        '<div class="d-flex gap-2 mb-2">' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === true ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-oui="savoirFairePerso">Oui</button>' +
+        '<button type="button" class="btn btn-sm ' + (d.actif === false ? 'btn-primary' : 'btn-outline-secondary') + '" data-infocompl-non="savoirFairePerso">Non</button>' +
+        '</div>' +
+        (d.actif
+          ? '<div class="mt-2">' +
+            '<input type="text" class="form-control form-control-sm mb-2" id="infoComplTexte_savoirFairePerso" placeholder="Décrivez ce savoir-faire" value="' + echapperAttribut(d.texte || '') + '">' +
+            '<div class="d-flex gap-2 align-items-center flex-wrap mb-2">' +
+            '<select class="form-select form-select-sm" style="width:auto;" id="infoComplDebut_savoirFairePerso">' + optionsAnnees(d.dateDebut, 'Année de début') + '</select>' +
+            '<span class="small text-muted">à</span>' +
+            '<select class="form-select form-select-sm" style="width:auto;" id="infoComplFin_savoirFairePerso">' + optionsAnnees(d.dateFin, 'Toujours en cours') + '</select>' +
+            '</div>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary" id="btnExplorerSavoirFairePerso">📖 Explorer des exemples</button>' +
+            '</div>'
+          : '');
+    }
 
     return {
-      titre: '🎯 Votre stratégie',
+      titre: '📋 Informations complémentaires',
       contenuHTML:
-        // TACHE (retour utilisateur : "pistes de métier possibles" trop
-        // engageant vu la base de données limitée -- ex. le permis B
-        // n'est jamais pris en compte) : repliée par défaut, formulation
-        // plus prudente ("à explorer" plutôt que "possibles"), et une
-        // réserve explicite sur les limites de ce que l'outil peut savoir.
-        (etat.strategie.aucunMetierPertinent
-          ? '<p class="text-muted small mb-3">Aucune piste de métier ne se dégage clairement pour l’instant — ce n’est pas un problème, votre CV reste tout à fait valorisable.</p>'
-          : '<button type="button" id="toggleMetiersDecouverte" class="btn btn-outline-secondary btn-sm mb-2">' +
-            '🔍 Voir quelques pistes de métier à explorer</button>' +
-            '<div id="zoneMetiersDecouverte" style="display:none;">' +
-            '<p class="small text-muted mb-2">À prendre comme un point de départ, pas une liste définitive — ' +
-            'certains critères comme le permis ou la mobilité n’ont pas pu être pris en compte ici. À affiner avec votre conseiller.</p>' +
-            '<ul class="small">' +
-            etat.strategie.metiersProposes.slice(0, 3).map(function (mp) { return '<li>' + echapperAttribut(mp.metier.nom) + '</li>'; }).join('') + '</ul>' +
-            '</div>') +
-        '<p class="fw-semibold mb-2 mt-3">Type de CV recommandé :</p>' +
-        '<div class="d-flex gap-2">' +
-        Object.keys(libellesType).map(function (cle) {
-          return '<button type="button" class="btn btn-sm ' + (etat.typeCVChoisi === cle ? 'btn-primary' : 'btn-outline-secondary') + '" data-type-cv="' + cle + '">' + libellesType[cle] + '</button>';
-        }).join('') + '</div>' +
-        '<div id="messageErreurGenerationDecouverte" class="small mt-3"></div>',
+        '<p class="text-muted small mb-3">Ces informations n’ont pas forcément été évoquées dans votre récit — elles peuvent être précieuses pour votre CV, transmises telles quelles, jamais interprétées.</p>' +
+        enveloppeBloc('mobilite', '🚗 Mobilité', contenuMobilite()) +
+        enveloppeBloc('formation', '🎓 Formations, diplômes et certifications', contenuBlocFormation()) +
+        enveloppeBloc('engagement', '🤝 Engagement', contenuBlocEngagement()) +
+        enveloppeBloc('savoirFairePerso', '🌱 Savoir-faire personnel', contenuBlocSavoirFairePerso()),
       peutContinuer: true,
-      // TACHE (retour utilisateur : "quelle est l'utilité de cette
-      // fenêtre ?") : l'ancien écran "Votre CV est prêt à être créé"
-      // (étape 9) ne faisait qu'annoncer ce que ce bouton fait déjà --
-      // fusionné ici, un clic de moins, cohérent avec le principe
-      // d'accessibilité cognitive (éviter tout écran sans action propre).
-      libelleContinuer: 'Créer mon CV →',
       onAfficher: function () {
-        document.querySelectorAll('[data-type-cv]').forEach(function (btn) {
-          btn.addEventListener('click', function () { etat.typeCVChoisi = this.dataset.typeCv; afficherEtape(8); });
+        // Réouverture d'un bloc déjà validé.
+        document.querySelectorAll('[data-rouvrir-bloc]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            infos[this.dataset.rouvrirBloc].valide = false;
+            afficherEtape(8);
+          });
         });
-        var toggleMetiers = document.getElementById('toggleMetiersDecouverte');
-        if (toggleMetiers) {
-          toggleMetiers.addEventListener('click', function () {
-            var zone = document.getElementById('zoneMetiersDecouverte');
-            var ouvert = zone.style.display !== 'none';
-            zone.style.display = ouvert ? 'none' : 'block';
-            toggleMetiers.textContent = (ouvert ? '🔍 Voir' : '🔽 Masquer') + ' quelques pistes de métier à explorer';
+
+        // TACHE (retour utilisateur : "une petite croix pour l'enlever
+        // si la personne le souhaite") : retire l'élément DIRECTEMENT du
+        // dossier (certifications/formations/engagements/experiencesPerso),
+        // par son index -- jamais besoin de rouvrir la fenêtre catalogue
+        // pour corriger un choix.
+        document.querySelectorAll('[data-retirer-infocompl]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var cle = this.dataset.retirerInfocompl;
+            var idx = parseInt(this.dataset.indexInfocompl, 10);
+            if (dossier[cle] && dossier[cle][idx] !== undefined) { dossier[cle].splice(idx, 1); }
+            afficherEtape(8);
+          });
+        });
+
+        // TACHE (retour utilisateur : "un bouton valider pour chaque
+        // partie, sans condition -- rien saisi = non") : seul déclencheur
+        // de validation désormais pour les blocs à champs (formation,
+        // engagement, savoirFairePerso) -- un clic sur "Oui" ne valide
+        // plus jamais tout seul (c'était le bug signalé pour Mobilité :
+        // "dès que je clique sur oui, le bloc se valide avant même de
+        // choisir la catégorie").
+        document.querySelectorAll('[data-valider-bloc]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            infos[this.dataset.validerBloc].valide = true;
+            afficherEtape(8);
+          });
+        });
+
+        // TACHE (retour utilisateur, bug réel corrigé : "pour mobilité,
+        // dès que je clique sur oui, le bloc se valide avant même de
+        // choisir la catégorie ou le moyen de transport -- ce bloc doit
+        // être validé seulement si j'ai le permis ET le moyen de
+        // transport") : "Oui" ne valide plus tout seul -- seul le
+        // bouton "Valider" (ci-dessus) ou "Non" (réponse complète en
+        // elle-même, rien de plus à préciser) referment ce bloc.
+        var boutonPermisOui = document.getElementById('permisOui');
+        var boutonPermisNon = document.getElementById('permisNon');
+        if (boutonPermisOui) { boutonPermisOui.addEventListener('click', function () { dossier.permis.possede = true; afficherEtape(8); }); }
+        if (boutonPermisNon) {
+          boutonPermisNon.addEventListener('click', function () {
+            dossier.permis.possede = false; dossier.permis.categories = []; dossier.permis.vehicule = null;
+            infos.mobilite.valide = true;
+            afficherEtape(8);
+          });
+        }
+        document.querySelectorAll('[data-permis]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var cat = this.dataset.permis;
+            var idx = dossier.permis.categories.indexOf(cat);
+            if (idx === -1) { dossier.permis.categories.push(cat); } else { dossier.permis.categories.splice(idx, 1); }
+            afficherEtape(8);
+          });
+        });
+        var boutonVehiculeOui = document.getElementById('vehiculeOui');
+        var boutonVehiculeNon = document.getElementById('vehiculeNon');
+        if (boutonVehiculeOui) { boutonVehiculeOui.addEventListener('click', function () { dossier.permis.vehicule = true; afficherEtape(8); }); }
+        if (boutonVehiculeNon) { boutonVehiculeNon.addEventListener('click', function () { dossier.permis.vehicule = false; afficherEtape(8); }); }
+
+        // Oui/Non génériques (formation-niveau, engagement, savoirFairePerso)
+        // -- "Non" reste une réponse complète, validée immédiatement ;
+        // "Oui" déplie les champs SANS valider (voir bouton "Valider"
+        // ci-dessus, ou Entrée dans le champ texte, seuls déclencheurs
+        // désormais).
+        ['formation', 'engagement', 'savoirFairePerso'].forEach(function (cle) {
+          var btnOui = document.querySelector('[data-infocompl-oui="' + cle + '"]');
+          var btnNon = document.querySelector('[data-infocompl-non="' + cle + '"]');
+          if (btnOui) { btnOui.addEventListener('click', function () { infos[cle].actif = true; afficherEtape(8); }); }
+          if (btnNon) { btnNon.addEventListener('click', function () { infos[cle].actif = false; infos[cle].valide = true; afficherEtape(8); }); }
+          var champTexte = document.getElementById('infoComplTexte_' + cle);
+          var champDebut = document.getElementById('infoComplDebut_' + cle);
+          var champFin = document.getElementById('infoComplFin_' + cle);
+          cablerMajusculeAuto(champTexte);
+          if (champTexte) {
+            champTexte.addEventListener('input', function () { infos[cle].texte = this.value; });
+            champTexte.addEventListener('keydown', function (e) {
+              if (e.key !== 'Enter') { return; }
+              e.preventDefault();
+              infos[cle].valide = true;
+              afficherEtape(8);
+            });
+          }
+          if (champDebut) { champDebut.addEventListener('change', function () { infos[cle].dateDebut = this.value; }); }
+          if (champFin) { champFin.addEventListener('change', function () { infos[cle].dateFin = this.value; }); }
+        });
+        document.querySelectorAll('[data-niveau-infocompl]').forEach(function (pastille) {
+          pastille.addEventListener('click', function () {
+            var cle = this.dataset.cleInfocompl;
+            var niveauClique = this.dataset.niveauInfocompl;
+            infos[cle].niveau = (infos[cle].niveau === niveauClique) ? '' : niveauClique;
+            afficherEtape(8);
+          });
+        });
+
+        // Certifications -- texte libre + parcourir le catalogue Mon Projet.
+        var champTexteCertif = document.getElementById('infoComplTexteCertif');
+        cablerMajusculeAuto(champTexteCertif);
+        var btnAjouterCertif = document.getElementById('btnAjouterCertifTexteLibre');
+        if (btnAjouterCertif) {
+          btnAjouterCertif.addEventListener('click', function () {
+            var texte = (champTexteCertif.value || '').trim();
+            if (!texte) { return; }
+            var annee = document.getElementById('infoComplAnneeCertif').value;
+            dossier.certifications = dossier.certifications || [];
+            if (dossier.certifications.indexOf(texte) === -1) { dossier.certifications.push(texte); }
+            if (annee) {
+              dossier.detailsCatalogue = dossier.detailsCatalogue || {};
+              dossier.detailsCatalogue.certifications = dossier.detailsCatalogue.certifications || {};
+              dossier.detailsCatalogue.certifications[texte] = { dateDebut: annee, dateFin: '' };
+            }
+            afficherEtape(8);
+          });
+        }
+        var btnParcourirCertifications = document.getElementById('btnParcourirCertifications');
+        if (btnParcourirCertifications) {
+          btnParcourirCertifications.addEventListener('click', function () {
+            ouvrirFenetreCatalogue(CONFIG_CERTIFICATIONS, function (choisis) {
+              ajouterAuCatalogue(CONFIG_CERTIFICATIONS, choisis);
+              afficherEtape(8);
+            });
+          });
+        }
+
+        // Formations -- texte libre + parcourir CATALOGUE_FORMATIONS_COURANTES.
+        // TACHE : jamais ajouterAuCatalogue() générique ici -- son schéma
+        // ({intitule, dateDebut, dateFin}) ne correspond pas à celui
+        // attendu par dossier.formations ({niveau, intitule, annee}) --
+        // transformation manuelle, ciblée, jamais un plantage silencieux
+        // ni un champ "annee" qui resterait vide par erreur.
+        var champTexteFormationLibre = document.getElementById('infoComplTexteFormationLibre');
+        cablerMajusculeAuto(champTexteFormationLibre);
+        var btnAjouterFormationLibre = document.getElementById('btnAjouterFormationTexteLibre');
+        if (btnAjouterFormationLibre) {
+          btnAjouterFormationLibre.addEventListener('click', function () {
+            var texte = (champTexteFormationLibre.value || '').trim();
+            if (!texte) { return; }
+            var annee = document.getElementById('infoComplAnneeFormationLibre').value;
+            dossier.formations = dossier.formations || [];
+            if (!dossier.formations.some(function (f) { return f.intitule === texte; })) {
+              dossier.formations.push({ niveau: '', intitule: texte, annee: annee || '' });
+            }
+            afficherEtape(8);
+          });
+        }
+        var btnParcourirFormations = document.getElementById('btnParcourirFormations');
+        if (btnParcourirFormations) {
+          btnParcourirFormations.addEventListener('click', function () {
+            ouvrirFenetreCatalogue({
+              cle: 'formations', titre: '🎓 Formations', catalogue: CATALOGUE_FORMATIONS_COURANTES,
+              avecDates: true, champValeur: 'intitule'
+            }, function (choisis) {
+              dossier.formations = dossier.formations || [];
+              choisis.forEach(function (entree) {
+                var valeur = entree.valeur;
+                var anneeChoisie = entree.dateDebut ? (entree.dateDebut + (entree.dateFin ? ' - ' + entree.dateFin : '')) : (entree.dateFin || '');
+                if (!dossier.formations.some(function (f) { return f.intitule === valeur; })) {
+                  dossier.formations.push({ niveau: '', intitule: valeur, annee: anneeChoisie });
+                }
+              });
+              afficherEtape(8);
+            });
+          });
+        }
+
+        // Engagement -- parcourir des exemples (catalogue Mon Projet).
+        var btnParcourirEngagements = document.getElementById('btnParcourirEngagements');
+        if (btnParcourirEngagements) {
+          btnParcourirEngagements.addEventListener('click', function () {
+            ouvrirFenetreCatalogue(CONFIG_ENGAGEMENTS, function (choisis) {
+              ajouterAuCatalogue(CONFIG_ENGAGEMENTS, choisis);
+              infos.engagement.valide = true;
+              afficherEtape(8);
+            });
+          });
+        }
+
+        // Savoir-faire personnel -- explorer des exemples (multi-sélection).
+        var btnExplorerSavoirFairePerso = document.getElementById('btnExplorerSavoirFairePerso');
+        if (btnExplorerSavoirFairePerso) {
+          btnExplorerSavoirFairePerso.addEventListener('click', function () {
+            ouvrirFenetreCatalogue(CONFIG_EXPERIENCES_PERSO, function (choisis) {
+              ajouterAuCatalogue(CONFIG_EXPERIENCES_PERSO, choisis);
+              infos.savoirFairePerso.valide = true;
+              afficherEtape(8);
+            });
           });
         }
       },
       onContinuer: function () {
-        var fragmentsValides = etat.etatsFragments.filter(fragmentEstValide);
-        var resultatMapping = executerMapping(fragmentsValides, {});
-        if (!resultatMapping.succes) {
-          document.getElementById('messageErreurGenerationDecouverte').innerHTML =
-            '<span style="color:#b91c1c;">⚠️ ' + resultatMapping.erreur + '</span>';
-          return;
-        }
-        var resultatApplication = executerApplicationDossier(dossier, resultatMapping.valeurs.misesAJour);
-        if (!resultatApplication.succes) {
-          document.getElementById('messageErreurGenerationDecouverte').innerHTML =
-            '<span style="color:#b91c1c;">⚠️ ' + resultatApplication.erreur + '</span>';
-          return;
-        }
-        dossier.identite = dossier.identite || {};
-        ['civilite', 'nom', 'prenom', 'telephone', 'email'].forEach(function (champ) {
-          if (etat.identite[champ]) { dossier.identite[champ] = etat.identite[champ]; }
-        });
-        // TACHE (retour utilisateur : "les réponses à ces questions vont
-        // dans l'IA par la suite ?") : jusqu'ici perdues silencieusement
-        // une fois l'étape passée -- transmises désormais via
-        // dossier.informationsNonClassees, déjà lu par texteProfil() et
-        // donc déjà transmis à l'IA pour le CV/la lettre/l'entretien,
-        // sans avoir besoin d'un nouveau mécanisme.
+        // TACHE : transmission finale -- structurée vers le bon champ du
+        // dossier (jamais perdue), ET un résumé lisible vers l'IA (même
+        // canal que le reste, informationsNonClassees). Fonctionne que
+        // le bloc ait été explicitement "validé" (Entrée) ou non -- la
+        // donnée tapée est toujours prise en compte au clic sur
+        // "Continuer" pour l'ensemble de la page.
         dossier.informationsNonClassees = dossier.informationsNonClassees || [];
-        etat.questionsCiblees.forEach(function (question, i) {
-          var reponse = (etat.reponsesQuestionsCiblees[i] || '').trim();
-          if (reponse) { dossier.informationsNonClassees.push(question + ' — Réponse : ' + reponse); }
-        });
-        // TACHE (retour utilisateur : "je suis sûr qu'il y a plus de
-        // contenu et des informations utiles que notre JSON... si on
-        // prend directement le texte, comment l'intégrer de façon
-        // cohérente ?") : le récit complet est conservé ici, EN PLUS de
-        // l'extraction structurée -- jamais à sa place. La structure
-        // (expériences/compétences/loisirs) reste la seule à savoir OÙ
-        // ranger chaque information dans le CV, de façon fiable et
-        // traçable ; le récit brut, lui, apporte la nuance qu'aucune
-        // structure ne peut capturer, disponible pour l'IA au moment de
-        // rédiger le CV/la lettre/l'entretien (déjà le même canal
-        // vérifié pour les réponses aux questions ciblées ci-dessus).
-        if (etat.recit && etat.recit.trim()) {
-          dossier.informationsNonClassees.push('Récit complet raconté par la personne, pour context et nuances au-delà des éléments déjà extraits ci-dessus : ' + etat.recit.trim());
+        if (infos.formation.actif && infos.formation.texte.trim()) {
+          var texteFormationCompl = infos.formation.texte.trim();
+          var anneeFormationCompl = infos.formation.dateDebut
+            ? (infos.formation.dateDebut + (infos.formation.dateFin ? ' - ' + infos.formation.dateFin : ''))
+            : (infos.formation.dateFin || '');
+          // TACHE (retour utilisateur : bug déjà trouvé et corrigé une
+          // fois -- "Sans diplôme" ferait disparaître toute la ligne,
+          // même avec un intitulé réel) : jamais transmis comme niveau
+          // ici non plus, même principe.
+          var niveauFormationCompl = (infos.formation.niveau && infos.formation.niveau !== 'Sans diplôme') ? infos.formation.niveau : '';
+          dossier.formations = dossier.formations || [];
+          dossier.formations.push({ niveau: niveauFormationCompl, intitule: texteFormationCompl, annee: anneeFormationCompl });
+          dossier.informationsNonClassees.push('Formation suivie — ' + texteFormationCompl);
         }
-        dossier.typeCVRecommandeDecouverte = etat.typeCVChoisi;
-        fermerDecouverteCompetences();
-        // TACHE (retour utilisateur : "je clique sur Retour et je me
-        // retrouve sur 'Faire le point'") : le bouton Retour de la page
-        // Résultats pointe TOUJOURS vers 'revelation' (Faire le point),
-        // sans savoir comment la personne est arrivée là -- le module
-        // Découverte contourne entièrement cette page, ce lien n'a donc
-        // aucun sens dans ce cas précis. Signalé ici, consommé une seule
-        // fois dans pageResultats() (app.js).
-        window._decouverteVersResultats = true;
-        naviguerVers('resultats');
+        if (infos.engagement.actif && infos.engagement.texte.trim()) {
+          var texteEngagementCompl = infos.engagement.texte.trim();
+          dossier.engagements = dossier.engagements || [];
+          dossier.engagements.push({ texte: texteEngagementCompl, dateDebut: infos.engagement.dateDebut || '', dateFin: infos.engagement.dateFin || '' });
+          dossier.informationsNonClassees.push('Engagement — ' + texteEngagementCompl);
+        }
+        if (infos.savoirFairePerso.actif && infos.savoirFairePerso.texte.trim()) {
+          var texteSavoirFaireCompl = infos.savoirFairePerso.texte.trim();
+          dossier.experiencesPerso = dossier.experiencesPerso || [];
+          dossier.experiencesPerso.push({ intitule: texteSavoirFaireCompl, detail: '', dateDebut: infos.savoirFairePerso.dateDebut || '', dateFin: infos.savoirFairePerso.dateFin || '' });
+          dossier.informationsNonClassees.push('Savoir-faire personnel — ' + texteSavoirFaireCompl);
+        }
+        calculerStrategieSiBesoin();
+        finaliserEtNaviguerVersResultats();
       }
     };
+  }
+
+  // ------------------------------------------------------------
+  // TACHE (retour utilisateur : "je vais l'enlever [l'écran 'Votre
+  // stratégie'] parce qu'elle est déjà présente lorsque je fais mon CV...
+  // je n'ai pas besoin de cette fenêtre") : l'ancienne étape 8
+  // ("Votre stratégie", titre, pistes de métier, choix chronologique/
+  // mixte/par compétences) ne s'affiche plus jamais -- seul son calcul
+  // de fond est conservé (calculerStrategieSiBesoin ci-dessous, appelé
+  // depuis l'étape 7 désormais), sa navigation/finalisation aussi
+  // (finaliserEtNaviguerVersResultats). Les pistes de métier qu'elle
+  // affichait (repliées, cachées par défaut) ne sont plus montrées nulle
+  // part -- décision explicite, la personne est là pour se valoriser,
+  // pas pour chercher un métier à ce stade du parcours.
+  // ------------------------------------------------------------
+  function calculerStrategieSiBesoin() {
+    if (etat.strategie) { return; }
+    var competencesValidees = [];
+    etat.etatsFragments.forEach(function (ef) { competencesValidees = competencesValidees.concat(ef.competencesValidees || []); });
+    var nbPro = etat.etatsFragments.filter(function (ef) { return ef.origine === 'proDeclaree' || ef.origine === 'proNonDeclaree'; }).length;
+    var nbPerso = etat.etatsFragments.length - nbPro;
+    var resultatStrategie = executerStrategie(competencesValidees, {
+      nombreExperiencesProfessionnelles: nbPro,
+      nombreExperiencesPersonnelles: nbPerso,
+      objectifReconversion: dossier.objectif === 'reconversion'
+    });
+    // TACHE (gestion centralisée des erreurs) : un échec ici ne bloque
+    // jamais le parcours -- la stratégie est un complément utile, pas
+    // une condition pour produire un CV (doc1 §10.5 : son absence ne
+    // devrait pas empêcher un document par ailleurs valorisable).
+    etat.strategie = resultatStrategie.succes
+      ? resultatStrategie.valeurs
+      : { metiersProposes: [], aucunMetierPertinent: true, typeCVRecommande: { type: DECOUVERTE_TYPES_CV.PAR_COMPETENCES, regle: 'repli-erreur-strategie' } };
+    etat.typeCVChoisi = etat.strategie.typeCVRecommande.type;
+  }
+
+  function finaliserEtNaviguerVersResultats() {
+    var fragmentsValides = etat.etatsFragments.filter(fragmentEstValide);
+
+    // TACHE (chantier "exp perso", Phase 3 : construire réellement
+    // infosComplementairesParFragment, plus jamais {} en dur) : pour
+    // chaque question de type "date" avec une réponse renseignée
+    // (Phase 2), retrouve le fragment concerné via fragmentIndex ->
+    // indexOriginal (transporté depuis decouverteAnalyse.js par
+    // initialiserEtatFragment(), voir decouverteRaffinement.js), puis
+    // utilise SON fragmentId réel comme clé -- exactement la forme
+    // attendue par mapperFragmentsVersDossier() (decouverteMapping.js).
+    // Si le fragment référencé n'a en fait jamais été validé par la
+    // personne (jamais retenu dans fragmentsValides), l'information est
+    // silencieusement ignorée -- rien à raccrocher à un fragment qui
+    // n'existe plus dans le résultat final, jamais une exception.
+    var infosComplementairesParFragment = {};
+    etat.questionsCiblees.forEach(function (question, i) {
+      if (question.type !== 'date' || question.fragmentIndex === null) { return; }
+      var reponseDate = etat.reponsesQuestionsCiblees[i];
+      if (!reponseDate || typeof reponseDate !== 'object' || (!reponseDate.dateDebut && !reponseDate.dateFin)) { return; }
+      var fragmentCorrespondant = fragmentsValides.filter(function (ef) { return ef.indexOriginal === question.fragmentIndex; })[0];
+      if (!fragmentCorrespondant) { return; }
+      infosComplementairesParFragment[fragmentCorrespondant.fragmentId] = {
+        dateDebut: reponseDate.dateDebut || '',
+        dateFin: reponseDate.dateFin || ''
+      };
+    });
+
+    var resultatMapping = executerMapping(fragmentsValides, infosComplementairesParFragment);
+    if (!resultatMapping.succes) {
+      document.getElementById('messageErreurGenerationDecouverte').innerHTML =
+        '<span style="color:#b91c1c;">⚠️ ' + resultatMapping.erreur + '</span>';
+      return;
+    }
+    var resultatApplication = executerApplicationDossier(dossier, resultatMapping.valeurs.misesAJour);
+    if (!resultatApplication.succes) {
+      document.getElementById('messageErreurGenerationDecouverte').innerHTML =
+        '<span style="color:#b91c1c;">⚠️ ' + resultatApplication.erreur + '</span>';
+      return;
+    }
+    dossier.identite = dossier.identite || {};
+    ['civilite', 'nom', 'prenom', 'telephone', 'email'].forEach(function (champ) {
+      if (etat.identite[champ]) { dossier.identite[champ] = etat.identite[champ]; }
+    });
+    // TACHE (retour utilisateur : "les réponses à ces questions vont
+    // dans l'IA par la suite ?") : jusqu'ici perdues silencieusement
+    // une fois l'étape passée -- transmises désormais via
+    // dossier.informationsNonClassees, déjà lu par texteProfil() et
+    // donc déjà transmis à l'IA pour le CV/la lettre/l'entretien,
+    // sans avoir besoin d'un nouveau mécanisme.
+    dossier.informationsNonClassees = dossier.informationsNonClassees || [];
+    // TACHE (chantier "exp perso", Phase 1) : question est désormais un
+    // objet {texte, fragmentIndex, type} -- question.texte remplace la
+    // concaténation directe (qui aurait produit "[object Object]").
+    // TACHE (chantier "exp perso", Phase 3) : une réponse de type "date"
+    // a désormais sa vraie place structurée (infosComplementairesParFragment,
+    // ci-dessus) -- ne rejoint plus informationsNonClassees.
+    // TACHE (retour utilisateur : "j'ai répondu oui à la question
+    // formation/engagements... mais ces informations ne remontent pas,
+    // rien n'apparaît sur le CV") : bug réel trouvé -- une réponse
+    // "oui, formation de 4-5 jours" ne rejoignait QUE le contexte pour
+    // l'IA (informationsNonClassees), jamais dossier.formations lui-même
+    // -- la rubrique Formation restait donc vide même après une réponse
+    // positive. Même chose pour "je suis investi dans une association" :
+    // jamais ajouté à dossier.engagements. Corrigé ici : les réponses de
+    // type "formation"/"engagement" sont désormais ajoutées TELLES
+    // QUELLES (les mots de la personne, jamais reformulés ni interprétés
+    // -- même principe que pour les dates, aucune invention) dans le
+    // bon champ structuré, et ne rejoignent donc plus
+    // informationsNonClassees (déjà leur vraie place, inutile de
+    // dupliquer -- même raisonnement que pour les dates ci-dessus).
+    // Seules les réponses de type "texte" (questions plus générales)
+    // continuent d'alimenter ce canal, comme avant.
+    // TACHE (retour utilisateur : "pour la formation... indiquer
+    // l'année, même format que les questions sur la durée du métier --
+    // pareil pour l'associatif/bénévole") : la réponse à ces 2 types
+    // est désormais un objet {texte, dateDebut, dateFin} (voir
+    // etapeQuestionsCiblees ci-dessus), plus une simple chaîne. Pour
+    // Formation, dont le schéma (dossier.formations) ne porte qu'un seul
+    // champ "annee" (jamais une plage dateDebut/dateFin -- changer ce
+    // schéma toucherait bien trop d'endroits, même risque que
+    // Certifications/Loisirs) : la période est formatée en une chaîne
+    // ("2019 - 2021" ou juste "2021") stockée directement dans ce champ
+    // existant, sans avoir besoin d'étendre son schéma. Pour Engagement,
+    // dont le schéma supporte déjà dateDebut/dateFin (chantier "exp
+    // perso", Phase 4), les deux valeurs sont utilisées telles quelles.
+    etat.questionsCiblees.forEach(function (question, i) {
+      if (question.type === 'date') { return; }
+      var reponseBrute = etat.reponsesQuestionsCiblees[i];
+      if (question.type === 'formation') {
+        var texteFormation = ((reponseBrute && reponseBrute.texte) || '').trim();
+        if (!texteFormation) { return; }
+        var anneeFormation = reponseBrute.dateDebut
+          ? (reponseBrute.dateDebut + (reponseBrute.dateFin ? ' - ' + reponseBrute.dateFin : ''))
+          : (reponseBrute.dateFin || '');
+        dossier.formations = dossier.formations || [];
+        // TACHE (retour utilisateur : "aucune trace dans le CV" -- bug
+        // réel trouvé : normaliserDonneesCV.js filtre TOUTE la ligne
+        // Formation dès que niveau === "Sans diplôme", même quand
+        // l'intitulé contient une vraie information. Cette règle
+        // préexistante avait du sens pour une réponse "Sans diplôme"
+        // vide de contenu (un simple constat), mais pas ici : la
+        // personne peut très bien avoir suivi une formation courte tout
+        // en n'ayant "pas de diplôme" à proprement parler -- l'intitulé
+        // reste précieux, jamais à perdre pour cette seule raison.
+        // "Sans diplôme" n'est donc jamais transmis comme niveau pour
+        // cette question précise (repli sur chaîne vide) -- l'intitulé
+        // survit toujours, quel que soit le niveau choisi ou non choisi.
+        var niveauFormationQ = (reponseBrute.niveau && reponseBrute.niveau !== 'Sans diplôme') ? reponseBrute.niveau : '';
+        dossier.formations.push({ niveau: niveauFormationQ, intitule: texteFormation, annee: anneeFormation });
+        return;
+      }
+      if (question.type === 'engagement') {
+        var texteEngagementQ = ((reponseBrute && reponseBrute.texte) || '').trim();
+        if (!texteEngagementQ) { return; }
+        dossier.engagements = dossier.engagements || [];
+        dossier.engagements.push({
+          texte: texteEngagementQ,
+          dateDebut: (reponseBrute && reponseBrute.dateDebut) || '',
+          dateFin: (reponseBrute && reponseBrute.dateFin) || ''
+        });
+        return;
+      }
+      var reponse = (typeof reponseBrute === 'string' ? reponseBrute : '').trim();
+      if (!reponse) { return; }
+      dossier.informationsNonClassees.push(question.texte + ' — Réponse : ' + reponse);
+    });
+    // TACHE (retour utilisateur : "je suis sûr qu'il y a plus de
+    // contenu et des informations utiles que notre JSON... si on
+    // prend directement le texte, comment l'intégrer de façon
+    // cohérente ?") : le récit complet est conservé ici, EN PLUS de
+    // l'extraction structurée -- jamais à sa place. La structure
+    // (expériences/compétences/loisirs) reste la seule à savoir OÙ
+    // ranger chaque information dans le CV, de façon fiable et
+    // traçable ; le récit brut, lui, apporte la nuance qu'aucune
+    // structure ne peut capturer, disponible pour l'IA au moment de
+    // rédiger le CV/la lettre/l'entretien (déjà le même canal
+    // vérifié pour les réponses aux questions ciblées ci-dessus).
+    // TACHE (retour utilisateur : "ce message ne passe pas sur tous les
+    // IA" -- bug réel et sérieux trouvé : etat.recit (le texte ORIGINAL
+    // de la personne, jamais filtré) partait ici mot pour mot, avec tout
+    // contexte personnel sensible potentiellement présent (détention,
+    // maladie...) -- alors que ce même contexte est déjà correctement
+    // retiré côté fragments individuels (decouverte-competences.md).
+    // Utilise désormais etat.reciteNettoye (même contenu utile, contexte
+    // sensible retiré par l'IA sur l'ENSEMBLE du récit, pas seulement
+    // fragment par fragment) -- jamais etat.recit original. Si
+    // reciteNettoye est vide (réponse IA antérieure à ce chantier, ou
+    // champ manquant), on ne transmet RIEN plutôt que de retomber sur le
+    // texte brut non filtré : mieux vaut perdre la nuance que risquer de
+    // relaisser passer un contexte personnel sensible.
+    if (etat.reciteNettoye && etat.reciteNettoye.trim()) {
+      dossier.informationsNonClassees.push('Récit complet raconté par la personne, pour context et nuances au-delà des éléments déjà extraits ci-dessus : ' + etat.reciteNettoye.trim());
+    }
+    dossier.typeCVRecommandeDecouverte = etat.typeCVChoisi;
+    fermerDecouverteCompetences();
+    // TACHE (retour utilisateur : "je clique sur Retour et je me
+    // retrouve sur 'Faire le point'") : le bouton Retour de la page
+    // Résultats pointe TOUJOURS vers 'revelation' (Faire le point),
+    // sans savoir comment la personne est arrivée là -- le module
+    // Découverte contourne entièrement cette page, ce lien n'a donc
+    // aucun sens dans ce cas précis. Signalé ici, consommé une seule
+    // fois dans pageResultats() (app.js).
+    window._decouverteVersResultats = true;
+    naviguerVers('resultats');
   }
 
   function obtenirDefinitionEtape(numero) {
@@ -1208,8 +1932,7 @@ function ouvrirDecouverteCompetences() {
     if (numero === 5) { return etapeCollerReponse(); }
     if (numero === 6) { return etapeDecouverte(); }
     if (numero === 7) { return etapeQuestionsCiblees(); }
-    if (numero === 8) { return etapeStrategie(); }
-    return etapeStrategie();
+    return etapeMobilite();
   }
 
   afficherEtape(1);
