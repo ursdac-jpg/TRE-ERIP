@@ -53,7 +53,31 @@ function creerDossierIAVide() {
         // appliquerMoteurDecisionCV) -- jamais pour une experience deja
         // bien ecrite et concise. Rapprochement avec dossier.experiences
         // par poste/entreprise, meme mecanisme que experiencesAMettreEnAvant.
-        savoirFaireParExperience: []    // [{ poste, entreprise, missions: [...] }]
+        savoirFaireParExperience: [],   // [{ poste, entreprise, missions: [...] }]
+        // TACHE (cv.md, points 11-14 : diplome le plus haut, certifications,
+        // experience personnelle prioritaire, regroupement des experiences) :
+        // meme tolerance que le reste -- valeurs neutres si l'IA ne les a
+        // pas renseignes, jamais d'invention.
+        formationRetenue: { intitule: '', justification: '' },
+        certificationsAMettreEnAvant: [],  // [{ certification, justification }]
+        experiencePersonnelleAMettreEnAvant: { intitule: '', missions: [], justification: '' },
+        // TACHE (bouton "Mettre en avant + regrouper") : NE PASSE PAS par
+        // l'ecran de revision (voir creerBrouillonChoixIACV) -- c'est un
+        // mode d'affichage entier, pas une recommandation a la carte.
+        // Transmis tel quel du parsing jusqu'ici.
+        regroupementExperiences: {
+          experiencePrioritaire: { type: '', poste: '', entreprise: '', intitule: '', missions: [], justification: '' },
+          groupes: []  // [{ metiers: [...], texteRegroupe }]
+        },
+        // TACHE (cv.md, point 15 -- chantier "stratégie 3 branches") :
+        // regroupement thematique reel des competences (theme + items +
+        // illustrePar), consomme uniquement quand la strategie "Par
+        // competences" est active (composeurComposition.js) -- comme
+        // regroupementExperiences, NE PASSE PAS par l'ecran de revision
+        // (c'est un contenu structurel entier, pas une recommandation a
+        // la carte). Repli automatique sur l'ancien decoupage technique/
+        // savoir-etre si vide (dossiers sans cette donnee).
+        competencesGroupeesParTheme: []  // [{ theme, items: [{texte, illustrePar}] }]
       },
       // TACHE (retour utilisateur : 5 propositions d'accroche, choix
       // unique + bouton "Revenir aux propositions de l'IA") : conserve les
@@ -962,6 +986,26 @@ var CATALOGUE_CERTIFICATIONS = [
   { categorie: 'Langues', items: ['TOEIC', 'TOEFL', 'Linguaskill', 'DELF', 'DALF'] }
 ];
 
+// TACHE (retour utilisateur : "je ne connais pas ces formations, fais un
+// catalogue pour les métiers les plus accessibles et les formations les
+// plus connues/recommandées") : couvre les secteurs les plus représentés
+// en insertion professionnelle (BTP, hôtellerie-restauration, aide à la
+// personne, logistique, sécurité/propreté, commerce, numérique) --
+// formations courtes et reconnues, jamais des parcours longs ou trop
+// spécialisés. Utilisé par le panneau "Informations complémentaires"
+// (decouverteParcours.js), sous-option "Formations" -- même structure
+// (categorie/items) que CATALOGUE_CERTIFICATIONS ci-dessus, jamais un
+// second format de catalogue à apprendre.
+var CATALOGUE_FORMATIONS_COURANTES = [
+  { categorie: 'Bâtiment / Travaux publics', items: ['CAP Maçonnerie', 'CAP Peinture et revêtements', 'CAP Menuiserie', 'CAP Électricien', 'CAP Plomberie', 'Titre professionnel Agent de propreté et d’hygiène', 'Formation conduite d’engins de chantier'] },
+  { categorie: 'Hôtellerie / Restauration', items: ['CAP Cuisine', 'CAP Service en restauration', 'Titre professionnel Employé polyvalent de restauration', 'Formation hygiène alimentaire (HACCP)'] },
+  { categorie: 'Aide à la personne / Santé', items: ['Titre professionnel Assistant de vie aux familles (ADVF)', 'DEAES (Accompagnant éducatif et social)', 'Formation Auxiliaire de vie', 'CAP Accompagnant éducatif petite enfance'] },
+  { categorie: 'Logistique / Transport', items: ['Titre professionnel Agent magasinier', 'Formation Cariste (CACES)', 'Permis poids lourd', 'Titre professionnel Préparateur de commandes'] },
+  { categorie: 'Sécurité / Propreté', items: ['Titre professionnel Agent de sécurité (carte professionnelle)', 'SSIAP 1', 'CQP Agent de propreté et d’hygiène'] },
+  { categorie: 'Commerce / Vente', items: ['CAP Employé de vente', 'Titre professionnel Conseiller de vente', 'Formation caisse et encaissement'] },
+  { categorie: 'Numérique / Bureautique', items: ['Formation bureautique (Word, Excel)', 'Initiation informatique', 'PIX'] }
+];
+
 // Enrichissement invisible : chaque loisir du catalogue est relie a 1-3
 // competences existantes (categorieCompetence). Jamais affiche a l'ecran ;
 // utilise uniquement par deduireCompetences() pour enrichir le Dossier Candidat.
@@ -1370,6 +1414,42 @@ function blocPastillesAvecDetail(config, liste) {
   }).join('') + '</div>';
 }
 
+// TACHE (retour utilisateur : "une mère au foyer qui a géré 5 ou 6
+// enfants... je veux pouvoir mettre des dates et valoriser ça") :
+// nouvelle fonction, JAMAIS une modification des 2 ci-dessus (Loisirs/
+// Certifications n'ont pas avecDates, donc jamais concernés). Réutilise
+// exactement le même principe que le parcours Découverte (chantier "exp
+// perso", Phase 2) -- deux sélecteurs d'année, jamais un champ de texte
+// libre pour une date (risque de faute de frappe/interprétation sur un
+// fait aussi précis). dossier[config.cle] est un tableau d'objets
+// { [config.champValeur]: ..., detail?: ..., dateDebut, dateFin }.
+function blocPastillesAvecDatesEtDetail(config, liste) {
+  var anneeCourante = new Date().getFullYear();
+  function optionsAnneesCatalogue(valeurSelectionnee, libellePremiereOption) {
+    var options = '<option value="">' + libellePremiereOption + '</option>';
+    for (var annee = anneeCourante; annee >= 1960; annee--) {
+      options += '<option value="' + annee + '"' + (String(annee) === String(valeurSelectionnee) ? ' selected' : '') + '>' + annee + '</option>';
+    }
+    return options;
+  }
+  return '<div class="pastilles-detail mt-2">' + liste.map(function (item, i) {
+    return '<div class="pastille-detail-bloc">' +
+      '<span class="pastille actif" data-catalogue-retrait="' + config.cle + '" data-index="' + i + '">' + item[config.champValeur] + ' &#10005;</span>' +
+      (config.avecDetail
+        ? '<input type="text" class="form-control form-control-sm mt-1" data-catalogue-detail="' + config.cle + '" data-index="' + i + '" ' +
+          'placeholder="Détail (optionnel)" value="' + echapperAttribut(item.detail || '') + '">'
+        : '') +
+      '<div class="d-flex gap-2 align-items-center mt-1 flex-wrap">' +
+        '<select class="form-select form-select-sm" style="width:auto;" data-catalogue-date-debut="' + config.cle + '" data-index="' + i + '">' +
+        optionsAnneesCatalogue(item.dateDebut, 'Année de début') + '</select>' +
+        '<span class="small text-muted">à</span>' +
+        '<select class="form-select form-select-sm" style="width:auto;" data-catalogue-date-fin="' + config.cle + '" data-index="' + i + '">' +
+        optionsAnneesCatalogue(item.dateFin, 'Toujours en cours') + '</select>' +
+      '</div>' +
+      '</div>';
+  }).join('') + '</div>';
+}
+
 // Composant generique "Oui/Non + pastilles", reutilisable pour Loisirs,
 // Engagements et Experiences et savoir-faire personnels (etapes 4/5/6).
 // config = { cle, titre, question, catalogue, avecDetail, champValeur }
@@ -1409,7 +1489,12 @@ function blocCatalogueOuiNon(config) {
     '<button class="btn btn-sm ' + choixNon + '" data-catalogue-non="' + config.cle + '">Non</button>';
   if (actif) {
     if (liste.length) {
-      html += config.avecDetail ? blocPastillesAvecDetail(config, liste) : blocPastillesSimples(config, liste);
+      // TACHE (retour utilisateur : dates pour Expériences personnelles/
+      // Engagements) : avecDates prioritaire sur avecDetail seul --
+      // Certifications/Loisirs (ni l'un ni l'autre) gardent
+      // blocPastillesSimples, strictement inchangé.
+      html += config.avecDates ? blocPastillesAvecDatesEtDetail(config, liste)
+        : (config.avecDetail ? blocPastillesAvecDetail(config, liste) : blocPastillesSimples(config, liste));
     }
     html += '<div class="mt-2"><button class="btn btn-outline-primary btn-sm" data-catalogue-ajouter="' + config.cle + '">&#10133; Ajouter</button></div>';
   }
@@ -1434,58 +1519,253 @@ function fermerFenetreCatalogue() {
 // Fenetre de selection : catalogue groupe par categories (cases a cocher pour
 // les items pas encore choisis) + champ "Autre" libre. onValider(choisis[]) est
 // appele avec les valeurs cochees + la saisie libre eventuelle.
+// TACHE (retour utilisateur : "une mère au foyer... je veux pouvoir mettre
+// des dates directement dans la fenêtre Ajouter, au moment de la
+// sélection", puis "pour Expériences personnelles, Loisirs, Engagements,
+// Certifications", puis "une option contexte, question libre, transmise
+// à l'IA") : quand config.avecDates OU config.avecDatesSeparees est actif,
+// un mini bloc (dates + contexte optionnel) apparaît sous chaque case à
+// cocher DÈS QU'ELLE EST COCHÉE (caché sinon, jamais affiché pour toutes
+// les cases d'un coup -- le catalogue compte parfois 30+ items). Aucun
+// autre config du catalogue partagé n'a ces champs à ce jour -- le
+// comportement originel (simple case à cocher) reste intact pour eux.
 function ouvrirFenetreCatalogue(config, onValider) {
+  // TACHE (retour utilisateur, bug trouvé en traçant le code : "dejaChoisis
+  // utilisait item directement pour Engagements, alors que l'item est
+  // maintenant un objet {texte, dateDebut, dateFin} depuis avecDates") :
+  // (config.avecDetail || config.avecDates) au lieu de config.avecDetail
+  // seul -- sinon les engagements déjà ajoutés ne seraient jamais
+  // reconnus comme "déjà choisis". avecDatesSeparees (Certifications/
+  // Loisirs) garde des éléments en simples chaînes -- jamais concerné
+  // par cette extraction.
   var dejaChoisis = (dossier[config.cle] || []).map(function (item) {
-    return config.avecDetail ? item[config.champValeur] : item;
+    return (config.avecDetail || config.avecDates) ? item[config.champValeur] : item;
   });
+  var anneeCouranteModal = new Date().getFullYear();
+  function optionsAnneesModal(libellePremiereOption) {
+    var options = '<option value="">' + libellePremiereOption + '</option>';
+    for (var annee = anneeCouranteModal; annee >= 1960; annee--) { options += '<option value="' + annee + '">' + annee + '</option>'; }
+    return options;
+  }
+  var avecChampsCase = config.avecDates || config.avecDatesSeparees || config.avecContexte || config.avecMissions;
+  var avecDatesQuellconque = config.avecDates || config.avecDatesSeparees;
+  // TACHE : bloc dates + contexte + missions, identique pour chaque case
+  // ET pour "Autre" -- jamais dupliqué à la main.
+  function zoneDatesEtContexte(idBase) {
+    var zoneDates = avecDatesQuellconque
+      ? '<div class="d-flex gap-2 align-items-center flex-wrap">' +
+        '<select class="form-select form-select-sm d-inline-block" style="width:auto;" id="debutPour_' + idBase + '">' + optionsAnneesModal('Année de début') + '</select> ' +
+        '<span class="small text-muted">à</span> ' +
+        '<select class="form-select form-select-sm d-inline-block" style="width:auto;" id="finPour_' + idBase + '">' + optionsAnneesModal('Toujours en cours') + '</select>' +
+        '</div>'
+      : '';
+    var zoneContexte = config.avecContexte
+      ? '<div class="mt-2">' +
+        '<label class="small text-muted d-block"><input type="checkbox" data-toggle-contexte-catalogue="' + idBase + '"> Voulez-vous ajouter du contexte ?</label>' +
+        '<textarea class="form-control form-control-sm mt-1" style="display:none;" id="contextePour_' + idBase + '" rows="2" placeholder="Précisez ce que vous voulez ajouter — cette information sera transmise à l\'IA, jamais affichée telle quelle sur le CV."></textarea>' +
+        '</div>'
+      : '';
+    // TACHE (retour utilisateur : "je veux bien que les expériences
+    // personnelles aient des missions au même titre que l'expérience
+    // professionnelle, sous le même format et avec les mêmes règles") :
+    // une mission par ligne (rows="3", même esprit que la saisie des
+    // missions professionnelles) -- affichée sur le CV telle quelle
+    // (contrairement au contexte, qui ne va qu'à l'IA), toujours
+    // optionnelle.
+    var zoneMissions = config.avecMissions
+      ? '<div class="mt-2">' +
+        '<label class="small text-muted d-block">Missions (optionnel, une par ligne)</label>' +
+        '<textarea class="form-control form-control-sm mt-1" id="missionsPour_' + idBase + '" rows="3" placeholder="Ex. Organiser des événements sportifs\nGérer un budget associatif"></textarea>' +
+        '</div>'
+      : '';
+    return zoneDates + zoneContexte + zoneMissions;
+  }
+  var compteurCasesModal = 0;
   var corpsCategories = config.catalogue.map(function (groupe) {
     var cases = groupe.items.filter(function (item) { return dejaChoisis.indexOf(item) === -1; }).map(function (item) {
-      return '<label class="catalogue-case"><input type="checkbox" value="' + echapperAttribut(item) + '"> ' + item + '</label>';
+      if (!avecChampsCase) {
+        return '<label class="catalogue-case"><input type="checkbox" value="' + echapperAttribut(item) + '"> ' + item + '</label>';
+      }
+      compteurCasesModal++;
+      var idCase = 'catalogueCase_' + compteurCasesModal;
+      return '<label class="catalogue-case"><input type="checkbox" value="' + echapperAttribut(item) + '" id="' + idCase + '" data-toggle-details-catalogue> ' + item + '</label>' +
+        '<div class="ms-4 mt-1 mb-2" id="detailsPour_' + idCase + '" style="display:none;">' + zoneDatesEtContexte(idCase) + '</div>';
     }).join('');
     if (!cases) { return ''; }
     return '<div class="catalogue-categorie"><h6>' + groupe.categorie + '</h6>' + cases + '</div>';
   }).join('');
+
+  var champsDetailsAutre = avecChampsCase
+    ? '<div class="ms-4 mt-1" id="detailsPourAutre" style="display:none;">' + zoneDatesEtContexte('Autre') + '</div>'
+    : '';
 
   var fenetre = ouvrirFenetreERIP({
     titre: config.titre,
     contenuHTML:
       corpsCategories +
       '<div class="catalogue-categorie"><h6>Autre</h6>' +
-      '<input type="text" class="form-control form-control-sm" id="catalogueAutreTexte" placeholder="Préciser..."></div>' +
+      '<input type="text" class="form-control form-control-sm" id="catalogueAutreTexte" placeholder="Préciser...">' +
+      champsDetailsAutre +
+      '</div>' +
       '<div class="d-flex justify-content-end mt-3">' +
         '<button type="button" id="validerCatalogueBtn" class="btn btn-primary">Valider</button>' +
       '</div>'
   });
 
+  // TACHE : n'affiche le mini bloc (dates + contexte) QUE pour la case
+  // que la personne vient de cocher (jamais toutes en même temps) --
+  // masqué à nouveau si elle décoche. Le champ contexte, lui, se déplie
+  // une 2e fois (au sein du bloc déjà déplié) uniquement si la personne
+  // coche "Voulez-vous ajouter du contexte ?".
+  if (avecChampsCase) {
+    fenetre.querySelectorAll('[data-toggle-details-catalogue]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var zone = document.getElementById('detailsPour_' + this.id);
+        if (zone) { zone.style.display = this.checked ? 'block' : 'none'; }
+      });
+    });
+    var champAutreTexte = document.getElementById('catalogueAutreTexte');
+    if (champAutreTexte) {
+      champAutreTexte.addEventListener('input', function () {
+        var zone = document.getElementById('detailsPourAutre');
+        if (zone) { zone.style.display = this.value.trim() ? 'block' : 'none'; }
+      });
+    }
+    fenetre.querySelectorAll('[data-toggle-contexte-catalogue]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var zoneTexte = document.getElementById('contextePour_' + this.dataset.toggleContexteCatalogue);
+        if (zoneTexte) { zoneTexte.style.display = this.checked ? 'block' : 'none'; }
+      });
+    });
+  }
+
   document.getElementById('validerCatalogueBtn').addEventListener('click', function () {
     var choisis = [];
-    fenetre.querySelectorAll('input[type="checkbox"]:checked').forEach(function (cb) { choisis.push(cb.value); });
+    // TACHE (retour utilisateur, bug trouvé en écrivant ce code : "la
+    // case 'Voulez-vous ajouter du contexte ?' est elle-même une case à
+    // cocher -- un sélecteur générique 'tout ce qui est coché' l'aurait
+    // confondue avec un élément du catalogue choisi") : sélecteur limité
+    // aux cases ayant un id "catalogueCase_..." (uniquement les vrais
+    // éléments du catalogue) quand avecChampsCase est actif -- sinon
+    // (aucun de ces champs), comportement originel identique (aucune
+    // case n'a d'id dans ce cas, la case contexte n'existe même pas).
+    var selecteurCasesCatalogue = avecChampsCase ? 'input[type="checkbox"][id^="catalogueCase_"]:checked' : 'input[type="checkbox"]:checked';
+    fenetre.querySelectorAll(selecteurCasesCatalogue).forEach(function (cb) {
+      // TACHE : forme de chaque entrée choisie -- {valeur, dateDebut,
+      // dateFin, contexte} dès que avecDates/avecDatesSeparees/avecContexte
+      // est actif, une simple chaîne sinon (comportement originel
+      // strictement conservé pour tout config sans aucun de ces champs).
+      if (avecChampsCase) {
+        var champDebut = document.getElementById('debutPour_' + cb.id);
+        var champFin = document.getElementById('finPour_' + cb.id);
+        var champContexte = document.getElementById('contextePour_' + cb.id);
+        var champMissions = document.getElementById('missionsPour_' + cb.id);
+        choisis.push({
+          valeur: cb.value,
+          dateDebut: champDebut ? champDebut.value : '',
+          dateFin: champFin ? champFin.value : '',
+          contexte: champContexte ? champContexte.value.trim() : '',
+          missions: champMissions ? champMissions.value.trim() : ''
+        });
+      } else {
+        choisis.push(cb.value);
+      }
+    });
     var autre = document.getElementById('catalogueAutreTexte').value.trim();
-    if (autre) { choisis.push(autre); }
+    if (autre) {
+      if (avecChampsCase) {
+        var debutAutre = document.getElementById('debutPourAutre');
+        var finAutre = document.getElementById('finPourAutre');
+        var contexteAutre = document.getElementById('contextePourAutre');
+        var missionsAutre = document.getElementById('missionsPourAutre');
+        choisis.push({
+          valeur: autre,
+          dateDebut: debutAutre ? debutAutre.value : '',
+          dateFin: finAutre ? finAutre.value : '',
+          contexte: contexteAutre ? contexteAutre.value.trim() : '',
+          missions: missionsAutre ? missionsAutre.value.trim() : ''
+        });
+      } else {
+        choisis.push(autre);
+      }
+    }
     fermerFenetreERIP();
     if (choisis.length) { onValider(choisis); }
   });
 }
 
 // Ajoute les valeurs choisies dans dossier[config.cle], sans doublon, en
-// respectant la forme attendue (chaine simple, ou objet si avecDetail).
+// respectant la forme attendue (chaine simple, ou objet si avecDetail
+// et/ou avecDates). Stocke aussi dates/contexte à part pour
+// avecDatesSeparees (Certifications/Loisirs), et transmet tout contexte
+// libre à l'IA (dossier.informationsNonClassees), quel que soit le bloc.
 function ajouterAuCatalogue(config, choisis) {
   dossier[config.cle] = dossier[config.cle] || [];
-  choisis.forEach(function (valeur) {
+  // TACHE (retour utilisateur : "une mère au foyer... pouvoir mettre des
+  // dates") : un objet est désormais utilisé dès que avecDetail OU
+  // avecDates est actif (avant ce chantier, seul avecDetail déclenchait
+  // un objet) -- Certifications et Loisirs (avecDatesSeparees, pas
+  // avecDates) restent en simples chaînes, strictement inchangés partout
+  // où dossier.certifications/loisirs est déjà lu (~15 endroits pour les
+  // certifications, encore plus pour les loisirs -- trop risqué pour
+  // changer leur forme). Même schéma exact que celui du parcours
+  // Découverte (chantier "exp perso", Phase 4) pour engagements --
+  // {texte, dateDebut, dateFin} -- jamais un second format selon
+  // l'origine.
+  var utiliseObjet = config.avecDetail || config.avecDates;
+  // TACHE : dès que la fenêtre a proposé des champs supplémentaires
+  // (dates et/ou contexte, voir ouvrirFenetreCatalogue), chaque entrée
+  // choisie est un objet {valeur, dateDebut, dateFin, contexte} --
+  // sinon, une simple valeur (comportement originel, inchangé).
+  var entreesEnrichies = config.avecDates || config.avecDatesSeparees || config.avecContexte || config.avecMissions;
+  dossier.detailsCatalogue = dossier.detailsCatalogue || {};
+  if (config.avecDatesSeparees) { dossier.detailsCatalogue[config.cle] = dossier.detailsCatalogue[config.cle] || {}; }
+  choisis.forEach(function (entree) {
+    var valeur = entreesEnrichies ? entree.valeur : entree;
     // TACHE (refonte Mon projet) : plafond commun a 5 elements, pour garder
     // les resumes de tableau de bord lisibles.
     if (dossier[config.cle].length >= LIMITE_CATALOGUE_RESUME) { return; }
-    var existe = config.avecDetail
+    var existe = utiliseObjet
       ? dossier[config.cle].some(function (item) { return item[config.champValeur] === valeur; })
       : dossier[config.cle].indexOf(valeur) !== -1;
     if (!existe) {
-      if (config.avecDetail) {
+      if (utiliseObjet) {
         var item = {};
         item[config.champValeur] = valeur;
-        item.detail = '';
+        if (config.avecDetail) { item.detail = ''; }
+        if (config.avecDates) {
+          item.dateDebut = (entree && entree.dateDebut) || '';
+          item.dateFin = (entree && entree.dateFin) || '';
+        }
+        if (config.avecContexte) { item.contexte = (entree && entree.contexte) || ''; }
+        // TACHE (retour utilisateur : "je veux bien que les expériences
+        // personnelles aient des missions au même titre que l'expérience
+        // professionnelle") : stockée telle quelle (les mots de la
+        // personne, jamais reformulés) -- une mission par ligne, même
+        // format que dossier.experiences[].missions, lu par
+        // composeurRender.js avec le même mécanisme puce/Condensé-Épuré.
+        if (config.avecMissions) { item.missions = (entree && entree.missions) || ''; }
         dossier[config.cle].push(item);
       } else {
+        // TACHE (retour utilisateur : "je veux que ça soit fait, aucune
+        // régression") : dossier.certifications/loisirs reçoit toujours
+        // une simple chaîne ici, EXACTEMENT comme avant -- les dates
+        // (avecDatesSeparees) vivent uniquement dans
+        // dossier.detailsCatalogue, jamais dans ce tableau lui-même.
         dossier[config.cle].push(valeur);
+        if (config.avecDatesSeparees && entree && (entree.dateDebut || entree.dateFin)) {
+          dossier.detailsCatalogue[config.cle][valeur] = { dateDebut: entree.dateDebut || '', dateFin: entree.dateFin || '' };
+        }
+      }
+      // TACHE (retour utilisateur : "une option contexte... transmise à
+      // l'IA") : quel que soit le bloc (objet ou simple chaîne), un
+      // contexte renseigné rejoint dossier.informationsNonClassees --
+      // même canal déjà utilisé par le parcours Découverte pour les
+      // réponses aux questions ciblées, déjà lu par texteProfil() et
+      // donc déjà transmis à l'IA pour le CV/la lettre/l'entretien.
+      if (config.avecContexte && entree && entree.contexte) {
+        dossier.informationsNonClassees = dossier.informationsNonClassees || [];
+        dossier.informationsNonClassees.push(config.titre.replace(/&#\d+;\s*/, '') + ' — ' + valeur + ' — Contexte : ' + entree.contexte);
       }
     }
   });
@@ -2208,7 +2488,12 @@ function pageChoixCV() {
   // Page d'accueil : PAS de bouton Accueil (on y est deja)
   app.innerHTML =
     afficherProgression('cv') +
-    '<div class="text-center"><h1>&#128075; Commençons par votre CV</h1>' +
+    // TACHE (retour utilisateur : "commençons par votre CV" n'est plus
+    // d'actualité, ce n'est plus que du CV -- lettre, entretien,
+    // ateliers aussi") : titre neutre, ne présuppose plus que le CV --
+    // le sous-titre existant ("Choisissez votre point de départ")
+    // fonctionnait déjà très bien pour l'ensemble des parcours, inchangé.
+    '<div class="text-center"><h1>&#128075; Par où voulez-vous commencer ?</h1>' +
     '<p class="sousTitre">Choisissez votre point de départ.</p></div>' +
     '<div class="objectifs objectifs-accueil">' +
       '<div class="carte' + classeMemoriseSi(dossier.modeCreation, 'nouveau') + '" data-action="mode" data-value="nouveau"><i class="bi bi-stars"></i>' +
@@ -2233,9 +2518,17 @@ function pageChoixCV() {
         '<h3>Vous hésitez encore ?</h3>' +
         '<p>Explorez d’autres pistes : ateliers, formations, immersions, autres métiers...</p>' +
       '</button>' +
+      // TACHE (retour utilisateur : "il manque la description du parcours
+      // Découvert -- on a lettre de motivation, entretien, mais rien sur
+      // ce parcours") : ce menu (ouvrirChoixPreparationAccueil(), metiers.js)
+      // propose en réalité 3 tuiles, dans cet ordre : "Découvrir mes
+      // compétences", "Co-construire ma lettre", "Préparer un entretien"
+      // -- la description ici ne mentionnait que 2 des 3, jamais mise à
+      // jour lors de l'ajout de la tuile Découverte (comportement déjà
+      // branché et fonctionnel, uniquement le texte était resté périmé).
       '<div class="carte carte-entretien-direct" id="btnPreparationAccueil"><i class="bi bi-briefcase"></i>' +
         '<h3>Boîte à outils</h3>' +
-        '<p>Préparez un entretien ou co-construisez votre lettre de motivation avec l’assistant IA.</p>' +
+        '<p>Découvrez vos compétences, co-construisez votre lettre de motivation, ou préparez un entretien avec l’assistant IA.</p>' +
       '</div>' +
     '</div>' +
     // TACHE 33A : Explorateur de la Base de connaissances ERIP — grand rectangle
@@ -3624,7 +3917,14 @@ var CONFIG_LOISIRS = {
   titre: '&#127917; Loisirs',
   question: 'Souhaitez-vous indiquer vos loisirs ?',
   catalogue: CATALOGUE_LOISIRS,
-  avecDetail: false
+  avecDetail: false,
+  // TACHE (retour utilisateur : "je veux que ça soit fait, aucune
+  // régression -- les loisirs sont utilisés tels quels dans encore plus
+  // d'endroits que les certifications") : même principe qu'expliqué sur
+  // CONFIG_CERTIFICATIONS -- dossier.loisirs reste en simples chaînes,
+  // strictement inchangé partout.
+  avecDatesSeparees: true,
+  avecContexte: true
 };
 
 // Etape 5 : configuration du catalogue Engagements (composant generique etape 3)
@@ -3633,7 +3933,30 @@ var CONFIG_ENGAGEMENTS = {
   titre: '&#129309; Engagements',
   question: 'Souhaitez-vous indiquer des engagements ?',
   catalogue: CATALOGUE_ENGAGEMENTS,
-  avecDetail: false
+  avecDetail: false,
+  // TACHE (retour utilisateur : "je veux que ces expériences personnelles
+  // puissent être mises en avant... pouvoir mettre des dates") : même
+  // schéma exact que celui déjà utilisé par le parcours Découverte
+  // (chantier "exp perso", Phase 4 -- {texte, dateDebut, dateFin}) --
+  // jamais un second format différent pour la même donnée selon son
+  // origine. avecDates active le rendu/la logique dédiés (voir
+  // blocPastillesAvecDatesEtDetail, ajouterAuCatalogue).
+  // TACHE (retour utilisateur : "champ contexte libre, pour tous les 4
+  // blocs") : avecContexte propose une question "Voulez-vous ajouter du
+  // contexte ?" au moment de l'ajout -- si oui, un texte libre est
+  // transmis à l'IA (dossier.informationsNonClassees), jamais affiché
+  // tel quel sur le CV.
+  avecDates: true,
+  avecContexte: true,
+  // TACHE (retour utilisateur : "je veux bien que les expériences
+  // personnelles aient des missions au même titre que l'expérience
+  // professionnelle, sous le même format et avec les mêmes règles") :
+  // ajoute une zone de texte multi-lignes (une mission par ligne, même
+  // principe que la saisie des missions professionnelles) -- stockée
+  // dans item.missions, lue par composeurRender.js avec exactement le
+  // même mécanisme puce/Condensé-Épuré que les missions pro.
+  avecMissions: true,
+  champValeur: 'texte'
 };
 
 // Etape 6 : configuration du catalogue Experiences et savoir-faire personnels
@@ -3644,7 +3967,17 @@ var CONFIG_EXPERIENCES_PERSO = {
   question: 'Souhaitez-vous indiquer des expériences personnelles ?',
   catalogue: CATALOGUE_EXPERIENCES_PERSO,
   avecDetail: true,
-  champValeur: 'intitule'
+  champValeur: 'intitule',
+  // TACHE (retour utilisateur : "une mère au foyer qui a géré 5 ou 6
+  // enfants... ça demande une gestion hors du commun, je veux pouvoir
+  // mettre des dates et valoriser ça") : même principe que pour
+  // Engagements ci-dessus -- avecDates active le rendu/la logique dédiés.
+  avecDates: true,
+  avecContexte: true,
+  // TACHE (retour utilisateur : "missions au même titre que
+  // l'expérience professionnelle") : même principe que pour Engagements
+  // ci-dessus.
+  avecMissions: true
 };
 
 // Etape 8 : configuration du catalogue Certifications (variante directe,
@@ -3655,7 +3988,17 @@ var CONFIG_CERTIFICATIONS = {
   question: 'Souhaitez-vous indiquer des certifications ?',
   labelAjouter: 'Ajouter une certification',
   catalogue: CATALOGUE_CERTIFICATIONS,
-  avecDetail: false
+  avecDetail: false,
+  // TACHE (retour utilisateur : "je veux que ça soit fait, aucune
+  // régression -- les certifications sont utilisées telles quelles à
+  // ~15 endroits différents") : contrairement à avecDates (Expériences
+  // personnelles/Engagements, qui transforme chaque élément en objet),
+  // avecDatesSeparees garde dossier.certifications EN SIMPLES CHAÎNES,
+  // strictement inchangé partout où il est déjà lu -- les dates/contexte
+  // sont stockés à part, dans dossier.detailsCatalogue.certifications
+  // (voir ajouterAuCatalogue), jamais consultés par le code existant.
+  avecDatesSeparees: true,
+  avecContexte: true
 };
 
 function pageProjet() {
@@ -4974,6 +5317,12 @@ var CONFIG_BLOC_PROFIL = {
   id: 'profil', icone: '&#128202;', titre: 'Analyse de votre profil', classe: 'bloc-titre-discret',
   masquerReset: true,
   masquerResumeSiFerme: true, // TACHE (complement, allegement visuel) : voir blocERIP()
+  // TACHE (retour utilisateur : "je ne veux pas que ce compteur pulse,
+  // je veux juste le nombre, simple, comme avant") : ce compteur est
+  // purement informatif (pas de notion de "restant à compléter") --
+  // désactive la pulsation générique appliquée par défaut à tout compteur
+  // personnalisé (voir blocERIP()). N'affecte aucun autre bloc.
+  compteurStatique: true,
   compteurTexte: function () { return resumeProfil().length + ' compétences'; },
   resumeHTML: function () {
     return resumeProfil().map(function (item) {
@@ -6099,13 +6448,25 @@ function blocERIP(config) {
         ? '<span class="bloc-erip-compteur-complet">' + compteur.complet + ' / ' + compteur.total + '</span>'
         : '<span class="' + classeCompteurCours + '">' + compteur.complet + '</span> / <span class="bloc-erip-compteur-cible">' + compteur.total + '</span>');
   var indicateurComplet = blocComplet ? ' <span class="bloc-erip-complet" title="Ce bloc est complet">&#9989;</span>' : '';
+  // TACHE (retour utilisateur : "Analyse de profil pulse comme Mon Projet,
+  // je ne veux pas ça, je veux juste le nombre, simple, comme avant") :
+  // bloc-erip-compteur-incomplet (et sa pulsation, style.css) etait
+  // applique a TOUS les compteurs personnalises (config.compteurTexte),
+  // pas seulement a ceux avec une vraie notion de completion (X/Y) -- la
+  // pulsation n'a de sens que pour inviter a completer un total connu,
+  // jamais pour un simple decompte informatif ("8 competences"). Nouveau
+  // drapeau config.compteurStatique (pose UNIQUEMENT sur CONFIG_BLOC_PROFIL
+  // plus bas, jamais sur les autres blocs a compteurTexte comme "Metiers
+  // recommandes"/"Autres pistes", qui gardent leur comportement actuel,
+  // inchange, n'ayant jamais ete signale comme genant).
+  var appliquerPulseCompteur = !blocComplet && !config.compteurStatique;
 
   if (!blocOuvert) {
     return '<div class="cv-section bloc-erip bloc-erip-ferme' + (config.classe ? ' ' + config.classe : '') + (blocComplet ? ' bloc-erip-complet-fond' : '') + '" id="blocERIP-' + config.id + '">' +
       '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
       (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
       '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
-      '<span class="bloc-erip-compteur' + (blocComplet ? '' : ' bloc-erip-compteur-incomplet ' + classeCompteurCours) + '">' + texteCompteur + '</span>' +
+      '<span class="bloc-erip-compteur' + (appliquerPulseCompteur ? ' bloc-erip-compteur-incomplet ' + classeCompteurCours : '') + '">' + texteCompteur + '</span>' +
       indicateurComplet +
       '<span class="bloc-erip-fleche">&#9660;</span>' +
       '</div>' +
@@ -6179,7 +6540,7 @@ function blocERIP(config) {
     '<div class="bloc-erip-entete" data-bloc-toggle="' + config.id + '">' +
     (config.masquerReset ? '' : '<button type="button" class="bloc-erip-reset" data-bloc-reset="' + config.id + '" title="Tout effacer dans ce bloc">&#10060;</button>') +
     '<h5>' + config.icone + ' ' + config.titre + '</h5>' +
-    '<span class="bloc-erip-compteur' + (blocComplet ? '' : ' bloc-erip-compteur-incomplet ' + classeCompteurCours) + '">' + texteCompteur + '</span>' +
+    '<span class="bloc-erip-compteur' + (appliquerPulseCompteur ? ' bloc-erip-compteur-incomplet ' + classeCompteurCours : '') + '">' + texteCompteur + '</span>' +
     indicateurComplet +
     '<span class="bloc-erip-fleche">&#9650;</span>' +
     '</div>' +
@@ -6418,7 +6779,12 @@ function resumeOnSuppressionParcours(idx) {
 // aucune logique dupliquee -- juste sorti de son bloc d'origine.
 function resumeExperiencesPerso() {
   return (dossier.experiencesPerso || []).map(function (e, i) {
-    return { label: e.intitule, source: 'experiencePerso', index: i };
+    // TACHE (retour utilisateur : "une mère au foyer... je veux pouvoir
+    // mettre des dates et valoriser ça") : la période, quand elle existe,
+    // apparaît en infobulle (au survol) -- infrastructure déjà existante
+    // (item.tooltip, blocERIP), jamais un nouvel élément d'interface.
+    var periode = e.dateDebut ? (e.dateDebut + (e.dateFin ? ' - ' + e.dateFin : ' - en cours')) : '';
+    return { label: e.intitule, source: 'experiencePerso', index: i, tooltip: periode || undefined };
   });
 }
 function resumeOnSuppressionExperiencesPerso(idx) {
@@ -6678,7 +7044,19 @@ var CONFIG_BLOC_CANDIDATURE = {
 function resumeComplements() {
   var items = [];
   (dossier.loisirs || []).forEach(function (l, i) { items.push({ label: l, source: 'loisir', index: i }); });
-  (dossier.engagements || []).forEach(function (e, i) { items.push({ label: e, source: 'engagement', index: i }); });
+  // TACHE (chantier "exp perso" puis "autres parcours" : engagements
+  // structurés) : un engagement est une chaîne (donnée ancienne, avant ce
+  // chantier) ou un objet {texte, dateDebut, dateFin} (Découverte ET,
+  // désormais, ce parcours manuel aussi -- même schéma partout) -- le
+  // libellé affiché reste le texte dans les deux cas, jamais un
+  // "[object Object]". La période, quand elle existe, apparaît en
+  // infobulle (au survol), même principe que pour les expériences
+  // personnelles (resumeExperiencesPerso ci-dessus).
+  (dossier.engagements || []).forEach(function (e, i) {
+    var texteEngagementResume = (typeof e === 'string' ? e : (e && e.texte) || '');
+    var periodeEngagementResume = (e && typeof e === 'object' && e.dateDebut) ? (e.dateDebut + (e.dateFin ? ' - ' + e.dateFin : ' - en cours')) : '';
+    items.push({ label: texteEngagementResume, source: 'engagement', index: i, tooltip: periodeEngagementResume || undefined });
+  });
   return items;
 }
 function resumeOnSuppressionComplements(idx) {
@@ -7149,13 +7527,35 @@ function pageResultats() {
       var estFormatMini = docActif === 'cv' && etatApercuInline.cv.formatPage === 'A5';
       var colonneGauche =
         '<div style="flex:1 1 340px;min-width:300px;">' +
-        (estFormatMini
-          ? '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; Modèles Mini CV (A5)</h3>' +
-            '<div id="grilleModelesA5' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
-            '<div id="grilleModeles' + idSuffixe + '" style="display:none;"></div>'
-          : '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; ' + libelleModeles + '</h3>' +
-            '<div id="grilleModeles' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
-            '<div id="grilleModelesA5' + idSuffixe + '" style="display:none;"></div>') +
+        // TACHE (retour utilisateur : "je veux que toutes les options
+        // qu'on a faites soient en haut à la place des modèles de CV,
+        // et que les modèles de CV puissent disparaître") : la grille
+        // classique (16 modèles) reste bien VIDE pour le CV -- Projet XXL
+        // est désormais le seul modèle A4 (modeleParDefautParType.cv =
+        // 'composeur'), jamais un autre choix à proposer pour l'A4.
+        // TACHE (retour utilisateur, bug réel trouvé : "je ne vois pas
+        // Portrait/Paysage sur Mini CV A5") : la grille A5 (Portrait/
+        // Paysage) N'A JAMAIS été concernée par cette migration -- ce
+        // sont 2 mises en page du format A5 lui-même (miniCvA5.js),
+        // jamais un "ancien modèle classique" au sens de Projet XXL.
+        // Elle doit donc rester visible pour le CV, exactement comme
+        // pour Lettre/Entretien, dès que le format Mini CV A5 est actif
+        // -- seule la grille CLASSIQUE (grilleModeles+idSuffixe) reste
+        // toujours masquée pour le CV, quel que soit le format.
+        (docActif === 'cv'
+          ? (estFormatMini
+            ? '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; Modèles Mini CV (A5)</h3>' +
+              '<div id="grilleModelesA5' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
+              '<div id="grilleModeles' + idSuffixe + '" style="display:none;"></div>'
+            : '<div id="grilleModeles' + idSuffixe + '" style="display:none;"></div>' +
+              '<div id="grilleModelesA5' + idSuffixe + '" style="display:none;"></div>')
+          : (estFormatMini
+            ? '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; Modèles Mini CV (A5)</h3>' +
+              '<div id="grilleModelesA5' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
+              '<div id="grilleModeles' + idSuffixe + '" style="display:none;"></div>'
+            : '<h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.6rem;">&#128196; ' + libelleModeles + '</h3>' +
+              '<div id="grilleModeles' + idSuffixe + '"><p class="small text-muted mb-0">Chargement des modèles…</p></div>' +
+              '<div id="grilleModelesA5' + idSuffixe + '" style="display:none;"></div>')) +
         // TACHE (spec : "uniquement lorsqu'un modèle est sélectionné") :
         // masque par defaut (display:none), affiche par construirePaletteCouleurs()
         // uniquement quand le modele actif supporte la couleur.
@@ -7186,6 +7586,25 @@ function pageResultats() {
           if (docActif === 'cv') {
             boutonsFormat += '<button type="button" class="bouton-format-page-accordeon' + (etatApercuInline[docActif].formatPage === 'A5' ? ' bouton-format-page-accordeon-active' : '') + '" data-format-page="A5">' + LIBELLES_MINI[docActif] + '</button>';
           }
+          // TACHE (retour utilisateur : "je ne vois pas depuis le début
+          // l'option CV Intégral, il faut cliquer sur Essentiel/Détaillé
+          // pour qu'il apparaisse -- bug réel trouvé") : ce bloc
+          // (pageResultats()) ne se ré-exécute pas à chaque changement de
+          // thème -- seulement construirePaletteCouleurs(), qui s'exécute
+          // bien à chaque changement, jamais ce bloc-ci. Le bouton est
+          // donc désormais TOUJOURS généré dès que docActif==='cv'
+          // (jamais pour lettre/entretien, comme avant), avec un id
+          // stable et masqué par défaut -- construirePaletteCouleurs()
+          // (plus bas dans ce fichier) affiche/masque ce même bouton de
+          // façon réactive, dès que le thème réel devient/cesse d'être
+          // Projet XXL, même sans passer par un rendu complet de page.
+          // Même principe déjà appliqué au toggle générique "sans
+          // accroche".
+          if (docActif === 'cv') {
+            boutonsFormat += '<button type="button" id="boutonFormatIntegralXXL" class="bouton-format-page-accordeon' +
+              (etatApercuInline.cv.formatPage === 'A4-integral' ? ' bouton-format-page-accordeon-active' : '') +
+              '" data-format-page="A4-integral" style="display:none;">CV Intégral (2 pages)</button>';
+          }
           var LIBELLES_EXPLICATION = {
             cv: 'A4 Essentiel : contenu allégé sur une page A4 normale. Mini CV (A5) : vraie demi-page, rubriques essentielles uniquement. Dans les deux cas, la sélection se fait automatiquement selon le métier visé.',
             lettre: 'A4 Essentiel : une version courte, rédigée spécifiquement pour tenir largement sur une page, jamais une coupure de la version longue.',
@@ -7203,9 +7622,17 @@ function pageResultats() {
             // bouton "Retirer" directement ici ; sinon, simple lien vers
             // Mon Projet pour en ajouter une (l'upload lui-meme reste dans
             // Identite, c'est la SEULE action qui necessite d'y aller).
+            // TACHE (retour utilisateur : "le texte n'est plus à jour, je
+            // vais remonter cette option dans le panneau Projet XXL") :
+            // texte corrigé (ne cite plus seulement Chic/Mini CV, obsolète
+            // depuis que le Composeur gère aussi la photo) -- conteneur à
+            // id stable pour pouvoir le masquer de façon réactive quand
+            // Projet XXL est actif (voir construirePaletteCouleurs(), qui
+            // affiche à la place l'équivalent simplifié Oui/Non dans le
+            // panneau, même principe déjà appliqué à "sans accroche").
             (docActif === 'cv'
-              ? '<div class="small mt-2 mb-0" style="background:#F0F9FF;border-radius:6px;padding:0.5rem 0.75rem;">' +
-                '&#128247; Certains modèles (Chic, Mini CV) peuvent afficher une photo. ' +
+              ? '<div class="small mt-2 mb-0" id="blocPhotoGenerique" style="background:#F0F9FF;border-radius:6px;padding:0.5rem 0.75rem;">' +
+                '&#128247; Certains modèles peuvent afficher une photo. ' +
                 (dossier.photo && dossier.photo.url
                   ? '<div class="form-check d-inline-block mt-1">' +
                     '<input class="form-check-input" type="checkbox" id="checkInclurePhotoApercu"' + (dossier.photo.inclure ? ' checked' : '') + '>' +
@@ -7216,6 +7643,14 @@ function pageResultats() {
                   : '<button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnAllerPhotoIdentite">Ajouter ma photo</button>') +
                 '</div>'
               : '') +
+            // TACHE (retour utilisateur : "remonter l'option ajouter une
+            // photo dans le panneau, oui/non, si oui une fenêtre s'ouvre
+            // pour mettre la photo") : champ de fichier caché, déclenché
+            // par le bouton "Oui" du panneau Projet XXL (voir plus bas)
+            // -- jamais affiché lui-même, c'est le navigateur qui ouvre sa
+            // propre fenêtre de sélection de fichier au clic déclenché
+            // par programme (input.click()).
+            (docActif === 'cv' ? '<input type="file" id="inputPhotoXXL" accept="image/*" style="display:none;">' : '') +
             // TACHE (retour utilisateur : "je veux avoir une option pour
             // proposer le CV sans phrase d'accroche") : réglage
             // d'affichage du document final -- même famille que
@@ -7225,8 +7660,20 @@ function pageResultats() {
             // c'est "aucune du tout"). CV uniquement (ni lettre ni
             // entretien, qui n'ont pas d'accroche) -- déjà dans le bloc
             // docActif === 'cv' ci-dessus.
+            // TACHE (retour utilisateur : "je veux que le bouton sans
+            // phrase d'accroche soit dans le panneau modulable de Projet
+            // XXL et pas en bas, séparé du reste") : ce toggle générique
+            // (partagé par les 16 modèles classiques ET Sobre/
+            // Institutionnel/Moderne, jamais touché pour eux) reste
+            // rendu ici A L'IDENTIQUE -- masqué DYNAMIQUEMENT (pas au
+            // moment du template, qui ne se réévalue pas à chaque
+            // changement de thème) par construirePaletteCouleurs() quand
+            // Projet XXL est actif, voir plus bas dans ce fichier. Un
+            // conteneur avec un id stable (jamais recree, seulement
+            // montre/cache) permet ce controle reactif sans dupliquer la
+            // logique de rendu.
             (docActif === 'cv'
-              ? '<div class="mt-2">' +
+              ? '<div class="mt-2" id="blocSansAccrocheGenerique">' +
                 '<span class="pastille' + (etatApercuInline.cv.sansAccroche ? ' actif' : '') + '" id="pastilleSansAccrocheApercu" style="display:inline-block;">' +
                 (etatApercuInline.cv.sansAccroche ? '&#10004; ' : '') + 'Sans phrase d’accroche (profil)' +
                 '</span>' +
@@ -7433,7 +7880,7 @@ function genererBlobDocumentActif(type) {
   // accordeon, aucun modele n'est defini et la generation echouait
   // silencieusement (rejetee car absent de la liste des modeles natifs).
   // Meme repli que ouvrirApercuDocxIntegre() ailleurs dans ce fichier.
-  var modeleParDefautParType = { cv: 'aquarelle', lettre: 'sobre', entretien: 'clair' };
+  var modeleParDefautParType = { cv: 'composeur', lettre: 'sobre', entretien: 'clair' };
   // TACHE (retour utilisateur : sélecteur de modèles A5, comme pour A4) :
   // en format A5, le modele choisi vit dans etat.modeleA5 (champ distinct,
   // jamais etat.modele -- qui reste reserve au choix A4).
@@ -7455,7 +7902,20 @@ function genererBlobDocumentActif(type) {
         // ça revenait à ré-empaqueter un Blob déjà empaqueté, échec
         // silencieux à chaque fois, quel que soit le thème choisi.
         if (modele === 'composeur' && typeof genererDocxComposeur === 'function') {
-          return genererDocxComposeur(dossier, {}, couleur, etat.formatPage, etat.sansAccroche);
+          // TACHE (Projet XXL) : "couleur" est ici l'id de theme compose en
+          // texte (ex. "projetxxl-bleu-7_2col", voir construirePaletteCouleurs()) --
+          // pour les 3 themes historiques, il continue d'etre transmis TEL
+          // QUEL a genererDocxComposeur(), qui le fait resoudre par
+          // composeurObtenirTheme() comme avant (comportement inchange).
+          // Pour Projet XXL, composeurResoudreThemeGeneration() (fonction
+          // PARTAGEE avec apercuDocxIntegre.js, jamais dupliquee) construit
+          // le theme reel via composeurAppliquerReglagesProjetXXL() a partir
+          // des reglages avances saisis dans le panneau dedie
+          // (etatApercuInline.cv.reglagesProjetXXL).
+          var themeAEnvoyer = (typeof composeurResoudreThemeGeneration === 'function')
+            ? composeurResoudreThemeGeneration(couleur, etat.reglagesProjetXXL)
+            : couleur;
+          return genererDocxComposeur(dossier, {}, themeAEnvoyer, etat.formatPage, etat.sansAccroche);
         }
         // TACHE (retour utilisateur : "sans accroche") : efface la copie
         // locale "donnees" (déjà une reconstruction propre à cette
@@ -7700,6 +8160,40 @@ function brancherEvenementsResultats() {
     btnRetirerPhotoApercu.addEventListener('click', function () {
       dossier.photo = { url: null, inclure: false };
       pageResultats();
+    });
+  }
+  // TACHE (retour utilisateur : "remonter l'option ajouter une photo dans
+  // le panneau, oui/non -- si oui, la fenêtre s'ouvre pour mettre la
+  // photo") : même logique de redimensionnement que le champ d'upload de
+  // l'écran Identité (lignes ~3375-3401 de ce fichier) -- dupliquée ici
+  // volontairement plutôt que "réutilisée" à distance : ce champ vit dans
+  // un tout autre écran, pas présent dans le DOM pendant qu'on est sur
+  // l'aperçu du CV, impossible d'y accrocher un écouteur partagé sans
+  // complexité inutile pour un si petit bout de logique.
+  var inputPhotoXXL = document.getElementById('inputPhotoXXL');
+  if (inputPhotoXXL) {
+    inputPhotoXXL.addEventListener('change', function () {
+      var fichier = this.files && this.files[0];
+      if (!fichier) { return; }
+      if (!fichier.type || fichier.type.indexOf('image/') !== 0) { alert('Merci de choisir un fichier image (JPG, PNG...).'); return; }
+      var lecteur = new FileReader();
+      lecteur.onload = function (evenement) {
+        var img = new Image();
+        img.onload = function () {
+          var taille = 400;
+          var canvas = document.createElement('canvas');
+          canvas.width = taille; canvas.height = taille;
+          var ctx = canvas.getContext('2d');
+          var cote = Math.min(img.width, img.height);
+          var sx = (img.width - cote) / 2, sy = (img.height - cote) / 2;
+          ctx.drawImage(img, sx, sy, cote, cote, 0, 0, taille, taille);
+          dossier.photo = { url: canvas.toDataURL('image/jpeg', 0.85), inclure: true };
+          pageResultats();
+        };
+        img.onerror = function () { alert('Impossible de lire cette image, essayez-en une autre.'); };
+        img.src = evenement.target.result;
+      };
+      lecteur.readAsDataURL(fichier);
     });
   }
   var btnRessourcesExplorerFin = document.getElementById('btnRessourcesExplorerFin');
@@ -8069,7 +8563,7 @@ function brancherEvenementsResultats() {
         // lettre et l'entretien) : ouvre le panneau integre qui affiche
         // le VRAI rendu .docx (voir apercuDocxIntegre.js), a la place de
         // l'ancienne fenetre popup.
-        var modeleParDefautParType = { cv: 'aquarelle', lettre: 'sobre', entretien: 'clair' };
+        var modeleParDefautParType = { cv: 'composeur', lettre: 'sobre', entretien: 'clair' };
         var modelePourApercu = (etatApercuInline[type] && etatApercuInline[type].modele) || modeleParDefautParType[type];
         if (typeof ouvrirApercuDocxIntegre === 'function') {
           ouvrirApercuDocxIntegre(type, modelePourApercu);
@@ -8572,6 +9066,27 @@ function texteProfil(type) {
           return '   . ' + r.rubrique + (r.justification ? ' — ' + r.justification : '');
         }).join('\n') + '\n';
       }
+      // TACHE (audit anti-doublon, cv.md points 11-13) : ces 3 champs
+      // n'etaient jusqu'ici jamais transmis a la lettre/l'entretien --
+      // pas un doublon (lacune inverse), mais une incoherence possible :
+      // la lettre/l'entretien pouvaient ignorer une formation, une
+      // certification ou une experience personnelle pourtant mises en
+      // avant sur le CV. regroupementExperiences volontairement EXCLU
+      // d'ici : c'est un choix de mise en forme du CV (quelle experience
+      // recoit 5 missions vs une ligne condensee), pas une information de
+      // strategie de candidature -- deja couvert cote contenu par
+      // experiencesAMettreEnAvant ci-dessus.
+      if (reco.formationRetenue && reco.formationRetenue.intitule) {
+        strategie += '- Formation mise en avant sur le CV' + (reco.formationRetenue.justification ? ' — ' + reco.formationRetenue.justification : '') + ' : ' + reco.formationRetenue.intitule + '\n';
+      }
+      if (reco.certificationsAMettreEnAvant && reco.certificationsAMettreEnAvant.length) {
+        strategie += '- Certifications mises en avant sur le CV, et pourquoi :\n' + reco.certificationsAMettreEnAvant.map(function (c) {
+          return '   . ' + c.certification + (c.justification ? ' — ' + c.justification : '');
+        }).join('\n') + '\n';
+      }
+      if (reco.experiencePersonnelleAMettreEnAvant && reco.experiencePersonnelleAMettreEnAvant.intitule) {
+        strategie += '- Expérience personnelle mise en avant sur le CV' + (reco.experiencePersonnelleAMettreEnAvant.justification ? ' — ' + reco.experiencePersonnelleAMettreEnAvant.justification : '') + ' : ' + reco.experiencePersonnelleAMettreEnAvant.intitule + '\n';
+      }
     }
   }
   // TACHE (context engineering, chantier 1 : stratégie lettre absente de
@@ -8637,7 +9152,20 @@ function texteProfil(type) {
     complements += '- Loisirs : ' + dossier.loisirs.join(', ') + '\n';
   }
   if (dossier.engagements && dossier.engagements.length) {
-    complements += '- Engagements : ' + dossier.engagements.join(', ') + '\n';
+    // TACHE (chantier "exp perso", Phase 4 : engagements structurés) :
+    // .join() sur des objets aurait produit "[object Object]" -- chaque
+    // engagement est désormais formaté individuellement (texte + période
+    // si connue), qu'il s'agisse de l'ancien format (chaîne) ou du
+    // nouveau (objet {texte, dateDebut, dateFin}, Découverte). La
+    // période, quand elle existe, est transmise ici à l'IA -- un vrai
+    // gain de contexte, jamais disponible avant ce chantier.
+    var texteEngagements = dossier.engagements.map(function (e) {
+      if (typeof e === 'string') { return e; }
+      if (!e) { return ''; }
+      var periode = e.dateDebut ? (' (' + e.dateDebut + (e.dateFin ? '-' + e.dateFin : ' - en cours') + ')') : '';
+      return (e.texte || '') + periode;
+    }).filter(Boolean).join(', ');
+    complements += '- Engagements : ' + texteEngagements + '\n';
   }
   if (dossier.certifications && dossier.certifications.length) {
     complements += '- Certifications : ' + dossier.certifications.join(', ') + '\n';
@@ -8786,9 +9314,6 @@ var FICHIERS_PROMPTS_EXTERNES = {
   // -- manquait ici, ce qui faisait retomber silencieusement sur le texte
   // de secours (promptParDefaut) meme quand le vrai fichier existait.
   'entretien-accueil': 'prompts/entretien-accueil.md',
-  // TACHE (V2 IA, etape 1) : prompt separe et dedie, pour ne prendre aucun
-  // risque sur le prompt principal de redaction du CV (prompts/cv.md).
-  accroche: 'prompts/accroche.md',
   // TACHE 5 (moteur d'import) : prompt d'extraction, distinct des 4
   // precedents -- ceux-la construisent une strategie, celui-ci ne fait que
   // lire un CV depose pour en extraire les faits (voir docs/ARCHITECTURE_MOTEUR_IMPORT.md).
@@ -8805,7 +9330,7 @@ var FICHIERS_PROMPTS_EXTERNES = {
   // fichier, jamais une variante de l'un pour l'autre usage).
   decouverte: 'prompts/decouverte-competences.md'
 };
-var promptsExternesCharges = { cv: null, lettre: null, entretien: null, 'entretien-accueil': null, accroche: null, 'extraction-cv': null, 'lettre-v1': null, decouverte: null };
+var promptsExternesCharges = { cv: null, lettre: null, entretien: null, 'entretien-accueil': null, 'extraction-cv': null, 'lettre-v1': null, decouverte: null };
 
 function chargerPromptsExternes() {
   if (typeof fetch !== 'function') { return; } // navigateur trop ancien : reste sur le texte par defaut
@@ -8868,13 +9393,6 @@ function promptParDefaut(type) {
       '"elevee", "alertes": []}], "certifications": [], "logiciels": [], "permis": {"possede": null, "categories": ' +
       '[], "vehicule": null}, "loisirs": [], "engagements": [], "informationsNonClassees": []}. N\'ajoute jamais de ' +
       'propriete JSON en dehors de ce format.';
-  }
-  if (type === 'accroche') {
-    return 'Tu es un conseiller en insertion professionnelle. A partir du profil ci-dessous, ' +
-      'propose un contenu court pour enrichir un CV : une accroche professionnelle (2 a 4 phrases), ' +
-      'une liste de 3 a 5 points forts (phrases courtes), et une liste de 5 a 10 mots-cles pertinents. ' +
-      'Reponds UNIQUEMENT avec un objet JSON strictement valide, sans aucun texte avant ou apres, ' +
-      'exactement selon ce format : {"profil": "...", "pointsForts": ["...", "..."], "motsCles": ["...", "..."]}.';
   }
   if (type === 'lettre') {
     // TACHE (integration prompt Lettre V2, tache 1 : texte complet) : texte
@@ -8966,17 +9484,6 @@ function promptParDefaut(type) {
     '"rubriquesMasquables": [{"rubrique": "...", "justification": "..."}]}}.';
 }
 
-// TACHE (V2 IA, etape 1 : lien assistant IA -> moteur de rendu) : parsing
-// ROBUSTE de la reponse collee par la personne apres avoir demande a l'IA
-// le prompt "accroche" (voir prompts/accroche.md). Ne modifie JAMAIS
-// dossier.ia en cas d'echec -- retourne uniquement un resultat annonçant le
-// succes ou l'echec, avec un message clair (jamais une exception brute).
-//
-// GENERIQUE et TOLERANT : les assistants IA respectent rarement une consigne
-// de format a 100% (ils ajoutent parfois une phrase d'introduction, ou
-// entourent leur reponse de balises de code ```json ... ```). Plusieurs
-// tentatives d'extraction sont faites, de la plus stricte a la plus
-// permissive, avant d'abandonner proprement.
 // TACHE (import IA, resume apres import) : construit un petit compte-rendu
 // HTML apres un import reussi, en distinguant clairement DEUX sources
 // differentes (jamais melangees comme si l'IA les avait toutes fournies) :
@@ -9037,7 +9544,7 @@ var SPEC_AFFICHAGE_LETTRE = [
 // réutilisable partout où un classement par pertinence a du sens), et
 // modifiable librement. 5 onglets thématiques (Profil/Accroche,
 // Expériences, Compétences à valoriser, Stratégie de candidature,
-// Informations complémentaires), même principe d'onglets que l'écran
+// Rubriques à masquer), même principe d'onglets que l'écran
 // "Vérifiez les informations importées" (classes/câblage réutilisés tels
 // quels : .onglets-validation-import / wireOngletsValidationImport()).
 // ============================================================
@@ -9182,7 +9689,39 @@ function creerBrouillonChoixIACV(valeursIA) {
       });
       return fusion.map(function (item, i) { item.garder = (i < 5); return item; });
     })(),
-    rubriquesMasquables: versListe(reco.rubriquesMasquables, function (r) { return { texte: r.rubrique, sousTexte: r.justification }; })
+    rubriquesMasquables: versListe(reco.rubriquesMasquables, function (r) { return { texte: r.rubrique, sousTexte: r.justification }; }),
+    // TACHE (cv.md, points 11-13, bouton "Mettre en avant" -- partie
+    // revisable) : meme mecanique generique que les listes ci-dessus
+    // (case a cocher + texte + fleches, voir ligneRecommandationReordonnable
+    // et le cablage generique de wireEcranChoixReponseIACV) -- formationRetenue
+    // et experiencePersonnelleAMettreEnAvant sont des objets uniques cote
+    // IA, mais representes ici comme des listes de 0 ou 1 element : ca
+    // permet de reutiliser tel quel tout le mecanisme existant (case a
+    // cocher "garder", texte editable, et pour l'experience personnelle,
+    // les missions via item.missions -- deja gere par le cablage generique
+    // plus bas, aucune logique de cablage nouvelle necessaire).
+    formationRetenue: (reco.formationRetenue && reco.formationRetenue.intitule)
+      ? [{ texte: reco.formationRetenue.intitule, sousTexte: reco.formationRetenue.justification || '', garder: true }]
+      : [],
+    certificationsAMettreEnAvant: versListe(reco.certificationsAMettreEnAvant, function (c) { return { texte: c.certification, sousTexte: c.justification }; }),
+    experiencePersonnelleAMettreEnAvant: (function () {
+      var epa = reco.experiencePersonnelleAMettreEnAvant || {};
+      if (!epa.intitule) { return []; }
+      return [{
+        intitule: epa.intitule, texte: epa.justification || '', garder: true,
+        missions: (epa.missions || []).map(function (m) { return { texte: m, garder: true }; })
+      }];
+    })(),
+    // TACHE (cv.md, point 14 -- bouton "Mettre en avant + regrouper") :
+    // NE PASSE PAS par l'ecran de revision (voir discussion : c'est un mode
+    // d'affichage entier -- active ou non -- pas une recommandation a la
+    // carte comme le reste de cet ecran). Transmis tel quel, jamais lu ni
+    // modifie par cet ecran, pour ne pas le perdre au moment de "Je valide"
+    // (voir appliquerBrouillonChoixIACV, qui le reprend sans transformation).
+    regroupementExperiences: reco.regroupementExperiences || {
+      experiencePrioritaire: { type: '', poste: '', entreprise: '', intitule: '', missions: [], justification: '' },
+      groupes: []
+    }
   };
 }
 
@@ -9367,6 +9906,48 @@ function contenuOngletComplementsIA(brouillon) {
     contenuListeRecommandationsIA('reco_rubriques', brouillon.rubriquesMasquables, false, 'Aucune rubrique proposée comme masquable.') + '</div>';
 }
 
+// TACHE (cv.md, points 11-13) : nouvel onglet regroupant 3 recommandations
+// liees (formation la plus elevee, certifications a mettre en avant,
+// experience personnelle prioritaire) -- meme mecanique generique que les
+// autres onglets (contenuListeRecommandationsIA) pour les deux premieres ;
+// rendu dedie pour la troisieme (calque sur contenuOngletExperiencesIA,
+// meme structure d'id -- _case/_texte/_mission_N_case/_mission_N_texte --
+// pour que le cablage generique de wireEcranChoixReponseIACV la prenne en
+// charge sans code de cablage supplementaire).
+function contenuOngletFormationEtPersoIA(brouillon) {
+  var html = '<div class="mb-3"><h6>Formation la plus élevée</h6>' +
+    contenuListeRecommandationsIA('reco_formationRetenue', brouillon.formationRetenue, false, 'Aucune formation proposée par l’assistant.') +
+    '</div>';
+  html += '<div class="mb-3"><h6>Certifications à mettre en avant</h6>' +
+    contenuListeRecommandationsIA('reco_certificationsAMettreEnAvant', brouillon.certificationsAMettreEnAvant, false, 'Aucune certification proposée par l’assistant.') +
+    '</div>';
+  html += '<div class="mb-1"><h6>Expérience personnelle prioritaire</h6>' +
+    '<p class="small text-muted mb-2">Une seule expérience personnelle (bénévolat, entraide, engagement...) choisie par l’assistant comme la plus utile pour cette candidature, avec 3 missions proposées.</p>';
+  if (!brouillon.experiencePersonnelleAMettreEnAvant.length) {
+    html += '<p class="text-muted small fst-italic mb-0">Aucune expérience personnelle proposée par l’assistant pour ce profil.</p>';
+  } else {
+    html += brouillon.experiencePersonnelleAMettreEnAvant.map(function (e, i) {
+      var idBase = 'reco_experiencePersonnelleAMettreEnAvant_' + i;
+      var missionsHtml = e.missions.length
+        ? e.missions.map(function (m, j) {
+            return '<div class="d-flex align-items-start gap-2 mb-1">' +
+              '<input type="checkbox" id="' + idBase + '_mission_' + j + '_case"' + (m.garder ? ' checked' : '') + '>' +
+              '<input type="text" class="form-control form-control-sm" id="' + idBase + '_mission_' + j + '_texte" value="' + echapperAttribut(m.texte) + '"></div>';
+          }).join('')
+        : '<p class="text-muted small mb-0">Aucune mission proposée pour cette expérience.</p>';
+      return '<div class="reco-item reco-item-experience mb-2" data-reco-prefixe="reco_experiencePersonnelleAMettreEnAvant" data-reco-index="' + i + '">' +
+        '<input type="checkbox" class="reco-case" id="' + idBase + '_case"' + (e.garder ? ' checked' : '') + '>' +
+        '<div class="reco-corps">' +
+        '<p class="fw-bold mb-1">' + echapperAttribut(e.intitule) + '</p>' +
+        '<textarea class="form-control form-control-sm mb-2" rows="2" id="' + idBase + '_texte" data-champ="texte">' + echapperAttribut(e.texte) + '</textarea>' +
+        '<div class="bloc-missions-validation">' + '<label class="small fw-bold text-muted d-block mb-1">Missions proposées</label>' + missionsHtml + '</div>' +
+        '</div></div>';
+    }).join('');
+  }
+  html += '</div>';
+  return html;
+}
+
 var GROUPES_ONGLETS_CHOIX_IA_CV = [
   { id: 'profil', titre: '👤 Profil', rendu: contenuOngletProfilIA },
   { id: 'intitule', titre: '🏷️ Intitulé', rendu: contenuOngletIntituleIA },
@@ -9375,7 +9956,8 @@ var GROUPES_ONGLETS_CHOIX_IA_CV = [
   { id: 'competences', titre: '🛠️ Compétences à valoriser', rendu: contenuOngletCompetencesIA },
   { id: 'competencesPersonnelles', titre: '🌱 Compétences personnelles', rendu: contenuOngletCompetencesPersonnellesIA },
   { id: 'strategie', titre: '🎯 Stratégie de candidature', rendu: contenuOngletStrategieIA },
-  { id: 'complements', titre: '➕ Informations complémentaires', rendu: contenuOngletComplementsIA }
+  { id: 'complements', titre: '🙈 Rubriques à masquer', rendu: contenuOngletComplementsIA },
+  { id: 'formationEtPerso', titre: '🎓 Formation & expérience perso', rendu: contenuOngletFormationEtPersoIA }
 ];
 
 function genererEcranChoixReponseIACV(brouillon) {
@@ -9399,7 +9981,14 @@ function wireEcranChoixReponseIACV(brouillon, rafraichirEcran) {
     reco_pointsForts: brouillon.pointsForts, reco_motsCles: brouillon.motsCles,
     reco_experiences: brouillon.experiences, reco_competences: brouillon.competences,
     reco_rubriques: brouillon.rubriquesMasquables, reco_postesRecommandes: brouillon.postesRecommandes,
-    reco_competencesPersonnelles: brouillon.competencesPersonnelles
+    reco_competencesPersonnelles: brouillon.competencesPersonnelles,
+    // TACHE (cv.md, points 11-13) : memes cle que le prefixe utilise dans
+    // le rendu (contenuOngletFormationEtPersoIA) -- le cablage generique
+    // ci-dessous (cases/textes/missions/fleches) s'applique automatiquement,
+    // aucun code de cablage dedie necessaire.
+    reco_formationRetenue: brouillon.formationRetenue,
+    reco_certificationsAMettreEnAvant: brouillon.certificationsAMettreEnAvant,
+    reco_experiencePersonnelleAMettreEnAvant: brouillon.experiencePersonnelleAMettreEnAvant
   };
   document.querySelectorAll('.reco-item').forEach(function (el) {
     var prefixe = el.dataset.recoPrefixe;
@@ -9584,7 +10173,30 @@ function appliquerBrouillonChoixIACV(brouillon) {
       rubriquesMasquables: garder(brouillon.rubriquesMasquables).map(function (it) { return { rubrique: it.texte, justification: it.sousTexte || '' }; }),
       savoirFaireParExperience: garder(brouillon.experiences).map(function (e) {
         return { poste: e.poste, entreprise: e.entreprise, missions: garder(e.missions).map(function (m) { return m.texte; }) };
-      })
+      }),
+      // TACHE (cv.md, points 11-13) : meme logique "garder" que le reste --
+      // formationRetenue/experiencePersonnelleAMettreEnAvant sont des listes
+      // de 0 ou 1 element dans le brouillon (voir creerBrouillonChoixIACV),
+      // repli sur les valeurs neutres si la case a ete decochee ou si l'IA
+      // n'avait rien propose.
+      formationRetenue: (function () {
+        var f = garder(brouillon.formationRetenue)[0];
+        return f ? { intitule: f.texte, justification: f.sousTexte || '' } : { intitule: '', justification: '' };
+      })(),
+      certificationsAMettreEnAvant: garder(brouillon.certificationsAMettreEnAvant).map(function (it) { return { certification: it.texte, justification: it.sousTexte || '' }; }),
+      experiencePersonnelleAMettreEnAvant: (function () {
+        var e = garder(brouillon.experiencePersonnelleAMettreEnAvant)[0];
+        if (!e) { return { intitule: '', missions: [], justification: '' }; }
+        return { intitule: e.intitule, missions: garder(e.missions).map(function (m) { return m.texte; }), justification: e.texte || '' };
+      })(),
+      // TACHE (point 14, bouton "Mettre en avant + regrouper") : jamais
+      // passe par l'ecran de revision (voir creerBrouillonChoixIACV) --
+      // repris tel quel, sans transformation, pour ne pas le perdre au
+      // moment de "Je valide".
+      regroupementExperiences: brouillon.regroupementExperiences || {
+        experiencePrioritaire: { type: '', poste: '', entreprise: '', intitule: '', missions: [], justification: '' },
+        groupes: []
+      }
     }
   };
 }
@@ -9827,6 +10439,92 @@ function normaliserSavoirFaireParExperienceIA(brut) {
   }).filter(function (e) { return e.poste && e.missions.length; });
 }
 
+// TACHE (cv.md, points 11-14) : normalisation d'un objet recommandation
+// SIMPLE (champs texte uniquement), reutilise pour formationRetenue --
+// contrairement a normaliserListeRecommandationsIA, un champ objet unique
+// reste present meme vide (plus simple a lire cote code qu'une liste qui
+// peut disparaitre).
+function normaliserObjetRecommandationIA(brut, champs) {
+  var b = (brut && typeof brut === 'object') ? brut : {};
+  var e = {};
+  champs.forEach(function (c) { e[c] = normaliserTexteIA(b[c]); });
+  return e;
+}
+
+// TACHE (cv.md, point 13) : experiencePersonnelleAMettreEnAvant -- meme
+// esprit que normaliserObjetRecommandationIA, avec un champ liste
+// (missions) en plus des champs texte.
+function normaliserExperiencePersonnelleAMettreEnAvantIA(brut) {
+  var b = (brut && typeof brut === 'object') ? brut : {};
+  return {
+    intitule: normaliserTexteIA(b.intitule),
+    missions: normaliserListeTextesIA(b.missions),
+    justification: normaliserTexteIA(b.justification)
+  };
+}
+
+// TACHE (cv.md, point 14 -- bouton "Mettre en avant + regrouper") :
+// regroupementExperiences -- experiencePrioritaire (type professionnelle/
+// personnelle + champs d'identification + 5 missions) et groupes (liste de
+// {metiers, texteRegroupe}). Tolerant : un groupe mal forme (ni metiers ni
+// texteRegroupe) est ignore plutot que de faire echouer tout le parsing.
+function normaliserExperiencePrioritaireIA(brut) {
+  var b = (brut && typeof brut === 'object') ? brut : {};
+  var type = normaliserTexteIA(b.type);
+  return {
+    type: (type === 'professionnelle' || type === 'personnelle') ? type : '',
+    poste: normaliserTexteIA(b.poste),
+    entreprise: normaliserTexteIA(b.entreprise),
+    intitule: normaliserTexteIA(b.intitule),
+    missions: normaliserListeTextesIA(b.missions),
+    justification: normaliserTexteIA(b.justification)
+  };
+}
+function normaliserGroupeExperiencesIA(brut) {
+  if (!brut || typeof brut !== 'object') { return null; }
+  var metiers = normaliserListeTextesIA(brut.metiers);
+  var texteRegroupe = normaliserTexteIA(brut.texteRegroupe);
+  if (metiers.length === 0 && !texteRegroupe) { return null; }
+  return { metiers: metiers, texteRegroupe: texteRegroupe };
+}
+// TACHE (cv.md, point 15 -- chantier "stratégie 3 branches" / vrai
+// regroupement thematique des competences) : normalisation d'un groupe
+// {theme, items:[{texte, illustrePar}]}. Tolerant comme le reste : un
+// groupe sans theme ni items exploitables est ignore plutot que de faire
+// echouer tout le parsing. La VALIDATION de illustrePar (verifier que
+// chaque nom cite correspond a une experience reellement presente dans
+// le dossier, jamais une confiance aveugle dans le texte de l'IA) est
+// faite plus tard, dans appliquerMoteurDecisionCV() -- ce fichier a acces
+// aux experiences reelles, pas ici (analyserReponseIACV ne fait que lire
+// le JSON brut, jamais de rapprochement avec le reste du dossier).
+function normaliserItemCompetenceGroupeeIA(brut) {
+  if (!brut || typeof brut !== 'object') { return null; }
+  var texte = normaliserTexteIA(brut.texte);
+  if (!texte) { return null; }
+  return { texte: texte, illustrePar: normaliserListeTextesIA(brut.illustrePar) };
+}
+function normaliserGroupeCompetencesParThemeIA(brut) {
+  if (!brut || typeof brut !== 'object') { return null; }
+  var theme = normaliserTexteIA(brut.theme);
+  var itemsBrut = Array.isArray(brut.items) ? brut.items : [];
+  var items = itemsBrut.map(normaliserItemCompetenceGroupeeIA).filter(function (i) { return i !== null; });
+  if (!theme || !items.length) { return null; }
+  return { theme: theme, items: items };
+}
+function normaliserCompetencesGroupeesParThemeIA(brut) {
+  var liste = Array.isArray(brut) ? brut : [];
+  return liste.map(normaliserGroupeCompetencesParThemeIA).filter(function (g) { return g !== null; });
+}
+
+function normaliserRegroupementExperiencesIA(brut) {
+  var b = (brut && typeof brut === 'object') ? brut : {};
+  var groupesBrut = Array.isArray(b.groupes) ? b.groupes : [];
+  return {
+    experiencePrioritaire: normaliserExperiencePrioritaireIA(b.experiencePrioritaire),
+    groupes: groupesBrut.map(normaliserGroupeExperiencesIA).filter(function (g) { return g !== null; })
+  };
+}
+
 // TACHE (Moteur de decision de candidature, Tache 1) : fonction DEDIEE
 // (comme analyserReponseIALettre()), pas une delegation vers
 // analyserReponseIA() -- "recommandations" melange un objet unique
@@ -9868,7 +10566,16 @@ function analyserReponseIACV(texteColle) {
       competencesAValoriser: normaliserListeRecommandationsIA(recoBrut.competencesAValoriser, ['competence', 'justification']),
       competencesPersonnelles: normaliserListeRecommandationsIA(recoBrut.competencesPersonnelles, ['competence', 'source', 'justification']),
       rubriquesMasquables: normaliserListeRecommandationsIA(recoBrut.rubriquesMasquables, ['rubrique', 'justification']),
-      savoirFaireParExperience: normaliserSavoirFaireParExperienceIA(recoBrut.savoirFaireParExperience)
+      savoirFaireParExperience: normaliserSavoirFaireParExperienceIA(recoBrut.savoirFaireParExperience),
+      // TACHE (cv.md, points 11-14) : 4 nouveaux champs, meme tolerance que
+      // le reste -- un champ absent du JSON colle retombe sur sa valeur
+      // neutre (scaffold de creerDossierIAVide()), jamais une erreur de
+      // parsing pour autant.
+      formationRetenue: normaliserObjetRecommandationIA(recoBrut.formationRetenue, ['intitule', 'justification']),
+      certificationsAMettreEnAvant: normaliserListeRecommandationsIA(recoBrut.certificationsAMettreEnAvant, ['certification', 'justification']),
+      experiencePersonnelleAMettreEnAvant: normaliserExperiencePersonnelleAMettreEnAvantIA(recoBrut.experiencePersonnelleAMettreEnAvant),
+      regroupementExperiences: normaliserRegroupementExperiencesIA(recoBrut.regroupementExperiences),
+      competencesGroupeesParTheme: normaliserCompetencesGroupeesParThemeIA(recoBrut.competencesGroupeesParTheme)
     }
   };
 
@@ -10004,7 +10711,15 @@ var SPECIFICATION_IMPORT = [
     // le moteur de fusion (fusionnerDonnees) n'a jamais besoin de connaitre
     // "experiences" ou "missions" en dur, il applique juste cette fonction
     // si elle est presente.
-    { nom: 'missions', type: 'liste', transformationVersDossier: function (valeur) { return (valeur || []).join('. '); } }
+    // TACHE (retour utilisateur : même bug "..", trouvé une 2e fois ici) :
+    // même correction -- retire le point final existant de chaque
+    // mission avant de rejoindre, jamais de point doublé.
+    { nom: 'missions', type: 'liste', transformationVersDossier: function (valeur) {
+      return (valeur || [])
+        .map(function (m) { return (m || '').trim().replace(/\.+\s*$/, ''); })
+        .filter(Boolean)
+        .join('. ');
+    } }
   ], champsRapprochement: ['poste', 'entreprise'] },
   { cle: 'formations', type: 'liste-objets', champs: [
     { nom: 'niveau', type: 'texte' }, { nom: 'intitule', type: 'texte' }, { nom: 'annee', type: 'texte' }
@@ -11280,6 +11995,124 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
     objetDecide[spec.cle] = d.rubriqueMasquee ? [] : d.elementsRetenus.map(function (e) { return e.element; });
   });
 
+  // TACHE (cv.md, point 11) : formationRetenue -- ne garde que la
+  // formation designee par l'IA comme la plus elevee, si elle correspond
+  // (rapprochement flou sur l'intitule, meme fonction correspond() que
+  // pour les experiences) a une formation reelle du dossier. Si l'IA n'a
+  // rien recommande, ou si aucune formation ne correspond, objetDecide.formations
+  // reste inchange (deja plafonne par capacites plus haut) -- repli
+  // silencieux, jamais un plantage ni une formation inventee.
+  var formationRetenue = reco.formationRetenue || {};
+  if (formationRetenue.intitule && objetDecide.formations && objetDecide.formations.length) {
+    var formationTrouvee = objetDecide.formations.filter(function (f) {
+      return f.intitule && correspond(f.intitule, formationRetenue.intitule);
+    })[0];
+    if (formationTrouvee) { objetDecide.formations = [formationTrouvee]; }
+  }
+
+  // TACHE (cv.md, point 12) : certificationsAMettreEnAvant -- meme
+  // principe, mais certifications est une liste de simples CHAINES (pas
+  // d'objets), donc rapprochement direct texte a texte. Conserve l'ORDRE
+  // de la recommandation IA (la plus pertinente en premier), jamais
+  // l'ordre du dossier.
+  var certificationsAMettreEnAvant = reco.certificationsAMettreEnAvant || [];
+  if (certificationsAMettreEnAvant.length && objetDecide.certifications && objetDecide.certifications.length) {
+    var certificationsRetenues = certificationsAMettreEnAvant.map(function (r) {
+      return objetDecide.certifications.filter(function (c) { return c && correspond(c, r.certification); })[0];
+    }).filter(Boolean);
+    if (certificationsRetenues.length) { objetDecide.certifications = certificationsRetenues; }
+  }
+
+  // TACHE (cv.md, point 13) : experiencePersonnelleAMettreEnAvant --
+  // injecte les 3 missions proposees par l'IA dans l'experience
+  // personnelle correspondante (rapprochement flou sur l'intitule, meme
+  // fonction correspond() que pour formations/certifications/experiences
+  // pro). Le rendu (composeurRender.js, bloc 'experiencesPersonnelles')
+  // sait DEJA afficher experiencesPersonnelles[].missions en puces --
+  // construit pour le parcours manuel (catalogue), jamais alimente par
+  // l'IA jusqu'ici. Cette recommandation ne fait qu'alimenter ce meme
+  // champ existant, aucun changement de rendu necessaire. Meme
+  // convention de ponctuation que savoirFaireParExperience plus haut (un
+  // seul point final exact par mission, jamais de double ponctuation).
+  var experiencePersonnelleAMettreEnAvant = reco.experiencePersonnelleAMettreEnAvant || {};
+  // TACHE (chantier "exp perso", étape 6) : construit les missions une
+  // seule fois, réutilisée pour les deux cibles possibles ci-dessous
+  // (experiencesPersonnelles OU engagements) -- même formatage exact que
+  // l'existant (un seul point final par mission), jamais deux mécanismes
+  // dupliqués.
+  var missionsExpPersoAMettreEnAvant = (experiencePersonnelleAMettreEnAvant.missions || [])
+    .map(function (m) { return (m || '').trim().replace(/\.+\s*$/, ''); })
+    .filter(Boolean);
+  var texteMissionsExpPersoAMettreEnAvant = missionsExpPersoAMettreEnAvant.length
+    ? missionsExpPersoAMettreEnAvant.join('. ') + '.'
+    : '';
+
+  var experiencePersonnelleCibleTrouvee = false;
+  if (experiencePersonnelleAMettreEnAvant.intitule && texteMissionsExpPersoAMettreEnAvant && objetDecide.experiencesPersonnelles && objetDecide.experiencesPersonnelles.length) {
+    objetDecide.experiencesPersonnelles = objetDecide.experiencesPersonnelles.map(function (e) {
+      if (!e.intitule || !correspond(e.intitule, experiencePersonnelleAMettreEnAvant.intitule)) { return e; }
+      experiencePersonnelleCibleTrouvee = true;
+      var copie = {};
+      Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
+      copie.missions = texteMissionsExpPersoAMettreEnAvant;
+      return copie;
+    });
+  }
+  // TACHE (chantier "exp perso", étape 6) : repli sur dossier.engagements
+  // si rien n'a matché dans experiencesPersonnelles -- une expérience
+  // personnelle mise en avant par l'IA peut tout aussi bien être un
+  // engagement associatif/bénévole (Découverte ou saisie manuelle),
+  // jamais uniquement le champ experiencesPersonnelles. Jamais les deux
+  // cibles a la fois (experiencePersonnelleCibleTrouvee), pour rester
+  // fidele au principe "une seule mise en avant, un seul endroit".
+  // Un engagement peut être une simple chaîne (ancien format / saisie
+  // manuelle) -- converti ici en objet {texte, missions} pour pouvoir y
+  // accrocher les missions, sans jamais inventer de dateDebut/dateFin
+  // absentes.
+  if (!experiencePersonnelleCibleTrouvee && experiencePersonnelleAMettreEnAvant.intitule && texteMissionsExpPersoAMettreEnAvant && objetDecide.engagements && objetDecide.engagements.length) {
+    objetDecide.engagements = objetDecide.engagements.map(function (eng) {
+      var texteEng = (typeof eng === 'string') ? eng : ((eng && eng.texte) || '');
+      if (!texteEng || !correspond(texteEng, experiencePersonnelleAMettreEnAvant.intitule)) { return eng; }
+      var copieEng = (typeof eng === 'string') ? { texte: eng } : (function () {
+        var c = {};
+        Object.keys(eng).forEach(function (k) { c[k] = eng[k]; });
+        return c;
+      })();
+      copieEng.missions = texteMissionsExpPersoAMettreEnAvant;
+      return copieEng;
+    });
+  }
+
+  // TACHE (cv.md, point 15 -- chantier "stratégie 3 branches") : regroupement
+  // thematique reel des competences, propose par l'IA. VALIDATION stricte
+  // avant tout affichage : chaque nom cite dans illustrePar doit
+  // correspondre a une experience REELLEMENT presente sur ce CV (poste ou
+  // entreprise pour le pro, intitule pour le perso) -- jamais une
+  // confiance aveugle dans le texte de l'IA. Un nom qui ne correspond a
+  // rien est simplement retire de la liste (mode degrade pour cette seule
+  // compétence), jamais un plantage ni un lien invente. Repli
+  // automatique : liste vide ici -> composeurComposition.js retombe sur
+  // l'ancien decoupage technique/savoir-etre (compatibilite dossiers sans
+  // cette recommandation, ex. generes avant ce chantier).
+  function nomCorrespondAUneExperience(nom) {
+    var matchPro = (objetDecide.experiences || []).some(function (e) {
+      return (e.poste && correspond(e.poste, nom)) || (e.entreprise && correspond(e.entreprise, nom));
+    });
+    if (matchPro) { return true; }
+    return (objetDecide.experiencesPersonnelles || []).some(function (e) { return e.intitule && correspond(e.intitule, nom); });
+  }
+  objetDecide.competencesGroupeesParTheme = (reco.competencesGroupeesParTheme || []).map(function (groupe) {
+    return {
+      theme: groupe.theme,
+      items: (groupe.items || []).map(function (item) {
+        return {
+          texte: item.texte,
+          illustrePar: (item.illustrePar || []).filter(nomCorrespondAUneExperience)
+        };
+      })
+    };
+  }).filter(function (g) { return g.theme && g.items && g.items.length; });
+
   // TACHE (retour utilisateur : "j'ai choisi 2 expériences mais le CV en
   // affiche 4") : deciderListeObjets() (utilisee juste au-dessus via
   // decider()) complete TOUJOURS jusqu'a la capacite avec les experiences
@@ -11363,7 +12196,19 @@ function appliquerMoteurDecisionCV(objetCV, recommandationsIA, capacitesModele) 
       if (!propose || !propose.missions || !propose.missions.length) { return e; }
       var copie = {};
       Object.keys(e).forEach(function (k) { copie[k] = e[k]; });
-      copie.missions = propose.missions.join('. ') + '.';
+      // TACHE (retour utilisateur : "pourquoi j'ai '..' ? Word le
+      // détecte et le souligne en bleu" -- bug réel confirmé sur un CV
+      // exporté) : chaque mission proposée par l'IA se termine déjà
+      // généralement par un point -- .join('. ') en ajoutait un second,
+      // et le "+ '.'" final en ajoutait un troisième sur la dernière
+      // mission. Le point final de chaque mission est retiré avant la
+      // jointure (jamais avant, seulement au moment d'assembler), un
+      // seul point exact entre chaque mission et à la fin, quel que soit
+      // ce que l'IA a fourni (avec ou sans point final).
+      copie.missions = propose.missions
+        .map(function (m) { return (m || '').trim().replace(/\.+\s*$/, ''); })
+        .filter(Boolean)
+        .join('. ') + '.';
       return copie;
     });
   }
@@ -11685,10 +12530,169 @@ var etatApercuInline = {
   // TACHE (format A5) : formatPage (deja present dans cet objet) reutilise
   // tel quel -- 'A4' = format complet (comportement inchange), 'A5' =
   // contenu recadre + page reduite (CV uniquement pour l'instant).
-  cv: { modele: null, modeleA5: 'portrait', couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4', sansAccroche: false },
+  // TACHE (Projet XXL) : reglagesProjetXXL porte UNIQUEMENT les reglages
+  // qui n'existent pas dans le mecanisme de couleur/colonnes deja partage
+  // avec les 3 autres themes du Composeur (theme, couleur de base, nuance
+  // et nombre de colonnes restent encodes dans etatApercuInline.cv.couleur,
+  // voir composeurExtraireReglagesDepuisId() ci-dessous -- jamais duplique
+  // ici). optionDebordement reste a null tant que le mecanisme A/B/C
+  // (composeurComposition.js) n'a pas ete declenche par un vrai constat de
+  // debordement -- pas encore cable cote interface a ce stade.
+  cv: { modele: null, modeleA5: 'portrait', couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4', sansAccroche: false,
+    // TACHE (Projet XXL, correction : "police" du panneau de reglages n'etait
+    // jamais cablee) : reglagesProjetXXL.police est DISTINCT du champ "police"
+    // ci-dessus (celui-ci = simple habillage CSS de l'apercu iframe, deja
+    // existant, jamais touche) -- reglagesProjetXXL.police pilote la VRAIE
+    // police du document Word genere pour ce theme (POLICES_PROJETXXL_DISPONIBLES,
+    // composeurTheme.js). null = police par defaut du theme (Arial).
+    reglagesProjetXXL: { icones: false, coloration: 'aucune', blocMisEnAvant: null, blocMisEnAvantGauche: null, blocMisEnAvantDroite: null, lettreJointe: false, optionDebordement: null, strategieForcee: 'chronologique', police: null, texteBandeau: null, lectureGuideeVariante: null, texteColorePortee: null, accrocheItalique: null, bandeauDisponibilite: null, styleProfessionnel: null, stylePersonnel: null, ordreDatesPoste: null, separateurCouleurBase: null, fondColonnes: null, fondColonnesEffet: null, texteFondColonnes: null, separateurColonnes: null, regroupementActif: false, tailleBonus: false, capaciteExperiencesBonus: 0, missionsBonus: 0 } },
   lettre: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' },
   entretien: { modele: null, couleur: null, choisiManuellement: false, taillePct: 100, police: '', formatPage: 'A4' }
 };
+
+// TACHE (Projet XXL) : point d'acces UNIQUE pour decomposer un id de theme
+// Composeur compose en texte (ex. "projetxxl-bleu-7_2col", meme convention
+// que composeurObtenirTheme(), composeurTheme.js) en ses 4 morceaux
+// independants -- reutilise a la fois par construirePaletteCouleurs()
+// (savoir si le theme actif est Projet XXL, pour afficher ses reglages
+// avances) et par genererBlobDocumentActif() (pour construire le vrai
+// objet thème via composeurAppliquerReglagesProjetXXL()). Jamais une
+// deuxieme logique de parsing ecrite ailleurs. Retourne null si l'entree
+// est vide/invalide -- jamais une exception.
+function composeurExtraireReglagesDepuisId(idComplet) {
+  if (!idComplet || typeof idComplet !== 'string') { return null; }
+  var colonnes = null;
+  var idSansColonnes = idComplet;
+  [['_1col', 1], ['_2col', 2]].forEach(function (paire) {
+    if (idComplet.slice(-paire[0].length) === paire[0]) {
+      colonnes = paire[1];
+      idSansColonnes = idComplet.slice(0, -paire[0].length);
+    }
+  });
+  var tiret = idSansColonnes.indexOf('-');
+  var theme = tiret !== -1 ? idSansColonnes.slice(0, tiret) : idSansColonnes;
+  var reste = tiret !== -1 ? idSansColonnes.slice(tiret + 1) : null; // "bleu" ou "bleu-7"
+  var couleurBase = null, nuance = null;
+  if (reste) {
+    var parties = reste.split('-');
+    couleurBase = parties[0];
+    nuance = parties[1] ? parseInt(parties[1], 10) : 10;
+  }
+  if (colonnes === null && typeof COMPOSEUR_THEMES_DISPONIBLES !== 'undefined' && COMPOSEUR_THEMES_DISPONIBLES[theme]) {
+    colonnes = COMPOSEUR_THEMES_DISPONIBLES[theme].colonnes;
+  }
+  return { theme: theme, couleurBase: couleurBase, nuance: nuance, colonnes: colonnes };
+}
+
+// TACHE (Projet XXL, correction : brancher aussi l'apercu inline/le
+// panneau plein ecran, pas seulement le telechargement) : point d'acces
+// UNIQUE pour resoudre ce qu'un appelant (genererBlobDocumentActif() ici,
+// et le meme besoin dans apercuDocxIntegre.js) doit reellement transmettre
+// a genererDocxComposeur() -- soit l'id texte tel quel (Sobre/
+// Institutionnel/Moderne, comportement inchange), soit un THEME DEJA
+// CONSTRUIT (objet) si le theme de base est Projet XXL, seul moyen de
+// transmettre ses reglages avances (icones, coloration, bloc mis en
+// avant, lettre jointe, option de debordement, strategie forcee --
+// INEXISTANTS dans un simple id texte compose). Ecrite une seule fois ici
+// plutot que dupliquee dans les 2 fichiers qui en ont besoin.
+function composeurResoudreThemeGeneration(idCompose, reglagesProjetXXLOverride) {
+  var reglagesBase = (typeof composeurExtraireReglagesDepuisId === 'function') ? composeurExtraireReglagesDepuisId(idCompose) : null;
+  if (!reglagesBase || reglagesBase.theme !== 'projetxxl' || typeof composeurAppliquerReglagesProjetXXL !== 'function') {
+    return idCompose;
+  }
+  var reglagesAvances = reglagesProjetXXLOverride || {};
+  return composeurAppliquerReglagesProjetXXL(
+    (typeof COMPOSEUR_THEME_PROJETXXL !== 'undefined') ? COMPOSEUR_THEME_PROJETXXL : null,
+    {
+      colonnes: reglagesBase.colonnes,
+      couleurBase: reglagesBase.couleurBase,
+      nuanceCouleur: reglagesBase.nuance,
+      icones: reglagesAvances.icones,
+      coloration: reglagesAvances.coloration,
+      blocMisEnAvant: reglagesAvances.blocMisEnAvant,
+      // TACHE (retour utilisateur : "mise en avant sur les 2 colonnes") :
+      // meme circuit que les autres reglages avances.
+      blocMisEnAvantGauche: reglagesAvances.blocMisEnAvantGauche,
+      blocMisEnAvantDroite: reglagesAvances.blocMisEnAvantDroite,
+      lettreJointe: reglagesAvances.lettreJointe,
+      optionDebordement: reglagesAvances.optionDebordement,
+      // TACHE (bouton "Mettre en avant + regrouper", point 14 cv.md) :
+      // meme circuit que lettreJointe/optionDebordement -- lu ensuite
+      // comme theme.regroupementActif dans composeurMoteur.js (jamais un
+      // parametre de fonction supplementaire, pour rester coherent avec
+      // le reste des reglages avances Projet XXL).
+      regroupementActif: reglagesAvances.regroupementActif,
+      // TACHE (bouton ultime, levier "plus d'informations") : meme
+      // circuit que regroupementActif juste au-dessus.
+      tailleBonus: reglagesAvances.tailleBonus,
+      // TACHE (bouton ultime, leviers "expériences supplémentaires" /
+      // "développer les missions tronquées") : meme circuit que
+      // tailleBonus juste au-dessus.
+      capaciteExperiencesBonus: reglagesAvances.capaciteExperiencesBonus,
+      missionsBonus: reglagesAvances.missionsBonus,
+      strategieForcee: reglagesAvances.strategieForcee,
+      police: reglagesAvances.police,
+      // TACHE (retour utilisateur : "en fond coloré, choix blanc/noir
+      // pour le texte") : meme circuit que les autres reglages avances.
+      texteBandeau: reglagesAvances.texteBandeau,
+      // TACHE (retour utilisateur : "lecture guidée par titre/par
+      // rectangle, texte coloré avec portée") : meme circuit que les
+      // autres reglages avances.
+      lectureGuideeVariante: reglagesAvances.lectureGuideeVariante,
+      texteColorePortee: reglagesAvances.texteColorePortee,
+      // TACHE (retour utilisateur : "italique ou pas pour l'accroche") :
+      // meme circuit que les autres reglages avances.
+      accrocheItalique: reglagesAvances.accrocheItalique,
+      // TACHE (retour utilisateur : "bandeau de disponibilité") : meme
+      // circuit que les autres reglages avances.
+      bandeauDisponibilite: reglagesAvances.bandeauDisponibilite,
+      // TACHE (retour utilisateur : "Condensé/Épuré") : meme circuit que
+      // les autres reglages avances.
+      styleProfessionnel: reglagesAvances.styleProfessionnel,
+      stylePersonnel: reglagesAvances.stylePersonnel,
+      // TACHE (retour utilisateur : "date d'abord/poste d'abord") : meme
+      // circuit que les autres reglages avances.
+      ordreDatesPoste: reglagesAvances.ordreDatesPoste,
+      // TACHE (retour utilisateur : "le séparateur peut-il avoir une
+      // autre couleur ?") : meme circuit que les autres reglages avances.
+      separateurCouleurBase: reglagesAvances.separateurCouleurBase,
+      // TACHE (retour utilisateur : "Fond des colonnes") : meme circuit
+      // que les autres reglages avances.
+      fondColonnes: reglagesAvances.fondColonnes,
+      fondColonnesEffet: reglagesAvances.fondColonnesEffet,
+      texteFondColonnes: reglagesAvances.texteFondColonnes,
+      // TACHE (retour utilisateur : "modèle Ruban -- séparateur") : meme
+      // circuit que les autres reglages avances.
+      separateurColonnes: reglagesAvances.separateurColonnes
+    }
+  );
+}
+
+// TACHE (Projet XXL, mecanisme A/B/C -- "C = un simple constat, mesure
+// reel, pas une estimation cote code") : composeurComposition.js l'a deja
+// signale explicitement (§4.3 de l'architecture) -- aucune mesure du
+// rendu Word n'est possible depuis notre propre code de generation.
+// EN REVANCHE, une fois le document reellement rendu a l'ecran par
+// docx-preview (apercuDocxIntegre.js), le nombre de pages est une donnee
+// VISIBLE et mesurable dans le DOM -- c'est ce constat reel (pas une
+// approximation) qui alimente cette variable, mise a jour par
+// apercuDocxIntegre.js apres chaque rendu reussi du CV. null tant
+// qu'aucune mesure n'a encore eu lieu (ex. accordeon jamais ouvert).
+var _pagesEstimeesCVProjetXXL = null;
+
+// Appelee par apercuDocxIntegre.js (_rafraichirApercuDocx) juste apres un
+// rendu reussi du CV -- ne fait que memoriser la mesure et rafraichir
+// l'affichage du panneau de reglages Projet XXL s'il est actuellement
+// visible (aucun effet si un autre modele/theme est affiche : le
+// panneau n'existe alors simplement pas dans le DOM, construirePaletteCouleurs()
+// se termine alors sans rien faire d'observable).
+function miseAJourConstatDebordementProjetXXL(nombrePages) {
+  _pagesEstimeesCVProjetXXL = nombrePages;
+  if (typeof construirePaletteCouleurs === 'function' && etatApercuInline.cv.modele === 'composeur') {
+    construirePaletteCouleurs('cv', 'CV', etatApercuInline.cv.modele);
+  }
+}
+
 var POLICES_APERCU_DISPONIBLES = [
   { id: '', nom: 'Police du modèle' },
   { id: 'Arial, Helvetica, sans-serif', nom: 'Arial' },
@@ -11842,7 +12846,11 @@ function chargerApercuCVInline(modele) {
   // (etatApercuInline.cv.formatPage, 'A4' par defaut -- comportement
   // inchange dans ce cas).
   if (typeof _rafraichirApercuDocx === 'function') {
-    _rafraichirApercuDocx('cv', modele, zone, document.getElementById('messageApercuInlineCV'), true, etatApercuInline.cv.couleur, etatApercuInline.cv.formatPage);
+    // TACHE (bouton ultime "1 page, lisible") : return ajoute -- fire-and-
+    // forget reste un usage valide pour tous les appelants existants,
+    // mais permet desormais a rechargerApercuInline() (et donc au bouton
+    // ultime) d'attendre la fin reelle du rendu si besoin.
+    return _rafraichirApercuDocx('cv', modele, zone, document.getElementById('messageApercuInlineCV'), true, etatApercuInline.cv.couleur, etatApercuInline.cv.formatPage);
   }
 }
 
@@ -11855,7 +12863,7 @@ function chargerApercuLettreInline(modele) {
   etatApercuInline.lettre.modele = modele;
 
   if (typeof _rafraichirApercuDocx === 'function') {
-    _rafraichirApercuDocx('lettre', modele, zone, document.getElementById('messageApercuInlineLettre'), true, etatApercuInline.lettre.couleur, etatApercuInline.lettre.formatPage);
+    return _rafraichirApercuDocx('lettre', modele, zone, document.getElementById('messageApercuInlineLettre'), true, etatApercuInline.lettre.couleur, etatApercuInline.lettre.formatPage);
   }
 }
 
@@ -11871,7 +12879,7 @@ function chargerApercuEntretienInline(modele) {
   etatApercuInline.entretien.modele = modele;
 
   if (typeof _rafraichirApercuDocx === 'function') {
-    _rafraichirApercuDocx('entretien', modele, zone, document.getElementById('messageApercuInlineEntretien'), true, etatApercuInline.entretien.couleur, etatApercuInline.entretien.formatPage);
+    return _rafraichirApercuDocx('entretien', modele, zone, document.getElementById('messageApercuInlineEntretien'), true, etatApercuInline.entretien.couleur, etatApercuInline.entretien.formatPage);
   }
 }
 
@@ -11883,51 +12891,230 @@ function chargerApercuEntretienInline(modele) {
 // evite de repeter le meme if/else CV/Lettre/Entretien a chaque endroit ou
 // l'apercu doit etre recharge (modele, taille, police...).
 function rechargerApercuInline(type, modele) {
-  if (type === 'lettre') { chargerApercuLettreInline(modele); }
-  else if (type === 'entretien') { chargerApercuEntretienInline(modele); }
-  else { chargerApercuCVInline(modele); }
+  if (type === 'lettre') { return chargerApercuLettreInline(modele); }
+  else if (type === 'entretien') { return chargerApercuEntretienInline(modele); }
+  else { return chargerApercuCVInline(modele); }
+}
+
+// TACHE (bouton ultime "1 page, lisible", version escalade) : essaie les
+// leviers existants du MOINS au PLUS agressif, en mesurant REELLEMENT le
+// nombre de pages generees (docx-preview -- meme comptage que
+// miseAJourConstatDebordementProjetXXL, ".apercu-docx-rendu-wrapper"
+// enfants directs) entre chaque etape, et s'arrete des que le CV tient sur
+// une page. Jamais un "tout activer" aveugle : un profil deja court ne
+// doit jamais ressortir avec des missions inutilement condensees ou un
+// regroupement applique sans besoin reel. CV/Projet XXL uniquement
+// (aucun sens pour lettre/entretien, qui n'ont pas ce mecanisme).
+function activerMiseEnFormeUltimeXXL(boutonRef) {
+  var etatCv = etatApercuInline.cv;
+  if (!etatCv.reglagesProjetXXL) { return; }
+  var reglages = etatCv.reglagesProjetXXL;
+
+  // Le regroupement n'est propose comme dernier palier que s'il y a
+  // reellement quelque chose d'exploitable -- meme verification que celle
+  // qui conditionne l'affichage de son propre bouton Oui/Non plus haut
+  // dans ce meme panneau.
+  var recoReg = (dossier.ia && dossier.ia.cv && dossier.ia.cv.recommandations && dossier.ia.cv.recommandations.regroupementExperiences) || {};
+  var prio = recoReg.experiencePrioritaire || {};
+  var regroupementUtilisable = !!((prio.type === 'professionnelle' && prio.poste) || (prio.type === 'personnelle' && prio.intitule) || (recoReg.groupes || []).length > 0);
+
+  // Paliers dans l'ordre du moins au plus agressif -- jamais l'inverse.
+  var paliers = [
+    { optionDebordement: null, regroupementActif: false },
+    { optionDebordement: 'A', regroupementActif: false },
+    { optionDebordement: 'AB', regroupementActif: false }
+  ];
+  if (regroupementUtilisable) { paliers.push({ optionDebordement: 'AB', regroupementActif: true }); }
+
+  var libelleBouton = boutonRef ? boutonRef.querySelector('span:last-child') : null;
+  if (boutonRef) { boutonRef.disabled = true; }
+  if (libelleBouton) { libelleBouton.textContent = 'Optimisation…'; }
+
+  etatCv.formatPage = 'A4';
+  reglages.tailleBonus = false;
+  reglages.capaciteExperiencesBonus = 0;
+  reglages.missionsBonus = 0;
+
+  var index = 0;
+  function terminer() {
+    // Re-rendu complet final (meme raison que construireBoutonsFormatPage()
+    // plus bas dans ce fichier) : garde le carrousel, le panneau de
+    // reglages (boutons "Reduire la police"/"Les deux (A+B)"/regroupement
+    // actifs) ET l'apercu parfaitement synchronises avec le palier
+    // finalement retenu -- pas seulement l'apercu.
+    if (typeof pageResultats === 'function') { pageResultats(); }
+  }
+  // TACHE (retour utilisateur : "Style professionnel condense/epure... un
+  // vrai impact sur la lisibilite percue") : si le tirage au hasard (ou un
+  // choix anterieur) a laisse les missions en mode "condense" (fusionnees
+  // en une ligne), tente de repasser en "epure" (puces separees, plus
+  // lisible) -- avec le meme principe de test reel + repli que le bonus
+  // de police plus bas : jamais applique si ca fait deborder sur 2 pages.
+  function essayerStyleEpureSiPossible(callbackSuite) {
+    if (reglages.styleProfessionnel !== 'condense') { callbackSuite(); return; }
+    reglages.styleProfessionnel = 'epure';
+    _pagesEstimeesCVProjetXXL = null;
+    var promesse = rechargerApercuInline('cv', 'composeur');
+    if (!promesse || typeof promesse.then !== 'function') { reglages.styleProfessionnel = 'condense'; callbackSuite(); return; }
+    promesse.then(function () {
+      var mesureExploitable = (typeof _pagesEstimeesCVProjetXXL === 'number' && _pagesEstimeesCVProjetXXL > 0);
+      var nbPages = mesureExploitable ? _pagesEstimeesCVProjetXXL : 99;
+      if (nbPages > 1) { reglages.styleProfessionnel = 'condense'; }
+      callbackSuite();
+    }).catch(function () { reglages.styleProfessionnel = 'condense'; callbackSuite(); });
+  }
+  // TACHE (chantier "1 page, lisible" -- levier "afficher des expériences
+  // supplémentaires écartées par la capacité") : la capacité normale
+  // (COMPOSEUR_CAPACITES_A4_DETAILLE_CV.experiences, 5 aujourd'hui) coupe
+  // silencieusement les expériences au-dela de ce plafond fixe, meme s'il
+  // reste de la place reelle sur la page. Augmente ce plafond UNE
+  // experience a la fois, avec test reel + repli a chaque etape --
+  // jamais plus loin que le nombre reel d'experiences du dossier (rien a
+  // gagner a monter un bonus que personne ne consommerait).
+  function essayerExperiencesSupplementairesSiPossible(callbackSuite) {
+    var capaciteBase = (typeof COMPOSEUR_CAPACITES_A4_DETAILLE_CV !== 'undefined' && COMPOSEUR_CAPACITES_A4_DETAILLE_CV.experiences) || 5;
+    var totalDisponible = (dossier.experiences || []).length;
+    reglages.capaciteExperiencesBonus = 0;
+    function essayerUneDePlus() {
+      if (capaciteBase + reglages.capaciteExperiencesBonus >= totalDisponible) { callbackSuite(); return; }
+      var bonusCandidat = reglages.capaciteExperiencesBonus + 1;
+      reglages.capaciteExperiencesBonus = bonusCandidat;
+      _pagesEstimeesCVProjetXXL = null;
+      var promesse = rechargerApercuInline('cv', 'composeur');
+      if (!promesse || typeof promesse.then !== 'function') { reglages.capaciteExperiencesBonus = bonusCandidat - 1; callbackSuite(); return; }
+      promesse.then(function () {
+        var mesureExploitable = (typeof _pagesEstimeesCVProjetXXL === 'number' && _pagesEstimeesCVProjetXXL > 0);
+        var nbPages = mesureExploitable ? _pagesEstimeesCVProjetXXL : 99;
+        if (nbPages > 1) { reglages.capaciteExperiencesBonus = bonusCandidat - 1; callbackSuite(); return; }
+        essayerUneDePlus(); // ça tient encore : on tente d'en montrer une de plus
+      }).catch(function () { reglages.capaciteExperiencesBonus = bonusCandidat - 1; callbackSuite(); });
+    }
+    essayerUneDePlus();
+  }
+  // TACHE (chantier "1 page, lisible" -- levier "développer les missions
+  // tronquées") : meme principe, sur le plafond de lignes de missions par
+  // expérience (lignesMaxParExperience, composeurComposition.js) plutôt
+  // que sur le nombre d'expériences. Plafond de sécurité à 5 (déjà imposé
+  // aussi côté composeurTheme.js) : au-delà, le gain de detail devient
+  // marginal face au risque de boucler longtemps pour rien.
+  function essayerMissionsSupplementairesSiPossible(callbackSuite) {
+    reglages.missionsBonus = 0;
+    function essayerUneLigneDePlus() {
+      if (reglages.missionsBonus >= 5) { callbackSuite(); return; }
+      var bonusCandidat = reglages.missionsBonus + 1;
+      reglages.missionsBonus = bonusCandidat;
+      _pagesEstimeesCVProjetXXL = null;
+      var promesse = rechargerApercuInline('cv', 'composeur');
+      if (!promesse || typeof promesse.then !== 'function') { reglages.missionsBonus = bonusCandidat - 1; callbackSuite(); return; }
+      promesse.then(function () {
+        var mesureExploitable = (typeof _pagesEstimeesCVProjetXXL === 'number' && _pagesEstimeesCVProjetXXL > 0);
+        var nbPages = mesureExploitable ? _pagesEstimeesCVProjetXXL : 99;
+        if (nbPages > 1) { reglages.missionsBonus = bonusCandidat - 1; callbackSuite(); return; }
+        essayerUneLigneDePlus();
+      }).catch(function () { reglages.missionsBonus = bonusCandidat - 1; callbackSuite(); });
+    }
+    essayerUneLigneDePlus();
+  }
+  // TACHE (retour utilisateur : "je veux qu'elle fasse les deux choses...
+  // mettre plus d'informations car il en reste de la place") : une fois
+  // qu'un palier de reduction a suffi (ou meme des le palier 1, si rien
+  // n'etait necessaire), tente EN PLUS un leger bonus de police --
+  // jamais une classification a priori (R005, deja disponible mais base
+  // sur une simple estimation de volume de texte, pas la place reellement
+  // restee vide) : un vrai essai, une vraie mesure, et un repli
+  // automatique si ce bonus fait deborder sur une 2e page.
+  function essayerBonusPoliceSiPossible() {
+    reglages.tailleBonus = true;
+    _pagesEstimeesCVProjetXXL = null;
+    var promesse = rechargerApercuInline('cv', 'composeur');
+    if (!promesse || typeof promesse.then !== 'function') { reglages.tailleBonus = false; terminer(); return; }
+    promesse.then(function () {
+      var mesureExploitable = (typeof _pagesEstimeesCVProjetXXL === 'number' && _pagesEstimeesCVProjetXXL > 0);
+      var nbPages = mesureExploitable ? _pagesEstimeesCVProjetXXL : 99;
+      // Mesure ambigue OU deborde avec le bonus : on revient sur le
+      // palier qui tenait deja, jamais un pari sur une mesure incertaine.
+      if (nbPages > 1) { reglages.tailleBonus = false; }
+      terminer();
+    }).catch(function () { reglages.tailleBonus = false; terminer(); });
+  }
+  function essayerPalier() {
+    var palier = paliers[index];
+    reglages.optionDebordement = palier.optionDebordement;
+    reglages.regroupementActif = palier.regroupementActif;
+    // TACHE (retour utilisateur : "je n'ai pas l'impression qu'elle
+    // fonctionne") : bug trouve -- remettre _pagesEstimeesCVProjetXXL a
+    // null AVANT chaque rendu, et lire cette MEME variable globale
+    // (deja mise a jour de façon fiable par miseAJourConstatDebordementProjetXXL,
+    // deja utilisee par le reste de ce panneau) plutot que de recompter
+    // soi-meme les enfants du DOM -- l'ancien code retombait par defaut
+    // sur "1 page" des qu'un comptage DOM echouait silencieusement (rendu
+    // pas encore termine, enveloppe introuvable un instant), ce qui
+    // arretait l'escalade immediatement a tort, avant meme d'avoir
+    // essaye de reduire quoi que ce soit.
+    _pagesEstimeesCVProjetXXL = null;
+    var promesse = rechargerApercuInline('cv', 'composeur');
+    if (!promesse || typeof promesse.then !== 'function') { terminer(); return; }
+    promesse.then(function () {
+      // Mesure ambigue (comptage qui n'a pas pu se faire) : ne jamais
+      // s'arreter la-dessus, on continue l'escalade par prudence plutot
+      // que de faussement conclure "ca tient deja".
+      var mesureExploitable = (typeof _pagesEstimeesCVProjetXXL === 'number' && _pagesEstimeesCVProjetXXL > 0);
+      var nbPages = mesureExploitable ? _pagesEstimeesCVProjetXXL : 99;
+      index += 1;
+      if (nbPages <= 1) {
+        essayerStyleEpureSiPossible(function () {
+          essayerExperiencesSupplementairesSiPossible(function () {
+            essayerMissionsSupplementairesSiPossible(essayerBonusPoliceSiPossible);
+          });
+        });
+      } else if (index >= paliers.length) { terminer(); } else { essayerPalier(); }
+    }).catch(terminer);
+  }
+  essayerPalier();
 }
 
 function initialiserApercuInlineSiOuvert() {
   var type = docActifActuel();
   if (type === 'cv' && document.getElementById('zoneApercuInlineCV')) {
-    // TACHE (retour utilisateur : sélecteur de modèles A5, comme pour A4) :
-    // deux grilles DISTINCTES coexistent dans le DOM (une par format,
-    // l'autre masquee -- voir accordeonApercuDoc plus haut), on ne
-    // construit desormais QUE celle qui correspond au format actuellement
-    // actif, jamais les deux.
+    // TACHE (retour utilisateur : "je veux que toutes les options qu'on
+    // a faites soient en haut à la place des modèles de CV, et que les
+    // modèles de CV puissent disparaître") : Projet XXL devient
+    // l'unique modèle -- plus de grille A4 (16 modèles classiques) à
+    // construire, plus de recommandation IA vers un modèle classique
+    // (choisirModeleRecommandeCV n'est plus jamais consultée pour le CV
+    // -- elle reste utilisée telle quelle pour Lettre/Entretien, qui
+    // gardent leurs 16/anciens modèles, inchangés). etatApercuInline.cv.
+    // modele est désormais TOUJOURS 'composeur', quel que soit ce que la
+    // personne a "choisi manuellement" par le passé (plus rien à choisir
+    // pour l'A4).
+    etatApercuInline.cv.modele = 'composeur';
+    // TACHE (retour utilisateur, bug réel trouvé : "je ne vois pas
+    // Portrait/Paysage sur Mini CV A5" -- construits la veille, jamais
+    // réellement rebranchés ici après la migration Projet XXL) : la
+    // grille A5 (Portrait/Paysage, MODELES_A5_CV_DISPONIBLES) N'EST PAS
+    // concernée par le retrait ci-dessus -- ce sont 2 mises en page du
+    // format Mini CV A5 (miniCvA5.js), jamais un "ancien modèle
+    // classique". Reconstruite ici exactement comme pour Lettre/
+    // Entretien (voir plus bas), mais avec idSuffixe='A5CV' (cible
+    // grilleModelesA5CV, voir le gabarit HTML), champEtat='modeleA5'
+    // (écrit dans etat.modeleA5 SANS jamais toucher etat.modele) et
+    // idSuffixePalette='CV' (la palette de couleurs reste dans le même
+    // conteneur que l'A4, voir la doc de construireCarrouselModeles()).
+    // Seulement si le format Mini CV A5 est actif -- sinon la grille
+    // reste vide/masquée (gabarit HTML), rien à construire.
     if (etatApercuInline.cv.formatPage === 'A5') {
-      var listeA5 = (typeof MODELES_A5_CV_DISPONIBLES !== 'undefined') ? MODELES_A5_CV_DISPONIBLES : [{ id: 'portrait', nom: 'Portrait' }];
-      Promise.all(listeA5.map(function (m) { return obtenirMetaModeleType('cv', m.id); })).then(function (metas) {
-        var carrouselA5 = document.getElementById('grilleModelesA5CV');
-        if (!carrouselA5) { return; }
-        var metasA5ParModele = {};
-        listeA5.forEach(function (m, i) { metasA5ParModele[m.id] = metas[i]; });
-        construireCarrouselModeles('cv', 'A5CV', listeA5, etatApercuInline.cv.modeleA5 || 'portrait', metasA5ParModele, 'modeleA5', 'CV');
-        // Le conteneur reel utilise par le reste du code (palette, apercu)
-        // reste "CV" -- seule la grille de MINIATURES vit sous un id
-        // distinct ('A5CV'). On reconstruit ici la palette/l'apercu sous
-        // le bon id ('CV', pas 'A5CV'), pour rester coherent avec le reste
-        // de l'accordeon "Aperçu et finalisation".
-        construireBoutonsFormatPage('cv', 'CV');
-        chargerApercuCVInline(etatApercuInline.cv.modeleA5 || 'portrait');
+      Promise.all(MODELES_A5_CV_DISPONIBLES.map(function (m) { return obtenirMetaModeleType('cv', m.id); })).then(function (metas) {
+        var carrousel = document.getElementById('grilleModelesA5CV');
+        if (!carrousel) { return; }
+        var metasParModele = {};
+        MODELES_A5_CV_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
+        var modeleA5 = etatApercuInline.cv.modeleA5 || 'portrait';
+        construireCarrouselModeles('cv', 'A5CV', MODELES_A5_CV_DISPONIBLES, modeleA5, metasParModele, 'modeleA5', 'CV');
       });
-      return;
     }
-    Promise.all(MODELES_CV_DISPONIBLES.map(function (m) { return obtenirMetaModele(m.id); })).then(function (metas) {
-      var carrousel = document.getElementById('grilleModelesCV');
-      if (!carrousel) { return; }
-      var metasParModele = {};
-      MODELES_CV_DISPONIBLES.forEach(function (m, i) { metasParModele[m.id] = metas[i]; });
-      if (!etatApercuInline.cv.choisiManuellement) {
-        etatApercuInline.cv.modele = choisirModeleRecommandeCV(metasParModele);
-      }
-      if (etatApercuInline.cv.formatPage !== 'A5') {
-        construireCarrouselModeles('cv', 'CV', MODELES_CV_DISPONIBLES, etatApercuInline.cv.modele || 'moderne', metasParModele);
-      }
-      construireBoutonsFormatPage('cv', 'CV');
-      chargerApercuCVInline(etatApercuInline.cv.modele || 'moderne');
-    });
+    construireBoutonsFormatPage('cv', 'CV');
+    chargerApercuCVInline('composeur');
+    return;
   } else if (type === 'lettre' && document.getElementById('zoneApercuInlineLettre')) {
     Promise.all(MODELES_LETTRE_DISPONIBLES.map(function (m) { return obtenirMetaModeleType('lettre', m.id); })).then(function (metas) {
       var carrousel = document.getElementById('grilleModelesLettre');
@@ -12112,9 +13299,17 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
   // vraies nuances de couleur, pas des identités visuelles distinctes).
   if (type === 'cv' && modeleActif === 'composeur' && typeof COMPOSEUR_THEMES_DISPONIBLES !== 'undefined') {
     bloc.style.display = 'block';
+    // TACHE (retour utilisateur : "je veux que toutes les options qu'on
+    // a faites soient en haut, à la place des modèles de CV... enlever
+    // le thème du composeur aussi") : Sobre/Institutionnel/Moderne ne
+    // sont plus proposés -- Projet XXL est désormais le seul thème,
+    // jamais un choix à faire. Le titre "Thème du Composeur" et la
+    // rangée de 4 boutons disparaissent (plus rien à choisir) -- seule
+    // la couleur/nuance de Projet XXL (zoneCouleurs, plus bas dans cette
+    // fonction) reste sélectionnable, c'est un réglage différent.
     var titreBloc = bloc.querySelector('h4');
-    if (titreBloc) { titreBloc.innerHTML = '&#127912; Thème du Composeur'; }
-    var themeActifComplet = etatApercuInline[type].couleur || 'sobre';
+    if (titreBloc) { titreBloc.style.display = 'none'; }
+    var themeActifComplet = etatApercuInline[type].couleur || 'projetxxl';
 
     // TACHE (retour utilisateur : "je vais pouvoir choisir si c'est une
     // colonne ou double colonne") : détecte un éventuel suffixe de
@@ -12131,7 +13326,7 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
     var tiretActif = idSansColonnesUI.indexOf('-');
     var themeBaseActif = tiretActif !== -1 ? idSansColonnesUI.slice(0, tiretActif) : idSansColonnesUI;
     var idCouleurComplet = tiretActif !== -1 ? idSansColonnesUI.slice(tiretActif + 1) : null; // "bleu" ou "bleu-7"
-    if (!COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif]) { themeBaseActif = 'sobre'; idCouleurComplet = null; }
+    if (!COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif]) { themeBaseActif = 'projetxxl'; idCouleurComplet = null; }
     var baseActiveComposeur = idCouleurComplet ? idCouleurComplet.split('-')[0] : null;
     if (colonnesActives === null) { colonnesActives = COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif].colonnes; }
 
@@ -12151,27 +13346,13 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
       construirePaletteCouleurs(type, idSuffixe, modeleActif);
     }
 
-    zonePastilles.innerHTML = Object.keys(COMPOSEUR_THEMES_DISPONIBLES).map(function (id) {
-      var th = COMPOSEUR_THEMES_DISPONIBLES[id];
-      var actif = (id === themeBaseActif);
-      return '<button type="button" class="pastille-couleur-cv' + (actif ? ' pastille-couleur-cv-active' : '') +
-        '" data-theme-composeur="' + id + '" title="' + echapperAttribut(th.nom + ' — ' + th.description) +
-        '" aria-label="Thème ' + echapperAttribut(th.nom) + '" style="background:#' + th.couleurs.primaire + ';' +
-        'width:auto;padding:0 0.6rem;border-radius:999px;font-size:0.78rem;color:#fff;height:1.8rem;line-height:1.8rem;">' +
-        echapperAttribut(th.nom) + '</button>';
-    }).join('');
-    zonePastilles.querySelectorAll('[data-theme-composeur]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        // TACHE (retour utilisateur : "si j'ai choisi 2 colonnes, il
-        // reste jusqu'à ce que je change" -- bug réel trouvé) : changer
-        // de thème repart bien de sa couleur d'origine (comportement
-        // volontaire, inchangé), mais doit conserver le nombre de
-        // colonnes déjà choisi -- jamais silencieusement revenir au
-        // défaut du nouveau thème. idComposeurComplet() applique
-        // colonnesActives (l'état actuel, pas celui du nouveau thème).
-        appliquerTheme(idComposeurComplet(this.dataset.themeComposeur, null, colonnesActives));
-      });
-    });
+    // TACHE (retour utilisateur : "enlever le thème du composeur, Projet
+    // XXL est l'unique thème") : plus aucun bouton généré ici -- la
+    // fonction appliquerTheme() ci-dessus reste définie (inoffensive,
+    // jamais appelée puisqu'aucune pastille n'existe plus pour la
+    // déclencher) plutôt que supprimée, cohérent avec le choix de
+    // masquer sans jamais retirer le code.
+    zonePastilles.innerHTML = '';
 
     // TACHE (retour utilisateur : "je veux 6 couleurs et 10 nuances par
     // couleur, uniformisé pour tous les modèles") : même structure
@@ -12187,15 +13368,51 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
       zoneCouleurs = document.createElement('div');
       zoneCouleurs.id = 'couleursThemeComposeur' + idSuffixe;
       zoneCouleurs.style.cssText = 'margin-top:0.6rem;';
-      zonePastilles.insertAdjacentElement('afterend', zoneCouleurs);
     }
+    // TACHE (Projet XXL, reorganisation du panneau) : repositionnement
+    // INCONDITIONNEL (pas seulement a la creation) -- necessaire car ce
+    // meme element peut avoir ete DEPLACE dans une section repliable du
+    // panneau Projet XXL lors d'un rendu precedent (voir plus bas). Sans
+    // cette ligne, revenir de Projet XXL a un autre theme laisserait
+    // zoneCouleurs "orpheline" au moment ou l'ancien panneau XXL est
+    // retire (elle serait supprimee avec lui, par cascade). Idempotent et
+    // sans effet visible si l'element est deja a sa place plate.
+    zonePastilles.insertAdjacentElement('afterend', zoneCouleurs);
     var themeBaseInfo = COMPOSEUR_THEMES_DISPONIBLES[themeBaseActif];
-    var libelleOrigine = '<button type="button" class="pastille-couleur-cv' + (!baseActiveComposeur ? ' pastille-couleur-cv-active' : '') +
-      '" data-couleur-theme-composeur="" title="Couleur d’origine du thème" aria-label="Couleur d’origine" ' +
-      'style="background:#' + themeBaseInfo.couleurs.primaire + ';"></button>';
+    // TACHE (retour utilisateur : "couleur thème d'origine, je ne veux
+    // pas l'avoir... ça sera directement sur le bleu, et si la personne
+    // clique à nouveau sur ce bleu, elle aura les nuances") : deux
+    // besoins distincts, à ne pas confondre -- (1) UNE base doit
+    // apparaître visuellement active par défaut (jamais un panneau sans
+    // rien de sélectionné, même avant tout clic) ; (2) les nuances, elles,
+    // ne doivent PAS se déplier automatiquement au premier affichage --
+    // seulement après un clic explicite sur cette base déjà active.
+    // baseActiveComposeur (calculé plus haut à partir de idCouleurComplet)
+    // continue de piloter SEULEMENT le dépliage des nuances, comportement
+    // inchangé -- baseAAfficherActive ci-dessous ne pilote que la
+    // surbrillance visuelle du bouton, jamais le dépliage.
+    var baseAAfficherActive = baseActiveComposeur;
+    if (!baseAAfficherActive) {
+      var baseCorrespondante = Object.keys(couleursDispoBase).filter(function (idBase) {
+        return couleursDispoBase[idBase].hex === themeBaseInfo.couleurs.primaire;
+      })[0];
+      baseAAfficherActive = baseCorrespondante || 'bleu';
+    }
+    // TACHE (retour utilisateur : "couleur thème d'origine, je ne veux
+    // pas l'avoir, ça fait doublon avec la couleur de base déjà
+    // affichée, certains ne vont pas comprendre pourquoi c'est deux fois
+    // la même couleur") : retiré -- la personne arrive directement sur
+    // les 6 couleurs de base (dont celle qui correspond déjà à la
+    // couleur d'origine du thème, déjà active par défaut), plus besoin
+    // de ce doublon.
     var pointsBase = Object.keys(couleursDispoBase).map(function (idBase) {
       var c = couleursDispoBase[idBase];
       var estBaseActive = (baseActiveComposeur === idBase);
+      // TACHE : surbrillance visuelle du bouton (baseAAfficherActive,
+      // peut être vraie par défaut même sans clic) DÉCOUPLÉE du
+      // dépliage des nuances (estBaseActive, uniquement après un clic
+      // explicite -- comportement inchangé).
+      var estAffichageActif = (baseAAfficherActive === idBase);
       var nuances = avecNuancesComposeur ? obtenirNuancesCouleurCV(idBase) : [];
       var rangeeNuances = (avecNuancesComposeur && estBaseActive)
         ? '<div class="rangee-nuances-cv" style="display:flex;gap:0.3rem;margin-top:0.4rem;flex-wrap:wrap;max-width:220px;">' +
@@ -12206,12 +13423,12 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
           }).join('') + '</div>'
         : '';
       return '<div style="display:inline-block;vertical-align:top;margin-right:0.3rem;">' +
-        '<button type="button" class="pastille-couleur-cv' + (estBaseActive ? ' pastille-couleur-cv-active' : '') + '" ' +
+        '<button type="button" class="pastille-couleur-cv' + (estAffichageActif ? ' pastille-couleur-cv-active' : '') + '" ' +
         'data-couleur-theme-composeur-base="' + idBase + '" title="' + echapperAttribut(c.nom) + (avecNuancesComposeur ? ' — cliquez pour voir les nuances' : '') + '" ' +
         'aria-label="Couleur ' + echapperAttribut(c.nom) + '" style="background:#' + c.hex + ';"></button>' +
         rangeeNuances + '</div>';
     }).join('');
-    zoneCouleurs.innerHTML = '<span class="small text-muted d-block mb-1">Couleur :</span>' + libelleOrigine + pointsBase;
+    zoneCouleurs.innerHTML = '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Couleur :</span>' + pointsBase;
 
     zoneCouleurs.querySelectorAll('[data-couleur-theme-composeur]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -12246,14 +13463,24 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
     // un thème peut toujours forcer son propre nombre de colonnes par
     // défaut (colonnesActives déjà initialisé dessus), la personne peut
     // le changer ici pour ce thème précis.
+    // TACHE (retour utilisateur : "on va travailler l'option 1 colonne")
+    // : le mode 1 colonne pour Projet XXL, précédemment désactivé faute
+    // de conception (voir versions précédentes de ce fichier), est
+    // désormais construit -- réactivé pour ce thème, comportement
+    // strictement identique aux 3 autres thèmes (jamais désactivé pour
+    // eux, ce choix ne l'a jamais été non plus).
     var zoneColonnes = document.getElementById('colonnesThemeComposeur' + idSuffixe);
     if (!zoneColonnes) {
       zoneColonnes = document.createElement('div');
       zoneColonnes.id = 'colonnesThemeComposeur' + idSuffixe;
       zoneColonnes.style.cssText = 'margin-top:0.6rem;';
-      zoneCouleurs.insertAdjacentElement('afterend', zoneColonnes);
     }
-    zoneColonnes.innerHTML = '<span class="small text-muted d-block mb-1">Mise en page :</span>' +
+    // TACHE (Projet XXL, reorganisation du panneau) : meme raisonnement
+    // que pour zoneCouleurs ci-dessus -- repositionnement INCONDITIONNEL,
+    // jamais seulement a la creation, pour ne jamais rester "orpheline"
+    // dans un panneau XXL en cours de suppression.
+    zoneCouleurs.insertAdjacentElement('afterend', zoneColonnes);
+    zoneColonnes.innerHTML = '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Mise en page :</span>' +
       [1, 2].map(function (n) {
         var actif = (colonnesActives === n);
         return '<button type="button" class="btn btn-sm ' + (actif ? 'btn-primary' : 'btn-outline-secondary') +
@@ -12265,6 +13492,887 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
         appliquerTheme(idComposeurComplet(themeBaseActif, idCouleurComplet, n));
       });
     });
+
+    // ============================================================
+    // TACHE (Projet XXL, document de conception) : reglages propres a ce
+    // theme uniquement -- n'apparaissent que si themeBaseActif ===
+    // 'projetxxl', jamais pour Sobre/Institutionnel/Moderne (qui n'ont
+    // aucun de ces champs, voir composeurTheme.js). Ecrit dans
+    // etatApercuInline.cv.reglagesProjetXXL, lu ensuite par
+    // genererBlobDocumentActif()/apercuDocxIntegre.js au moment de la
+    // generation reelle, via la fonction PARTAGEE composeurResoudreThemeGeneration()
+    // (jamais deux logiques de construction du theme).
+    //
+    // TACHE (correction : "il faut faire le necessaire, respecter le
+    // plan") : la Strategie de contenu et le mecanisme A/B/C, precedemment
+    // signales comme non cables, le sont desormais :
+    // - Strategie : theme.strategieForcee (composeurTheme.js), applique
+    //   PAR-DESSUS la recommandation automatique de R005 dans
+    //   composeurComposition.js -- jamais a la place de son calcul.
+    // - Mecanisme A/B/C : le "constat" C n'est PLUS une simple estimation
+    //   codee en dur (impossible, deja documente dans composeurRegles.js
+    //   §4.3 -- aucune mesure du rendu Word n'est possible depuis notre
+    //   code de generation), mais une MESURE REELLE du nombre de pages
+    //   effectivement rendues par docx-preview (voir
+    //   miseAJourConstatDebordementProjetXXL(), appelee par
+    //   apercuDocxIntegre.js juste apres chaque rendu reussi du CV) --
+    //   _pagesEstimeesCVProjetXXL. "Ne rien faire" reste le choix par
+    //   defaut (optionDebordement=null) tant qu'aucun debordement reel
+    //   n'est constate ; ce bouton devient indisponible (grise, non
+    //   cliquable) des que le constat C apparait, comme demande dans le
+    //   document de conception -- sans jamais bloquer la generation
+    //   elle-meme (A/B restent de simples preferences, R003 -- police
+    //   minimale 12pt -- reste de toute facon une regle dure inviolable).
+    // ============================================================
+    if (themeBaseActif === 'projetxxl') {
+      var etatCv = etatApercuInline.cv;
+      // TACHE (retour utilisateur : "sans phrase d'accroche dans le
+      // panneau modulable") : masque le toggle générique -- l'équivalent
+      // vit désormais dans la section "Contenu" ci-dessous. Element
+      // jamais recree (id stable, voir pageResultats()), seulement montre/
+      // cache -- aucun risque si l'element n'existe pas encore (fonction
+      // appelee avant l'ouverture de l'accordeon CV, par exemple).
+      var blocSansAccrocheGenerique = document.getElementById('blocSansAccrocheGenerique');
+      if (blocSansAccrocheGenerique) { blocSansAccrocheGenerique.style.display = 'none'; }
+      // TACHE (retour utilisateur : "remonter l'option photo dans le
+      // panneau") : masque le bloc générique -- l'équivalent simplifié
+      // vit désormais dans la section "Contenu" ci-dessous.
+      var blocPhotoGenerique = document.getElementById('blocPhotoGenerique');
+      if (blocPhotoGenerique) { blocPhotoGenerique.style.display = 'none'; }
+      // TACHE (retour utilisateur : "je ne vois pas depuis le début
+      // l'option CV Intégral, il faut cliquer sur Essentiel/Détaillé
+      // pour qu'il apparaisse") : affiche ce même bouton (toujours
+      // présent dans le DOM, masqué par défaut -- voir pageResultats())
+      // dès que Projet XXL est réellement actif, réactif à chaque
+      // changement de thème -- plus besoin d'attendre un rendu complet
+      // de page pour qu'il apparaisse.
+      if (type === 'cv') {
+        var boutonFormatIntegralXXL = document.getElementById('boutonFormatIntegralXXL');
+        if (boutonFormatIntegralXXL) { boutonFormatIntegralXXL.style.display = ''; }
+      }
+      if (!etatCv.reglagesProjetXXL) {
+        etatCv.reglagesProjetXXL = { icones: false, coloration: 'aucune', blocMisEnAvant: null, blocMisEnAvantGauche: null, blocMisEnAvantDroite: null, lettreJointe: false, optionDebordement: null, strategieForcee: 'chronologique', police: null, texteBandeau: null, lectureGuideeVariante: null, texteColorePortee: null, accrocheItalique: null, bandeauDisponibilite: null, styleProfessionnel: null, stylePersonnel: null, ordreDatesPoste: null, separateurCouleurBase: null, fondColonnes: null, fondColonnesEffet: null, texteFondColonnes: null, separateurColonnes: null, regroupementActif: false, tailleBonus: false, capaciteExperiencesBonus: 0, missionsBonus: 0 };
+      }
+      var reglages = etatCv.reglagesProjetXXL;
+
+      var zoneReglagesXXL = document.getElementById('reglagesProjetXXL' + idSuffixe);
+      if (!zoneReglagesXXL) {
+        zoneReglagesXXL = document.createElement('div');
+        zoneReglagesXXL.id = 'reglagesProjetXXL' + idSuffixe;
+        zoneReglagesXXL.style.cssText = 'margin-top:0.9rem;padding-top:0.7rem;border-top:1px dashed #E5E7EB;';
+        zoneColonnes.insertAdjacentElement('afterend', zoneReglagesXXL);
+      }
+
+      function boutonReglageXXL(dataAttr, valeur, actif, libelle, desactive, titreDesactive) {
+        return '<button type="button" class="btn btn-sm ' + (actif ? 'btn-primary' : 'btn-outline-secondary') +
+          '" data-' + dataAttr + '="' + valeur + '"' + (desactive ? ' disabled title="' + (titreDesactive || 'Pas de contenu pour ce bloc') + '" style="margin:0 0.35rem 0.35rem 0;opacity:0.45;cursor:not-allowed;"' : ' style="margin:0 0.35rem 0.35rem 0;"') +
+          '>' + libelle + '</button>';
+      }
+
+      // TACHE (retour utilisateur : "mélange entre loisirs et centre
+      // d'intérêt... le bloc centre d'intérêt restera à gauche") : "Loisirs"
+      // n'est plus un choix de mise en avant -- Centre d'intérêt reste
+      // désormais toujours en colonne latérale, jamais déplaçable (voir
+      // composeurComposition.js). Remplacé par "Expérience personnelle"
+      // (experiencesPersonnelles, les engagements seuls -- devenu un vrai
+      // bloc distinct, voir composeurComposition.js/composeurRender.js,
+      // corrigeant une précédente confusion qui avait écarté ce bloc en le
+      // croyant inexistant) : c'est ce bloc, pas Centre d'intérêt, qui peut
+      // être mis en tête de la colonne principale "si quelque chose
+      // d'exceptionnel".
+      // TACHE (retour utilisateur : "on va travailler l'option 1
+      // colonne... je vais les appeler simplement des compétences,
+      // seulement et uniquement lorsque la personne a choisi 1
+      // colonne") : liste différente selon colonnesActives -- en 1
+      // colonne, "Compétences comportementales" et "Formation" seuls
+      // n'ont plus de sens (ils sont désormais fusionnés respectivement
+      // avec Compétences professionnelles et Langues dans un même bloc
+      // côte-à-côte, voir composeurComposition.js/composeurRender.js) --
+      // remplacés par les 2 blocs combinés correspondants.
+      // TACHE (retour utilisateur : "corrige expérience pro par
+      // expérience professionnelle") : accord au singulier, cohérent
+      // avec le titre du bloc lui-même sur le CV ("EXPÉRIENCE
+      // PROFESSIONNELLE", toujours au singulier).
+      var BLOCS_MISE_EN_AVANT = (colonnesActives === 1) ? [
+        { id: '', label: 'Aucun' },
+        { id: 'experiences', label: 'Expérience professionnelle' },
+        { id: 'experiencesPersonnelles', label: 'Expérience personnelle' },
+        { id: 'competencesCombinees', label: 'Compétences' },
+        { id: 'formationLangues', label: 'Formation' }
+      ] : [];
+
+      // TACHE (retour utilisateur : "je ne pense pas que remonter le
+      // bloc compétences comportementales soit une bonne idée... la
+      // chose la plus simple c'est d'avoir la possibilité de mettre en
+      // avant les blocs souhaités sur les DEUX colonnes") : un
+      // sélecteur PAR colonne en 2 colonnes -- ne réordonne plus jamais
+      // qu'à l'intérieur de sa propre colonne (voir composeurComposition.js).
+      // "Compétences personnelles" ici (panneau) UNIQUEMENT -- le CV
+      // continue d'afficher "Compétences comportementales" (public ne
+      // connaissant pas forcément ce terme, "personnelles" est plus
+      // parlant pour choisir dans le panneau).
+      // TACHE (retour utilisateur : "je ne veux pas l'option aucun, ça
+      // n'a pas de sens, aucun c'est déjà un choix -- d'office
+      // compétences professionnelles/expérience professionnelle seront
+      // déjà en avant, en bleu") : retiré des 2 listes -- "Compétences
+      // professionnelles" et "Expérience professionnelle" sont déjà en
+      // tête de leur colonne par défaut (ordre naturel), les proposer
+      // comme choix "actif" par défaut ne change donc rien au rendu,
+      // juste à l'affichage du bouton actif dans le panneau.
+      var BLOCS_MISE_EN_AVANT_GAUCHE = [
+        { id: 'competences', label: 'Compétences professionnelles' },
+        { id: 'competencesPersonnelles', label: 'Compétences personnelles' },
+        { id: 'loisirsEngagements', label: 'Loisirs' }
+      ];
+      var BLOCS_MISE_EN_AVANT_DROITE = [
+        { id: 'experiences', label: 'Expérience professionnelle' },
+        { id: 'formations', label: 'Formation' },
+        { id: 'experiencesPersonnelles', label: 'Expérience personnelle' }
+      ];
+
+      // TACHE (Projet XXL, correction : police jamais cablee jusqu'ici) :
+      // reutilise directement POLICES_PROJETXXL_DISPONIBLES (composeurTheme.js)
+      // -- jamais une nouvelle enumeration parallele, jamais confondue avec
+      // POLICES_APERCU_DISPONIBLES (habillage CSS de l'apercu, mecanisme
+      // totalement different, deja existant plus haut dans ce fichier).
+      var POLICES_XXL = (typeof POLICES_PROJETXXL_DISPONIBLES !== 'undefined') ? POLICES_PROJETXXL_DISPONIBLES : ['Arial'];
+
+      // TACHE (Projet XXL, "garder l'existant du Composeur tel quel") :
+      // reutilise directement les ids de STRATEGIES_CV (composeurStrategies.js)
+      // -- jamais une nouvelle enumeration parallele.
+      var STRATEGIES_XXL = [
+        { id: '', label: 'Auto (recommandé)' },
+        { id: 'chronologique', label: 'Chronologique' },
+        { id: 'mixte', label: 'Mixte' },
+        { id: 'parCompetences', label: 'Par compétences' }
+      ];
+
+      // TACHE (mecanisme A/B/C) : constat REEL, mesure par docx-preview
+      // (voir apercuDocxIntegre.js) -- jamais pour le format CV Intégral,
+      // qui autorise explicitement 2 pages (aucune reduction n'y a de
+      // sens, voir composeurComposition.js). "null" = mesure pas encore
+      // disponible (accordeon jamais ouvert pour ce CV) : dans ce cas, on
+      // n'affiche ni constat ni desactivation, par prudence (on ne sait
+      // pas encore).
+      var enDebordementReel = (etatCv.formatPage !== 'A4-integral') &&
+        (typeof _pagesEstimeesCVProjetXXL === 'number') && (_pagesEstimeesCVProjetXXL > 1);
+      var constatDebordementHTML = enDebordementReel
+        ? '<p class="small mb-2" style="color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:0.5rem 0.75rem;">' +
+          '&#9888;&#65039; Ce CV tient sur ' + _pagesEstimeesCVProjetXXL + ' pages (mesuré sur l’aperçu ci-contre) — ' +
+          'choisissez une option ci-dessous pour le ramener à une page.</p>'
+        : '';
+
+      // TACHE (Projet XXL, point signalé "panneau non organisé en 3
+      // sections repliables") : reorganisation en <details>/<summary>
+      // natifs (pas de JS supplementaire necessaire pour replier/deplier,
+      // comportement natif du navigateur) -- 3 sections validees dans le
+      // document de conception : Structure (colonnes, style titres, bloc
+      // mis en avant), Style visuel (coloration+nuance, police, icones),
+      // Contenu (strategie, lettre jointe). Le constat de debordement
+      // (mecanisme A/B/C) reste HORS de ces 3 sections, toujours visible
+      // sans avoir a deplier quoi que ce soit -- coherent avec "A et B sont
+      // deux vrais choix TOUJOURS visibles" (document de conception).
+      // Ouvertes par defaut (open) : le contenu de chaque section reste
+      // modeste, la personne peut les replier si elle le souhaite, mais
+      // rien n'est cache au premier affichage.
+      var idSlotStructure = 'slotStructureXXL' + idSuffixe;
+      var idSlotStyle = 'slotStyleXXL' + idSuffixe;
+      var idSlotContenu = 'slotContenuXXL' + idSuffixe;
+      zoneReglagesXXL.innerHTML =
+        // TACHE (retour utilisateur : "un gros dé comme une carte...
+        // je clique là-bas et à chaque fois je vais avoir des nouvelles
+        // propositions... je veux ne pas appuyer sur les petits boutons
+        // puisque difficilement visibles") : la carte-dé remplace le
+        // petit bouton texte -- gros pictogramme, forme de carte,
+        // impossible à manquer. Le crayon "Personnaliser" reste juste à
+        // côté, plus petit (action secondaire, moins fréquente).
+        '<div class="d-flex gap-3 mb-3 align-items-stretch">' +
+          '<button type="button" id="btnProposerModeleXXL" class="btn btn-primary" ' +
+            'style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.2rem;min-width:150px;padding:1rem 1.2rem;border-radius:14px;">' +
+            '<span style="font-size:2.6rem;line-height:1;">🎲</span>' +
+            '<span style="font-size:0.85rem;font-weight:700;">Propose-moi un modèle</span>' +
+          '</button>' +
+          // TACHE (retour utilisateur : "un bouton personnalisé avec le
+          // crayon... j'aimerais bien avoir cette vision moins
+          // effrayante, avec un peu de chance la personne peut avoir
+          // son CV assez rapidement") : masque tout le panneau de
+          // réglages par défaut (voir le conteneur "zonePanneauXXL"
+          // plus bas) -- seul ce bouton (et le dé) restent visibles tant
+          // que la personne n'a pas explicitement demandé à personnaliser.
+          '<button type="button" id="btnPersonnaliserXXL" class="btn btn-outline-secondary" ' +
+            'style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.2rem;min-width:110px;padding:1rem 0.8rem;border-radius:14px;">' +
+            '<span style="font-size:2rem;line-height:1;">✏️</span>' +
+            '<span style="font-size:0.8rem;font-weight:700;">Personnaliser</span>' +
+          '</button>' +
+          // TACHE (retour utilisateur : "un bouton ultime -- mise en
+          // forme sur une page A4 et lisible") : active d'un seul clic
+          // toutes les options deja existantes pour tenir sur 1 page A4
+          // avec un maximum d'informations et rester lisible -- jamais
+          // une nouvelle logique de mise en page, uniquement les leviers
+          // deja construits et testes : formatPage force sur "A4"
+          // (Detaille, jamais Essentiel qui retire du contenu, jamais A5
+          // ni Integral qui autorise 2 pages) + optionDebordement="AB"
+          // (les deux mecanismes de reduction combines : police legerement
+          // reduite ET missions secondaires condensees, voir
+          // composeurComposition.js -- jamais en dessous du plancher
+          // 12pt, R003). Reutilise pageResultats() (re-rendu complet),
+          // comme le fait deja construireBoutonsFormatPage() plus bas
+          // dans ce fichier -- un simple rafraichissement partiel ne
+          // suffirait pas a garder tous les boutons du panneau
+          // synchronises avec ce changement d'etat.
+          '<button type="button" id="btnMiseEnFormeUltimeXXL" class="btn btn-outline-secondary" ' +
+            'style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.2rem;min-width:130px;padding:1rem 0.8rem;border-radius:14px;" ' +
+            'title="Force le format A4 Détaillé et combine les deux mécanismes existants de réduction (police + missions condensées) pour tenir sur une page en gardant un maximum d’informations lisibles.">' +
+            '<span style="font-size:2rem;line-height:1;">📄</span>' +
+            '<span style="font-size:0.8rem;font-weight:700;">1 page, lisible</span>' +
+          '</button>' +
+        '</div>' +
+        '<div id="zonePanneauReglagesXXL" style="display:' + (etatCv.personnalisationOuverte ? 'block' : 'none') + ';">' +
+        '<div class="mb-2">' +
+        '<details class="mb-2" open><summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#1D4ED8;">Structure</summary>' +
+          '<div id="' + idSlotStructure + '" style="margin-top:0.5rem;">' +
+            // TACHE (retour utilisateur : "je veux que l'intitulé de
+            // chaque option soit clair, en gras") : <strong> autour du
+            // libellé uniquement pour les boutons de mise en avant --
+            // jamais pour les autres groupes de boutons de ce panneau
+            // (Coloration, Police...), non concernés par la demande.
+            (colonnesActives === 1
+              ? '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Bloc mis en avant :</span>' +
+                BLOCS_MISE_EN_AVANT.map(function (b) {
+                  return boutonReglageXXL('projetxxl-bloc', b.id, (reglages.blocMisEnAvant || '') === b.id, '<strong>' + b.label + '</strong>');
+                }).join('')
+              // TACHE (retour utilisateur : "je ne pense pas que remonter
+              // compétences comportementales soit une bonne idée...
+              // possibilité de mettre en avant les blocs sur les DEUX
+              // colonnes") : 2 sélecteurs indépendants, chacun limité aux
+              // blocs de sa propre colonne (voir composeurComposition.js).
+              // TACHE (retour utilisateur : "options de la colonne gauche
+              // à gauche, options de la colonne droite à droite, sur la
+              // même ligne -- pour montrer qu'il s'agit bien de 2
+              // colonnes différentes, pas une répétition") : disposition
+              // flex côte-à-côte, UNIQUEMENT en 2 colonnes -- en 1
+              // colonne (branche ci-dessus), un seul sélecteur, jamais
+              // concerné par cette demande.
+              : '<div style="display:flex;gap:1rem;align-items:flex-start;">' +
+                  '<div style="flex:1;text-align:left;">' +
+                    '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Mise en avant — colonne de gauche :</span>' +
+                    BLOCS_MISE_EN_AVANT_GAUCHE.map(function (b) {
+                      return boutonReglageXXL('projetxxl-bloc-gauche', b.id, (reglages.blocMisEnAvantGauche || 'competences') === b.id, '<strong>' + b.label + '</strong>');
+                    }).join('') +
+                  '</div>' +
+                  '<div style="flex:1;text-align:right;">' +
+                    '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Mise en avant — colonne de droite :</span>' +
+                    // TACHE (retour utilisateur : "si la personne n'a pas
+                    // de formation et pas d'expérience personnelle
+                    // notifiée, ces options vont être désactivées, en
+                    // gris, curseur interdit") : vérifie le contenu RÉEL
+                    // du dossier -- dossier.formations et dossier.
+                    // experiencesPerso/engagements, mêmes champs que ceux
+                    // lus par le Composeur (composeurComposition.js).
+                    // "Expérience professionnelle" reste toujours
+                    // cliquable, jamais concernée par cette demande.
+                    (function () {
+                      var aFormationReelle = !!(dossier.formations && dossier.formations.length);
+                      var aExperiencePersonnelleReelle = !!((dossier.experiencesPerso && dossier.experiencesPerso.length) ||
+                        (dossier.engagements && dossier.engagements.length));
+                      return BLOCS_MISE_EN_AVANT_DROITE.map(function (b) {
+                        var desactive = false;
+                        var titreDesactive;
+                        if (b.id === 'formations' && !aFormationReelle) {
+                          desactive = true; titreDesactive = 'Aucune formation renseignée pour cette personne';
+                        } else if (b.id === 'experiencesPersonnelles' && !aExperiencePersonnelleReelle) {
+                          desactive = true; titreDesactive = 'Aucune expérience personnelle renseignée pour cette personne';
+                        }
+                        return boutonReglageXXL('projetxxl-bloc-droite', b.id, (reglages.blocMisEnAvantDroite || 'experiences') === b.id, '<strong>' + b.label + '</strong>', desactive, titreDesactive);
+                      }).join('');
+                    })() +
+                  '</div>' +
+                '</div>'
+            ) +
+            // TACHE (retour utilisateur : "modèle Ruban -- ligne pour
+            // séparer les colonnes, ligne horizontale sous le titre du
+            // cv, souligner chaque bloc de la même couleur") : réutilise
+            // par défaut la couleur/nuance déjà choisie pour le thème
+            // (comme "Fond des colonnes" et "Coloration") -- MAIS peut
+            // désormais être personnalisée indépendamment (retour
+            // utilisateur : "est-ce que le séparateur peut avoir une
+            // autre couleur ?... je suis plutôt favorable, on limite ça
+            // intelligemment"). Choix volontairement simplifié : les 10
+            // couleurs de base uniquement (couleursDispoBase, déjà
+            // utilisée par le sélecteur de couleur principal -- jamais
+            // une liste dupliquée), toujours à la nuance 6/10 par défaut
+            // -- pas de sous-sélecteur de nuance ici, pour rester simple
+            // sur un réglage secondaire (une ligne fine n'a de toute
+            // façon pas besoin d'un plancher de lisibilité comme du
+            // texte).
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Séparateur (ligne entre les colonnes) :</span>' +
+            boutonReglageXXL('projetxxl-separateur', '1', reglages.separateurColonnes === true, 'Oui') +
+            boutonReglageXXL('projetxxl-separateur', '0', reglages.separateurColonnes !== true, 'Non') +
+            (reglages.separateurColonnes === true
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Couleur du séparateur :</span>' +
+                boutonReglageXXL('projetxxl-separateur-couleur', '', !reglages.separateurCouleurBase, 'Accent du thème') +
+                // TACHE (retour utilisateur : "je veux garder le texte
+                // mais je veux que la pastille, quand je clique, montre
+                // la couleur du séparateur -- violet c'est juste une
+                // pastille non colorée, je clique et elle devient
+                // violette") : une petite pastille avant le texte de
+                // chaque bouton -- grise/neutre tant que ce bouton n'est
+                // pas la sélection active, colorée avec le vrai hex de
+                // cette couleur (couleursDispoBase) UNE FOIS sélectionnée
+                // -- jamais toutes les pastilles colorées en même temps
+                // (ce n'est pas un sélecteur classique qui montre toutes
+                // les couleurs d'un coup, seulement un retour visuel sur
+                // le choix actif).
+                Object.keys(couleursDispoBase).map(function (idBase) {
+                  var estActif = reglages.separateurCouleurBase === idBase;
+                  var couleurPastille = estActif ? couleursDispoBase[idBase].hex : 'D1D5DB';
+                  var pastille = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#' +
+                    couleurPastille + ';margin-right:5px;vertical-align:middle;"></span>';
+                  return boutonReglageXXL('projetxxl-separateur-couleur', idBase, estActif, pastille + couleursDispoBase[idBase].nom);
+                }).join('')
+              : '') +
+            // TACHE : "style titres" n'est jamais un choix independant
+            // (fusionne avec la coloration, voir composeurAppliquerReglagesProjetXXL)
+            // -- simple note explicative ici, jamais un controle en double.
+            '<p class="small text-muted mb-0 mt-2">Style des titres : dérivé automatiquement du mode de coloration choisi ci-dessous (Style visuel).</p>' +
+          '</div>' +
+        '</details>' +
+        '</div>' +
+
+        '<div class="d-flex gap-3 flex-wrap" style="align-items:flex-start;">' +
+        '<div style="flex:1 1 260px;min-width:240px;">' +
+        '<details class="mb-2" open><summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#B45309;">Style visuel</summary>' +
+          '<div id="' + idSlotStyle + '" style="margin-top:0.5rem;">' +
+            '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Coloration :</span>' +
+            // TACHE (retour utilisateur : "on supprime complètement fond
+            // coloré, je l'intègre dans lecture guidée") : "Fond coloré"
+            // n'est plus un bouton indépendant -- absorbé dans "Lecture
+            // guidée" (variante "par rectangle", voir plus bas).
+            boutonReglageXXL('projetxxl-coloration', 'aucune', reglages.coloration === 'aucune', 'Aucune') +
+            boutonReglageXXL('projetxxl-coloration', 'texteColore', reglages.coloration === 'texteColore', 'Texte coloré') +
+            boutonReglageXXL('projetxxl-coloration', 'lectureGuidee', reglages.coloration === 'lectureGuidee', 'Lecture guidée') +
+
+            // TACHE (retour utilisateur : "texte coloré -- colorer tout
+            // le contenu des blocs [...], avec un choix gauche/droite/
+            // les deux") : portée uniquement affichée en 2 colonnes (en
+            // 1 colonne, pas de gauche/droite -- tout le contenu est
+            // coloré directement, voir composeurRender.js).
+            (reglages.coloration === 'texteColore' && colonnesActives !== 1
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Portée du texte coloré :</span>' +
+                boutonReglageXXL('projetxxl-textecolore-portee', 'gauche', reglages.texteColorePortee === 'gauche', 'Gauche') +
+                boutonReglageXXL('projetxxl-textecolore-portee', 'droite', reglages.texteColorePortee === 'droite', 'Droite') +
+                boutonReglageXXL('projetxxl-textecolore-portee', 'lesDeux', (reglages.texteColorePortee || 'lesDeux') === 'lesDeux', 'Les deux')
+              : '') +
+
+            // TACHE (retour utilisateur : "lecture guidée par titre ou
+            // lecture guidée par les rectangles colorés") : 2 variantes
+            // internes -- "par titre" reprend l'ancien "texte coloré"
+            // (titre souligné coloré), "par rectangle" reprend l'ancien
+            // "fond coloré" (rectangle plein derrière le titre). Les 2
+            // colorent le nom/poste visé de l'en-tête (propriété
+            // historique de "lecture guidée", inchangée).
+            (reglages.coloration === 'lectureGuidee'
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Variante :</span>' +
+                boutonReglageXXL('projetxxl-lectureguidee-variante', 'titre', (reglages.lectureGuideeVariante || 'titre') === 'titre', 'Par titre') +
+                boutonReglageXXL('projetxxl-lectureguidee-variante', 'rectangle', reglages.lectureGuideeVariante === 'rectangle', 'Par rectangle')
+              : '') +
+            // TACHE (retour utilisateur : "à l'intérieur [du rectangle],
+            // je vais devoir choisir la couleur du texte, blanc ou
+            // noir, tel que fond coloré le fait aujourd'hui") : reprise
+            // à l'identique de l'ancien réglage "Texte du bandeau",
+            // affiché désormais pour cette variante précise.
+            (reglages.coloration === 'lectureGuidee' && reglages.lectureGuideeVariante === 'rectangle'
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Texte du rectangle :</span>' +
+                boutonReglageXXL('projetxxl-textebandeau', 'blanc', (reglages.texteBandeau || 'blanc') === 'blanc', 'Blanc') +
+                boutonReglageXXL('projetxxl-textebandeau', 'noir', reglages.texteBandeau === 'noir', 'Noir')
+              : '') +
+
+            // TACHE (retour utilisateur : "possibilité de mettre un fond
+            // comme Aquarelle sur la colonne de gauche... 3 possibilités,
+            // le fond peut aussi être à droite ou les deux") : DISTINCT
+            // de "Coloration" ci-dessus -- réutilise la même couleur/
+            // nuance déjà choisie pour le thème (pas de second sélecteur
+            // de couleur). "Effet du fond" et son choix blanc/noir ne
+            // s'affichent que si un fond est réellement actif -- sinon
+            // trompeur (aucun effet visuel possible sans fond).
+            // TACHE (retour utilisateur : "Fond des colonnes"/"Séparateur"
+            // en 1 colonne -- réinterpréter, pas désactiver") : en 1
+            // colonne, il n'y a plus de gauche/droite -- un simple Oui/
+            // Non ("lesDeux"/"aucun" en interne, réinterprété en fond de
+            // PAGE ENTIÈRE côté rendu, voir composeurRender.js). En 2
+            // colonnes, les 4 choix d'origine restent inchangés.
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">' + (colonnesActives === 1 ? 'Fond de page :' : 'Fond des colonnes :') + '</span>' +
+            (colonnesActives === 1
+              ? boutonReglageXXL('projetxxl-fondcolonnes', 'aucun', (reglages.fondColonnes || 'aucun') === 'aucun', 'Non') +
+                boutonReglageXXL('projetxxl-fondcolonnes', 'lesDeux', reglages.fondColonnes === 'lesDeux', 'Oui')
+              : boutonReglageXXL('projetxxl-fondcolonnes', 'aucun', (reglages.fondColonnes || 'aucun') === 'aucun', 'Aucun') +
+                boutonReglageXXL('projetxxl-fondcolonnes', 'gauche', reglages.fondColonnes === 'gauche', 'Gauche') +
+                boutonReglageXXL('projetxxl-fondcolonnes', 'droite', reglages.fondColonnes === 'droite', 'Droite') +
+                boutonReglageXXL('projetxxl-fondcolonnes', 'lesDeux', reglages.fondColonnes === 'lesDeux', 'Les deux')) +
+            (reglages.fondColonnes && reglages.fondColonnes !== 'aucun'
+              // TACHE (retour utilisateur : "le seul problème, pour
+              // accéder au texte coloré de fond de colonne, il faut
+              // choisir une colonne... texte coloré est plus simple") :
+              // "Texte du contenu" retiré -- doublon exact de
+              // "Coloration -> Texte coloré", qui marche seul. Ne reste
+              // que "Fond seul" et "Titres et identité".
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Effet du fond :</span>' +
+                boutonReglageXXL('projetxxl-fondcolonneseffet', 'fondSeul', (reglages.fondColonnesEffet || 'fondSeul') === 'fondSeul', 'Fond seul') +
+                boutonReglageXXL('projetxxl-fondcolonneseffet', 'titres', reglages.fondColonnesEffet === 'titres', 'Titres et identité') +
+                (reglages.fondColonnesEffet === 'titres'
+                  ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Texte (fond des colonnes) :</span>' +
+                    boutonReglageXXL('projetxxl-textefondcolonnes', 'blanc', (reglages.texteFondColonnes || 'blanc') === 'blanc', 'Blanc') +
+                    boutonReglageXXL('projetxxl-textefondcolonnes', 'noir', reglages.texteFondColonnes === 'noir', 'Noir')
+                  : '')
+              : '') +
+
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Police :</span>' +
+            POLICES_XXL.map(function (p) {
+              return boutonReglageXXL('projetxxl-police', p, (reglages.police || POLICES_XXL[0]) === p, p);
+            }).join('') +
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Icônes (téléphone, email...) :</span>' +
+            boutonReglageXXL('projetxxl-icones', '1', reglages.icones === true, 'Oui') +
+            boutonReglageXXL('projetxxl-icones', '0', reglages.icones !== true, 'Non') +
+          '</div>' +
+        '</details>' +
+        '</div>' +
+
+        '<div style="flex:1 1 260px;min-width:240px;">' +
+        '<details class="mb-2" open><summary style="cursor:pointer;font-weight:700;font-size:1.15rem;color:#047857;">Contenu</summary>' +
+          '<div id="' + idSlotContenu + '" style="margin-top:0.5rem;">' +
+            '<span class="d-block mb-1" style="font-size:1rem;font-weight:600;color:#374151;">Stratégie du contenu :</span>' +
+            STRATEGIES_XXL.map(function (s) {
+              return boutonReglageXXL('projetxxl-strategie', s.id, (reglages.strategieForcee || '') === s.id, s.label);
+            }).join('') +
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Une lettre de motivation accompagne ce CV ?</span>' +
+            boutonReglageXXL('projetxxl-lettre', '1', reglages.lettreJointe === true, 'Oui') +
+            boutonReglageXXL('projetxxl-lettre', '0', reglages.lettreJointe !== true, 'Non') +
+            '<p class="small text-muted mb-0 mt-1">Si oui, la phrase d’accroche est retirée automatiquement.</p>' +
+
+            // TACHE (retour utilisateur : "je veux que le bouton sans
+            // phrase d'accroche soit dans le panneau modulable de Projet
+            // XXL") : pilote le meme etat que le toggle generique
+            // (etatApercuInline.cv.sansAccroche, partage avec les 16
+            // modeles classiques et les 3 autres themes du Composeur --
+            // jamais un etat parallele) -- desormais visible ICI plutot
+            // que dans le bloc generique separe (masque pour ce theme,
+            // voir plus haut dans ce fichier). Choix independant de "lettre
+            // jointe" ci-dessus, mais les deux se combinent (OR, voir
+            // composeurMoteur.js : sansAccroche || theme.lettreJointe) --
+            // la note ci-dessous le precise pour eviter toute confusion.
+            '<span class="d-block mb-1 mt-3" style="font-size:1rem;font-weight:600;color:#374151;">Phrase d’accroche dans l’en-tête :</span>' +
+            boutonReglageXXL('projetxxl-sansaccroche', '0', !etatCv.sansAccroche, 'Afficher') +
+            boutonReglageXXL('projetxxl-sansaccroche', '1', etatCv.sansAccroche === true, 'Masquer') +
+            '<p class="small text-muted mb-0 mt-1">Se cumule avec le réglage "lettre jointe" ci-dessus : l’accroche est masquée dès que l’un des deux le demande.</p>' +
+            // TACHE (bouton "Mettre en avant + regrouper", point 14
+            // cv.md) : n'affiche ce reglage que si l'IA a reellement
+            // propose quelque chose d'exploitable (experience prioritaire
+            // ET/OU au moins un groupe) -- jamais un bouton sans effet
+            // visible. Meme mecanique Oui/Non que les reglages voisins
+            // (boutonReglageXXL), etat dans etatCv.reglagesProjetXXL
+            // (jamais un etat parallele), lu ensuite via
+            // composeurResoudreThemeGeneration -> theme.regroupementActif
+            // (composeurMoteur.js).
+            (function () {
+              var recoReg = (dossier.ia && dossier.ia.cv && dossier.ia.cv.recommandations && dossier.ia.cv.recommandations.regroupementExperiences) || {};
+              var prio = recoReg.experiencePrioritaire || {};
+              var aUnePrioritaire = (prio.type === 'professionnelle' && prio.poste) || (prio.type === 'personnelle' && prio.intitule);
+              var aDesGroupes = (recoReg.groupes || []).length > 0;
+              if (!aUnePrioritaire && !aDesGroupes) { return ''; }
+              return '<span class="d-block mb-1 mt-3" style="font-size:1rem;font-weight:600;color:#374151;">Mettre en avant l’expérience la plus pertinente et regrouper les autres :</span>' +
+                boutonReglageXXL('projetxxl-regroupement', '1', reglages.regroupementActif === true, 'Oui') +
+                boutonReglageXXL('projetxxl-regroupement', '0', reglages.regroupementActif !== true, 'Non') +
+                '<p class="small text-muted mb-0 mt-1">Propose une expérience en avant (5 missions) et condense les autres expériences par domaine de métier.</p>';
+            })() +
+            // TACHE (retour utilisateur : "je veux avoir la possibilité
+            // de choisir si la phrase d'accroche est en italique ou
+            // pas") : n'a de sens que si l'accroche est effectivement
+            // affichée -- masqué si "Masquer" est choisi ci-dessus ou si
+            // une lettre est jointe, pour éviter un réglage sans objet
+            // visible.
+            (!etatCv.sansAccroche && !reglages.lettreJointe
+              ? '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Style de la phrase d’accroche :</span>' +
+                boutonReglageXXL('projetxxl-accrocheitalique', '1', reglages.accrocheItalique !== false, 'Italique') +
+                boutonReglageXXL('projetxxl-accrocheitalique', '0', reglages.accrocheItalique === false, 'Normal')
+              : '') +
+
+            // TACHE (retour utilisateur : "l'option photo est quelque
+            // part en bas, le texte n'est plus à jour... remonter cette
+            // option dans le panneau, oui/non, si oui la fenêtre s'ouvre
+            // pour mettre la photo") : version simplifiée par rapport au
+            // bloc générique (masqué pour ce thème, voir plus haut) --
+            // un seul Oui/Non, sans case à cocher ni liens séparés.
+            // "Oui" ouvre directement la fenêtre de sélection de fichier
+            // du navigateur (inputPhotoXXL.click(), voir pageResultats()
+            // pour le champ cache et son écouteur) -- que la personne
+            // ajoute une première photo ou en choisisse une nouvelle,
+            // toujours la même action simple. "Non" désactive l'inclusion
+            // sans jamais supprimer le fichier déjà envoyé.
+            '<span class="d-block mb-1 mt-3" style="font-size:1rem;font-weight:600;color:#374151;">Ajouter une photo :</span>' +
+            boutonReglageXXL('projetxxl-photo', '1', !!(dossier.photo && dossier.photo.inclure), 'Oui') +
+            boutonReglageXXL('projetxxl-photo', '0', !(dossier.photo && dossier.photo.inclure), 'Non') +
+
+            // TACHE (retour utilisateur : "bandeau de disponibilité --
+            // permis, langues, téléphone bien en évidence... je valide à
+            // une seule condition : si la réponse est non pour mobilité,
+            // pas d'option bandeau") : désactivé (grisé, non cliquable)
+            // si dossier.permis.possede n'est pas explicitement true --
+            // le bandeau perd son utilité première sans permis, pour ce
+            // public (saisonnier/hôtellerie-restauration/logistique).
+            '<span class="d-block mb-1 mt-3" style="font-size:1rem;font-weight:600;color:#374151;">Bandeau de disponibilité :</span>' +
+            (function () {
+              var aLePermis = !!(dossier.permis && dossier.permis.possede === true);
+              var titreDesactive = 'Nécessite d’avoir renseigné le permis de conduire';
+              return boutonReglageXXL('projetxxl-bandeaudispo', '1', reglages.bandeauDisponibilite === true, 'Oui', !aLePermis, titreDesactive) +
+                boutonReglageXXL('projetxxl-bandeaudispo', '0', reglages.bandeauDisponibilite !== true, 'Non', !aLePermis, titreDesactive);
+            })() +
+
+            // TACHE (retour utilisateur : "Condensé/Épuré -- pas pour
+            // réduire le nombre de missions [déjà géré par le mécanisme
+            // A/B], c'est le modèle qu'on a déjà avec les points, la
+            // continuité d'une mission sur la ligne de la précédente...
+            // Professionnel et Personnel indépendants, chacun choisit
+            // Épuré ou Condensé") : un seul réglage par portée (jamais 2
+            // cases à exclure entre elles) -- "Épuré" = mise en page
+            // normale actuelle (confirmé par comparaison de 2 CV réels
+            // fournis par l'utilisateur), "Condensé" = missions/entrées
+            // fusionnées en un seul paragraphe continu, séparées par « · ».
+            '<span class="d-block mb-1 mt-3" style="font-size:1.05rem;font-weight:700;color:#374151;">Mise en forme du texte :</span>' +
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Expérience professionnelle :</span>' +
+            boutonReglageXXL('projetxxl-stylepro', 'epure', (reglages.styleProfessionnel || 'epure') === 'epure', 'Épuré') +
+            boutonReglageXXL('projetxxl-stylepro', 'condense', reglages.styleProfessionnel === 'condense', 'Condensé') +
+            '<span class="d-block mb-1 mt-2" style="font-size:1rem;font-weight:600;color:#374151;">Expérience personnelle :</span>' +
+            boutonReglageXXL('projetxxl-stylepersonnel', 'epure', (reglages.stylePersonnel || 'epure') === 'epure', 'Épuré') +
+            boutonReglageXXL('projetxxl-stylepersonnel', 'condense', reglages.stylePersonnel === 'condense', 'Condensé') +
+
+            // TACHE (retour utilisateur : "récupérer de Trajectoire
+            // l'idée d'avoir les dates avant le poste... l'entreprise
+            // n'est jamais la chose centrale, toujours une annexe") :
+            // 'posteAvant' (défaut) = Poste — Entreprise, puis la date ;
+            // 'dateAvant' = la date, puis Poste — Entreprise. Dans les
+            // deux cas, l'entreprise reste en couleur secondaire, jamais
+            // en gras avec le poste.
+            '<span class="d-block mb-1 mt-3" style="font-size:1rem;font-weight:600;color:#374151;">Ordre dans la ligne d’expérience :</span>' +
+            boutonReglageXXL('projetxxl-ordredatesposte', 'posteAvant', (reglages.ordreDatesPoste || 'posteAvant') === 'posteAvant', 'Poste d’abord') +
+            boutonReglageXXL('projetxxl-ordredatesposte', 'dateAvant', reglages.ordreDatesPoste === 'dateAvant', 'Date d’abord') +
+          '</div>' +
+        '</details>' +
+        '</div>' +
+        '</div>' +
+
+        (etatCv.formatPage !== 'A4-integral'
+          ? '<span class="d-block mb-1 mt-1" style="font-size:1rem;font-weight:600;color:#374151;">Si le contenu dépasse une page :</span>' +
+            constatDebordementHTML +
+            boutonReglageXXL('projetxxl-debordement', '', !reglages.optionDebordement, 'Ne rien faire', enDebordementReel) +
+            boutonReglageXXL('projetxxl-debordement', 'A', reglages.optionDebordement === 'A', 'Réduire la police') +
+            // TACHE (retour utilisateur : "débordement -- les 2 options
+            // doivent s'appliquer normalement à l'A5") : l'A5 n'a pas de
+            // missions (une ligne par expérience, jamais de détail) --
+            // le libellé de l'option B s'adapte donc selon le format,
+            // sans changer son identifiant ('B', toujours le même
+            // réglage côté données).
+            boutonReglageXXL('projetxxl-debordement', 'B', reglages.optionDebordement === 'B',
+              (etatCv.formatPage === 'A5-portrait' || etatCv.formatPage === 'A5-paysage') ? 'Retirer du contenu' : 'Retirer des missions') +
+            // TACHE (retour utilisateur : "si le contenu dépasse une
+            // page, je veux aussi pouvoir faire A+B") : les deux
+            // réductions cumulées -- police réduite ET missions/contenu
+            // retirés en même temps, pour les cas de débordement les
+            // plus importants.
+            boutonReglageXXL('projetxxl-debordement', 'AB', reglages.optionDebordement === 'AB', 'Les deux (A+B)')
+          : '<p class="small text-muted mb-0 mt-1">Format « CV Intégral » : 2 pages autorisées, aucune réduction ne s’applique.</p>') +
+        '</div>';
+
+      // TACHE (Projet XXL, reorganisation du panneau) : zoneColonnes et
+      // zoneCouleurs sont des elements PARTAGES avec les 3 autres themes
+      // du Composeur (construits plus haut, meme code, jamais modifie pour
+      // eux) -- deplaces ICI (appendChild deplace un noeud existant, ne le
+      // recree jamais : listeners deja attaches plus haut restent intacts)
+      // dans les sections Structure/Style visuel UNIQUEMENT parce qu'on
+      // est dans la branche Projet XXL. Pour Sobre/Institutionnel/Moderne,
+      // ce bloc n'est jamais execute (if (themeBaseActif === 'projetxxl')
+      // plus haut) -- ils gardent zoneColonnes/zoneCouleurs a leur
+      // emplacement plat d'origine, comportement 100% inchange.
+      var slotStructureEl = document.getElementById(idSlotStructure);
+      if (slotStructureEl) { slotStructureEl.insertAdjacentElement('afterbegin', zoneColonnes); }
+      var slotStyleEl = document.getElementById(idSlotStyle);
+      if (slotStyleEl) { slotStyleEl.insertAdjacentElement('afterbegin', zoneCouleurs); }
+
+      function rafraichirEtRegenererXXL() {
+        rechargerApercuInline('cv', etatApercuInline.cv.formatPage === 'A5' ? (etatApercuInline.cv.modeleA5 || 'portrait') : modeleActif);
+        construirePaletteCouleurs(type, idSuffixe, modeleActif);
+      }
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-police]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.police = this.dataset.projetxxlPolice || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-icones]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.icones = (this.dataset.projetxxlIcones === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-textecolore-portee]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.texteColorePortee = this.dataset.projetxxlTextecolorePortee || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-lectureguidee-variante]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.lectureGuideeVariante = this.dataset.projetxxlLectureguideeVariante || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-textebandeau]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.texteBandeau = this.dataset.projetxxlTextebandeau || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-coloration]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          reglages.coloration = this.dataset.projetxxlColoration;
+          // TACHE (retour utilisateur : "texte coloré ne colore plus les
+          // titres du tout, seule lecture guidée le fait encore") :
+          // l'exclusion mutuelle avec "Fond des colonnes -> Titres" ne
+          // concerne plus que "lectureGuidee" -- "texte coloré" peut
+          // désormais coexister sans conflit avec ce réglage.
+          if (reglages.coloration === 'lectureGuidee' && reglages.fondColonnesEffet === 'titres') { reglages.fondColonnesEffet = 'fondSeul'; }
+          rafraichirEtRegenererXXL();
+        });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-fondcolonnes]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.fondColonnes = this.dataset.projetxxlFondcolonnes; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-fondcolonneseffet]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          reglages.fondColonnesEffet = this.dataset.projetxxlFondcolonneseffet;
+          // TACHE : même exclusion affinée, dans l'autre sens -- choisir
+          // "Titres et identité" ici reprend la main sur les titres,
+          // "Coloration" ne repasse sur "Aucune" que si elle valait
+          // "Lecture guidée" (seul mode qui touche encore les titres --
+          // "Texte coloré" n'est plus concerné, aucun conflit avec lui).
+          if (reglages.fondColonnesEffet === 'titres' && reglages.coloration === 'lectureGuidee') { reglages.coloration = 'aucune'; }
+          rafraichirEtRegenererXXL();
+        });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-textefondcolonnes]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.texteFondColonnes = this.dataset.projetxxlTextefondcolonnes || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-bloc]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.blocMisEnAvant = this.dataset.projetxxlBloc || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-bloc-gauche]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.blocMisEnAvantGauche = this.dataset.projetxxlBlocGauche || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-bloc-droite]').forEach(function (btn) {
+        if (btn.disabled) { return; }
+        btn.addEventListener('click', function () { reglages.blocMisEnAvantDroite = this.dataset.projetxxlBlocDroite || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-separateur]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.separateurColonnes = (this.dataset.projetxxlSeparateur === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-separateur-couleur]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.separateurCouleurBase = this.dataset.projetxxlSeparateurCouleur || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-strategie]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.strategieForcee = this.dataset.projetxxlStrategie || null; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-lettre]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.lettreJointe = (this.dataset.projetxxlLettre === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-sansaccroche]').forEach(function (btn) {
+        btn.addEventListener('click', function () { etatCv.sansAccroche = (this.dataset.projetxxlSansaccroche === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-regroupement]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.regroupementActif = (this.dataset.projetxxlRegroupement === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-accrocheitalique]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.accrocheItalique = (this.dataset.projetxxlAccrocheitalique !== '0'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-photo]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (this.dataset.projetxxlPhoto === '1') {
+            // TACHE (retour utilisateur : "si oui, la fenêtre s'ouvre
+            // pour mettre la photo") : ouvre directement le sélecteur de
+            // fichier natif du navigateur -- que ce soit un premier ajout
+            // ou un remplacement, toujours la même action. La photo
+            // n'est réellement incluse qu'une fois le fichier choisi
+            // (voir l'écouteur "change" de inputPhotoXXL, pageResultats()) --
+            // si la personne annule la fenêtre sans rien choisir, rien ne
+            // change.
+            var inputPhotoDepuisPanneau = document.getElementById('inputPhotoXXL');
+            if (inputPhotoDepuisPanneau) { inputPhotoDepuisPanneau.click(); }
+          } else {
+            // TACHE : "Non" désactive l'inclusion sans jamais supprimer
+            // le fichier déjà envoyé -- "reste comme ça" si aucune photo
+            // n'existait déjà (rien à désactiver).
+            dossier.photo = dossier.photo || { url: null, inclure: false };
+            dossier.photo.inclure = false;
+            rafraichirEtRegenererXXL();
+          }
+        });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-bandeaudispo]').forEach(function (btn) {
+        if (btn.disabled) { return; }
+        btn.addEventListener('click', function () { reglages.bandeauDisponibilite = (this.dataset.projetxxlBandeaudispo === '1'); rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-stylepro]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.styleProfessionnel = this.dataset.projetxxlStylepro; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-stylepersonnel]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.stylePersonnel = this.dataset.projetxxlStylepersonnel; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-ordredatesposte]').forEach(function (btn) {
+        btn.addEventListener('click', function () { reglages.ordreDatesPoste = this.dataset.projetxxlOrdredatesposte; rafraichirEtRegenererXXL(); });
+      });
+      zoneReglagesXXL.querySelectorAll('[data-projetxxl-debordement]').forEach(function (btn) {
+        if (btn.disabled) { return; }
+        btn.addEventListener('click', function () { reglages.optionDebordement = this.dataset.projetxxlDebordement || null; rafraichirEtRegenererXXL(); });
+      });
+      // TACHE (retour utilisateur : "propose-moi un modèle -- pioche une
+      // combinaison au hasard parmi toutes les options qu'on a") : ne
+      // touche jamais au format de page (etatCv.formatPage, un choix
+      // délibéré, pas une affaire de goût) ni aux réglages qui reflètent
+      // un fait réel (photo, lettre jointe, débordement, stratégie
+      // forcée) -- uniquement l'esthétique et la présentation du
+      // contenu, exactement ce qui reste sous le contrôle de la
+      // personne dans "Structure"/"Mise en forme du texte"/"Style
+      // visuel"/"Contenu". bandeauDisponibilite respecte la même règle
+      // que son propre bouton (jamais activé sans permis réel).
+      var btnPersonnaliserXXL = document.getElementById('btnPersonnaliserXXL');
+      if (btnPersonnaliserXXL) {
+        btnPersonnaliserXXL.addEventListener('click', function () {
+          // TACHE (retour utilisateur : "un bouton personnalisé avec le
+          // crayon... cette vision moins effrayante") : bascule simple
+          // d'affichage -- le panneau est déjà entièrement construit
+          // (avec les valeurs actuelles de reglages, y compris une
+          // éventuelle proposition tirée au hasard juste avant), rien à
+          // reconstruire ici, juste le révéler.
+          etatCv.personnalisationOuverte = !etatCv.personnalisationOuverte;
+          var zonePanneauReglagesXXL = document.getElementById('zonePanneauReglagesXXL');
+          if (zonePanneauReglagesXXL) { zonePanneauReglagesXXL.style.display = etatCv.personnalisationOuverte ? 'block' : 'none'; }
+        });
+      }
+      var btnMiseEnFormeUltimeXXL = document.getElementById('btnMiseEnFormeUltimeXXL');
+      if (btnMiseEnFormeUltimeXXL) {
+        btnMiseEnFormeUltimeXXL.addEventListener('click', function () {
+          // TACHE (bouton ultime "1 page, lisible", version escalade) :
+          // n'active PAS tout d'un bloc -- essaie les leviers dans
+          // l'ordre du moins au plus agressif, en MESURANT reellement le
+          // nombre de pages generees (docx-preview, meme mecanisme que
+          // miseAJourConstatDebordementProjetXXL) entre chaque etape, et
+          // s'arrete des que ca tient sur 1 page. Un CV qui tenait deja
+          // avec seulement l'etape 1 ne doit jamais se retrouver avec
+          // des missions inutilement condensees ou regroupees.
+          activerMiseEnFormeUltimeXXL(this);
+        });
+      }
+      // TACHE (retour utilisateur : "au retour du 1er tour IA... je suis
+      // directement sur la page propose-moi un modèle. Et le modèle est
+      // déjà aléatoire") : extraite en fonction nommée, réutilisée à la
+      // fois par le clic sur la carte-dé ET par le tirage automatique au
+      // tout premier passage sur cette page (voir plus bas,
+      // etatCv.aDejaTireModeleAleatoire) -- jamais deux implémentations
+      // du même tirage.
+      function tirerModeleAleatoireXXL() {
+        function auHasard(liste) { return liste[Math.floor(Math.random() * liste.length)]; }
+        var couleursId = Object.keys(couleursDispoBase);
+        var aLePermisXXL = !!(dossier.permis && dossier.permis.possede === true);
+        var colonnesTirees = auHasard([1, 2]);
+        var fondColonnesOptions = colonnesTirees === 2 ? ['aucun', 'gauche', 'droite', 'lesDeux'] : ['aucun', 'gauche'];
+        var fondColonnesTire = auHasard(fondColonnesOptions);
+        // TACHE (retour utilisateur : "il faut s'assurer que les
+        // couleurs choisies entre texte et bandeaux ne sont pas les
+        // mêmes... sinon ils s'annulent et ça fait des pages
+        // blanches... ceux qui font ça au hasard ne comprendront pas
+        // ce qui se passe") : bug réel confirmé en vérifiant le code --
+        // la protection anti-collision existante (couleurTitrePourColonne)
+        // ne couvre que "Fond des colonnes -> effet Titres", jamais
+        // "effet Fond seul" (toute la colonne colorée), qui peut donc
+        // entrer en collision avec "Lecture guidée" (titres colorés)
+        // ou "Texte coloré" (contenu coloré) de la même teinte,
+        // rendant le texte invisible. Règle simple et sûre pour ce
+        // tirage : dès qu'un fond de colonne est actif, Coloration
+        // reste "aucune" -- jamais les deux en même temps, aucune
+        // collision possible, quel que soit le hasard.
+        var coloration = (fondColonnesTire !== 'aucun') ? 'aucune' : auHasard(['aucune', 'texteColore', 'lectureGuidee']);
+        var separateurTire = Math.random() < 0.5;
+        // TACHE (retour utilisateur, bug réel trouvé : "le bouton
+        // aléatoire ne mélange pas 1 ou 2 colonnes et non plus les
+        // couleurs") : couleur/nuance/colonnes ne vivent PAS dans
+        // reglages (etatCv.reglagesProjetXXL) -- ils vivent dans
+        // etatApercuInline.cv.couleur, une chaîne encodée
+        // ("projetxxl-bleu-6_2col"), lue par composeurResoudreThemeGeneration()
+        // via composeurExtraireReglagesDepuisId(), jamais depuis
+        // reglagesAvances pour ces 3 valeurs précises. Écrire dans
+        // reglages.couleurBase/nuanceCouleur/colonnes n'avait donc
+        // strictement aucun effet. Construit ici avec idComposeurComplet(),
+        // exactement la même fonction que le reste du panneau utilise,
+        // jamais un format dupliqué à la main.
+        var couleurTiree = auHasard(couleursId);
+        var nuanceTiree = 1 + Math.floor(Math.random() * 10);
+        etatApercuInline[type].couleur = idComposeurComplet('projetxxl', couleurTiree + '-' + nuanceTiree, colonnesTirees);
+        Object.assign(reglages, {
+          coloration: coloration,
+          texteColorePortee: auHasard(['gauche', 'droite', 'lesDeux']),
+          lectureGuideeVariante: auHasard(['titre', 'rectangle']),
+          fondColonnes: fondColonnesTire,
+          fondColonnesEffet: auHasard(['fondSeul', 'titres']),
+          texteFondColonnes: auHasard(['blanc', 'noir']),
+          separateurColonnes: separateurTire,
+          separateurCouleurBase: (separateurTire && Math.random() < 0.5) ? auHasard(couleursId) : null,
+          police: auHasard(POLICES_XXL),
+          icones: Math.random() < 0.5,
+          accrocheItalique: Math.random() < 0.5,
+          styleProfessionnel: auHasard(['epure', 'condense']),
+          stylePersonnel: auHasard(['epure', 'condense']),
+          ordreDatesPoste: auHasard(['posteAvant', 'dateAvant']),
+          blocMisEnAvantGauche: auHasard(['competences', 'competencesPersonnelles', 'loisirsEngagements']),
+          blocMisEnAvantDroite: auHasard(['experiences', 'formations', 'experiencesPersonnelles']),
+          bandeauDisponibilite: aLePermisXXL ? (Math.random() < 0.5) : false,
+          // TACHE (retour utilisateur : "normalement il n'y avait pas
+          // de compétences clés... je m'attendais à la mise en page
+          // habituelle") : toujours une valeur EXPLICITE parmi les 3
+          // (jamais '' = "Auto"), pour un résultat prévisible et
+          // reproductible à chaque tirage -- "Auto" reste disponible
+          // dans le panneau si la personne veut explicitement laisser
+          // le moteur décider, mais jamais choisi par surprise ici.
+          strategieForcee: auHasard(['chronologique', 'mixte', 'parCompetences'])
+        });
+        rafraichirEtRegenererXXL();
+      }
+
+      // TACHE : dès le tout premier passage sur cette page pour ce CV
+      // (jamais choisi manuellement quoi que ce soit encore), un tirage
+      // automatique s'exécute une seule fois -- la personne arrive donc
+      // déjà sur une proposition, jamais sur un rendu "par défaut" figé.
+      // Le drapeau empêche tout second tirage automatique lors des
+      // reconstructions suivantes du panneau (couleur, format...), qui
+      // n'ont rien à voir avec ce premier tirage.
+      if (!etatCv.aDejaTireModeleAleatoire) {
+        etatCv.aDejaTireModeleAleatoire = true;
+        tirerModeleAleatoireXXL();
+        return;
+      }
+
+      var btnProposerModeleXXL = document.getElementById('btnProposerModeleXXL');
+      if (btnProposerModeleXXL) {
+        btnProposerModeleXXL.addEventListener('click', tirerModeleAleatoireXXL);
+      }
+    } else {
+      // TACHE (Projet XXL) : retire le panneau des qu'on n'est plus sur ce
+      // theme -- meme principe deja applique a couleursThemeComposeur/
+      // colonnesThemeComposeur en sortie de la branche Composeur plus bas.
+      var ancienPanneauXXL = document.getElementById('reglagesProjetXXL' + idSuffixe);
+      if (ancienPanneauXXL) { ancienPanneauXXL.remove(); }
+      // TACHE (retour utilisateur : "sans phrase d'accroche dans le
+      // panneau modulable") : reaffiche le toggle generique -- Sobre/
+      // Institutionnel/Moderne n'ont pas d'equivalent dans un panneau
+      // dedie, il redevient donc la seule facon de regler ce choix.
+      var blocSansAccrocheAReafficher = document.getElementById('blocSansAccrocheGenerique');
+      if (blocSansAccrocheAReafficher) { blocSansAccrocheAReafficher.style.display = ''; }
+      // TACHE (retour utilisateur : "remonter l'option photo") : réaffiche
+      // le bloc générique en quittant Projet XXL vers un autre thème
+      // Composeur -- même raisonnement que "sans accroche" ci-dessus.
+      var blocPhotoAReafficher = document.getElementById('blocPhotoGenerique');
+      if (blocPhotoAReafficher) { blocPhotoAReafficher.style.display = ''; }
+      // TACHE (retour utilisateur : "CV Intégral n'apparaît pas depuis le
+      // début") : masque ce bouton en quittant Projet XXL vers un autre
+      // thème Composeur -- ce format n'a de sens que pour ce thème précis.
+      if (type === 'cv') {
+        var boutonFormatIntegralAMasquer = document.getElementById('boutonFormatIntegralXXL');
+        if (boutonFormatIntegralAMasquer) { boutonFormatIntegralAMasquer.style.display = 'none'; }
+      }
+    }
+
     return;
   }
 
@@ -12276,10 +14384,27 @@ function construirePaletteCouleurs(type, idSuffixe, modeleActif) {
   // donnant l'impression d'une double rangée de couleurs. Retirés
   // explicitement dès qu'on n'est plus sur 'composeur', quel que soit le
   // modèle actif.
-  ['couleursThemeComposeur' + idSuffixe, 'colonnesThemeComposeur' + idSuffixe].forEach(function (id) {
+  ['couleursThemeComposeur' + idSuffixe, 'colonnesThemeComposeur' + idSuffixe, 'reglagesProjetXXL' + idSuffixe].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) { el.remove(); }
   });
+  // TACHE (retour utilisateur : "sans phrase d'accroche dans le panneau
+  // modulable") : reaffiche le toggle generique en quittant le Composeur
+  // -- meme raisonnement que ci-dessus, les 16 modeles classiques n'ont
+  // aucun panneau equivalent.
+  (function () {
+    var blocSansAccrocheAReafficher = document.getElementById('blocSansAccrocheGenerique');
+    if (blocSansAccrocheAReafficher) { blocSansAccrocheAReafficher.style.display = ''; }
+    // TACHE (retour utilisateur : "remonter l'option photo") : réaffiche
+    // le bloc générique en quittant le Composeur entièrement.
+    var blocPhotoAReafficher = document.getElementById('blocPhotoGenerique');
+    if (blocPhotoAReafficher) { blocPhotoAReafficher.style.display = ''; }
+    // TACHE (retour utilisateur : "CV Intégral n'apparaît pas depuis le
+    // début") : masque ce bouton en quittant le Composeur entièrement --
+    // les 16 modèles classiques n'ont jamais ce format.
+    var boutonFormatIntegralAMasquer = document.getElementById('boutonFormatIntegralXXL');
+    if (boutonFormatIntegralAMasquer) { boutonFormatIntegralAMasquer.style.display = 'none'; }
+  })();
 
   // TACHE (couleurs + formats pour la lettre et l'entretien) : chaque
   // type a sa propre fonction de verification (un seul modele chacun

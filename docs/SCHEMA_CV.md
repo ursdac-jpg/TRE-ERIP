@@ -258,11 +258,15 @@ d'accueillir plusieurs formations à l'avenir sans casser la structure.
 
 | Type | Rôle |
 |---|---|
-| `string[]` | Engagements associatifs/citoyens renseignés par la personne. |
+| `{texte, dateDebut, dateFin}[]` | Engagements associatifs/citoyens renseignés par la personne. `dateDebut`/`dateFin` vides si non renseignées (chaîne vide, jamais `null`) ; `dateFin` vide = engagement toujours en cours. |
 
 ```json
-"engagements": []
+"engagements": [
+  { "texte": "Bénévolat association d'aide alimentaire", "dateDebut": "2018", "dateFin": "2022" }
+]
 ```
+
+**TACHE (chantier "exp perso", Phase 4)** : format étendu depuis `string[]` (ancien format) — breaking change assumé pour les 16 modèles classiques (décision explicite de l'utilisateur, stratégie de migration vers un seul modèle Composeur). Le code de rendu (composeurRender.js, app.js) gère les deux formats de façon défensive (`typeof e === 'string'` vs objet) pour ne jamais planter sur une donnée déjà existante au format ancien.
 
 ---
 
